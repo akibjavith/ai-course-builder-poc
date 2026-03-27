@@ -1,0 +1,29 @@
+# Python / Backend
+backend/__pycache__/
+backend/.venv/
+backend/.env
+backend/chroma_db/
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/courses.json
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
+# OS / Editor Files
+.DS_Store
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
