@@ -2,9 +2,7 @@ import React from 'react';
 import { Check } from 'lucide-react';
 
 const steps = [
-  'Source',
-  'Details',
-  'Structure',
+  'Setup',
   'Content',
   'Publish'
 ];

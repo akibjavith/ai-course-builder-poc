@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import Stepper from './components/Stepper';
-import Step1SourceSelection from './components/Step1SourceSelection';
-import Step2CourseDetailsForm from './components/Step2CourseDetailsForm';
-import Step3StructureEditor from './components/Step3StructureEditor';
+import InteractiveCourseCreator from './components/InteractiveCourseCreator';
 import Step4ContentEditor from './components/Step4ContentEditor';
 import Step5ReviewPage from './components/Step5ReviewPage';
 import CoursesDashboard from './pages/CoursesDashboard';
@@ -27,7 +25,7 @@ function App() {
     content: [] // from Step 4
   });
 
-  const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, 5));
+  const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, 3));
   const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1));
   const resetBuilder = () => {
     setCurrentStep(1);
@@ -88,31 +86,14 @@ function App() {
       <div className="max-w-4xl mx-auto pb-12 px-4 sm:px-6 lg:px-8">
         <Stepper currentStep={currentStep} />
         
-        <div className="bg-white shadow sm:rounded-lg mb-6 py-6 px-4 sm:p-6">
           {currentStep === 1 && (
-            <Step1SourceSelection 
+            <InteractiveCourseCreator 
               courseData={courseData} 
               updateCourseData={updateCourseData} 
               onNext={nextStep} 
             />
           )}
           {currentStep === 2 && (
-            <Step2CourseDetailsForm 
-              courseData={courseData} 
-              updateCourseData={updateCourseData} 
-              onNext={nextStep} 
-              onBack={prevStep}
-            />
-          )}
-          {currentStep === 3 && (
-            <Step3StructureEditor 
-              courseData={courseData} 
-              updateCourseData={updateCourseData} 
-              onNext={nextStep} 
-              onBack={prevStep}
-            />
-          )}
-          {currentStep === 4 && (
             <Step4ContentEditor 
               courseData={courseData} 
               updateCourseData={updateCourseData} 
@@ -120,7 +101,7 @@ function App() {
               onBack={prevStep}
             />
           )}
-          {currentStep === 5 && (
+          {currentStep === 3 && (
             <Step5ReviewPage 
               courseData={courseData} 
               onBack={prevStep}
@@ -128,7 +109,6 @@ function App() {
             />
           )}
         </div>
-      </div>
     </div>
   );
 }

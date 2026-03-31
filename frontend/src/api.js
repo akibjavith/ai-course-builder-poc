@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8000'; // FastAPI default port
+const API_URL = 'http://192.168.3.158:8000'; // FastAPI running on your Wi-Fi IP
 
 export const uploadDoc = async (file) => {
   const formData = new FormData();
