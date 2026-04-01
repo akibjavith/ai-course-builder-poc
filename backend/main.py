@@ -15,6 +15,10 @@ load_dotenv()
 
 app = FastAPI()
 
+# Register online course generator router
+from app.api.online_course_generator import router as ocg_router
+app.include_router(ocg_router)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -127,4 +131,6 @@ async def finalize_course(course: dict):
 
 @app.get("/courses")
 async def list_courses():
-    return {"status": "success", "courses": get_courses()}
+    courses = get_courses()
+    # Ensure dashboard always gets list under "courses" key
+    return {"courses": courses}

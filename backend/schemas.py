@@ -68,3 +68,33 @@ class RegenerateRequest(BaseModel):
     difficulty: str
     objectives: List[str]
     regenerate_type: str # "full" or "quiz"
+
+# --- Online Course Generator schemas ---
+
+class OutlineRequest(BaseModel):
+    course_title: str = Field(..., description="Title of the course")
+    description: str = Field(..., description="Brief description of the course")
+    difficulty_level: str = Field(..., description="Difficulty (beginner|intermediate|advanced)")
+    target_audience: str = Field(..., description="Intended audience")
+
+class LessonContent(BaseModel):
+    explanation: str
+    examples: List[str]
+    key_points: List[str]
+
+class LessonRequest(BaseModel):
+    module_index: int
+    lesson_index: int
+    context: Optional[dict] = None
+
+class VoiceScriptResponse(BaseModel):
+    voice_script: str
+
+class ImagePromptResponse(BaseModel):
+    prompt: str
+
+class ImageResponse(BaseModel):
+    image_url: str
+
+class StoreCourseRequest(BaseModel):
+    course_json: dict

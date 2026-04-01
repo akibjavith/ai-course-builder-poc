@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
+import { PlayCircle } from 'lucide-react';
 import Stepper from './components/Stepper';
 import InteractiveCourseCreator from './components/InteractiveCourseCreator';
-import Step4ContentEditor from './components/Step4ContentEditor';
-import Step5ReviewPage from './components/Step5ReviewPage';
+import HybridContentEditor from './components/HybridContentEditor';
+import PublishDashboard from './components/PublishDashboard';
 import CoursesDashboard from './pages/CoursesDashboard';
 import CourseViewer from './components/CourseViewer';
 
@@ -45,14 +46,19 @@ function App() {
   if (view === 'dashboard') {
     return (
       <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
-        <header className="bg-white shadow">
-          <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-            <h1 className="text-3xl font-bold text-gray-900">AI Course Builder</h1>
+        <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
+          <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+            <div className="flex items-center gap-3">
+               <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-sm">
+                  <PlayCircle className="text-white w-6 h-6" />
+               </div>
+               <h1 className="text-2xl font-black text-gray-900 tracking-tight">AI Course Builder</h1>
+            </div>
             <button 
               onClick={() => setView('builder')}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition"
+              className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition shadow-sm active:scale-95"
             >
-              Create New Course
+              + Create New Course
             </button>
           </div>
         </header>
@@ -71,7 +77,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
-       <header className="bg-white shadow mb-8">
+       <header className="bg-white border-b border-gray-200 mb-8 sticky top-0 z-50">
           <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
             <h1 className="text-2xl font-bold text-gray-900">Course Builder Wizard</h1>
             <button 
@@ -94,7 +100,7 @@ function App() {
             />
           )}
           {currentStep === 2 && (
-            <Step4ContentEditor 
+            <HybridContentEditor 
               courseData={courseData} 
               updateCourseData={updateCourseData} 
               onNext={nextStep} 
@@ -102,7 +108,7 @@ function App() {
             />
           )}
           {currentStep === 3 && (
-            <Step5ReviewPage 
+            <PublishDashboard 
               courseData={courseData} 
               onBack={prevStep}
               onComplete={resetBuilder}

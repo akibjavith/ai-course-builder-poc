@@ -11,3 +11,5 @@ chromadb
 python-multipart
 pypdf
 docx2txt
+requests
+imageio-ffmpeg

@@ -1,368 +1,646 @@
-import React, { useState } from 'react';
-import { ChevronLeft, ChevronDown, ChevronRight, BookOpen, CheckCircle, Video, PlayCircle, ClipboardList, Send, ThumbsUp } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import {
+  ChevronLeft, ChevronDown, ChevronRight, BookOpen,
+  CheckCircle, Video, PlayCircle, ClipboardList, Send,
+  ThumbsUp, Play, Pause, Volume2, VolumeX, Maximize,
+  X, Star, RotateCcw
+} from 'lucide-react';
 
+// ─── Custom HTML5 Video Player ─────────────────────────────────────────────
+function CustomVideoPlayer({ src }) {
+  const videoRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [hovering, setHovering] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+  const hideTimer = useRef(null);
+
+  const resetHideTimer = useCallback(() => {
+    setShowControls(true);
+    clearTimeout(hideTimer.current);
+    hideTimer.current = setTimeout(() => {
+      if (playing) setShowControls(false);
+    }, 3000);
+  }, [playing]);
+
+  useEffect(() => {
+    return () => clearTimeout(hideTimer.current);
+  }, []);
+
+  const togglePlay = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) { v.play(); setPlaying(true); }
+    else { v.pause(); setPlaying(false); setShowControls(true); }
+    resetHideTimer();
+  };
+
+  const toggleMute = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.muted = !v.muted;
+    setMuted(v.muted);
+  };
+
+  const handleTimeUpdate = () => {
+    const v = videoRef.current;
+    if (!v || !v.duration) return;
+    setProgress((v.currentTime / v.duration) * 100);
+  };
+
+  const handleLoadedMetadata = () => {
+    setDuration(videoRef.current?.duration || 0);
+  };
+
+  const seekTo = (e) => {
+    const v = videoRef.current;
+    const bar = e.currentTarget;
+    const rect = bar.getBoundingClientRect();
+    const ratio = (e.clientX - rect.left) / rect.width;
+    v.currentTime = ratio * v.duration;
+  };
+
+  const fullscreen = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.requestFullscreen) v.requestFullscreen();
+  };
+
+  const fmt = (s) => {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div
+      className="relative w-full bg-black aspect-video select-none"
+      onMouseMove={resetHideTimer}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => { setHovering(false); if (playing) setShowControls(false); }}
+    >
+      <video
+        ref={videoRef}
+        src={src}
+        className="w-full h-full object-contain"
+        onTimeUpdate={handleTimeUpdate}
+        onLoadedMetadata={handleLoadedMetadata}
+        onEnded={() => { setPlaying(false); setShowControls(true); }}
+        onClick={togglePlay}
+      />
+
+      {/* Big centre play/pause on click */}
+      <div
+        className="absolute inset-0 flex items-center justify-center pointer-events-none"
+      >
+        {!playing && (
+          <div className="bg-black/50 rounded-full p-6 backdrop-blur-sm">
+            <Play className="w-12 h-12 text-white fill-white" onClick={togglePlay} />
+          </div>
+        )}
+      </div>
+
+      {/* Controls bar */}
+      <div
+        className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent px-4 pt-8 pb-3 transition-opacity duration-300 ${showControls || hovering || !playing ? 'opacity-100' : 'opacity-0'}`}
+      >
+        {/* Progress bar */}
+        <div
+          className="w-full h-1.5 bg-white/20 rounded-full mb-3 cursor-pointer group"
+          onClick={seekTo}
+        >
+          <div
+            className="h-full bg-red-500 rounded-full relative group-hover:h-2 transition-all"
+            style={{ width: `${progress}%` }}
+          >
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-red-500 rounded-full shadow opacity-0 group-hover:opacity-100 transition" />
+          </div>
+        </div>
+
+        {/* Bottom row */}
+        <div className="flex items-center justify-between text-white">
+          <div className="flex items-center gap-4">
+            <button onClick={togglePlay} className="hover:text-red-400 transition">
+              {playing ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+            </button>
+            <button onClick={toggleMute} className="hover:text-red-400 transition">
+              {muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+            </button>
+            <span className="text-xs font-mono text-gray-300">
+              {fmt(duration * (progress / 100))} / {fmt(duration)}
+            </span>
+          </div>
+          <button onClick={fullscreen} className="hover:text-red-400 transition">
+            <Maximize className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Quiz Modal Overlay ─────────────────────────────────────────────────────
+function QuizModal({ quiz, onClose, onFinish }) {
+  const [answers, setAnswers] = useState({});
+  const [submitted, setSubmitted] = useState(false);
+  const [score, setScore] = useState(null);
+
+  const questions = Array.isArray(quiz) ? quiz : (quiz?.questions || []);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    let correct = 0;
+    questions.forEach((q, i) => {
+      if (answers[i] === q.answer) correct++;
+    });
+    const pct = questions.length > 0 ? Math.round((correct / questions.length) * 100) : 100;
+    setScore(pct);
+    setSubmitted(true);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="sticky top-0 bg-gray-900 border-b border-gray-700 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+          <div className="flex items-center gap-3">
+            <ClipboardList className="w-6 h-6 text-red-400" />
+            <h2 className="text-xl font-bold text-white">Final Course Assessment</h2>
+          </div>
+          {!submitted && (
+            <button onClick={onClose} className="text-gray-400 hover:text-white transition">
+              <X className="w-5 h-5" />
+            </button>
+          )}
+        </div>
+
+        <div className="px-6 py-6">
+          {submitted ? (
+            <div className="text-center py-10">
+              <div className={`inline-flex items-center justify-center w-28 h-28 rounded-full mb-6 ${score >= 70 ? 'bg-green-900/50 border-2 border-green-500' : 'bg-red-900/50 border-2 border-red-500'}`}>
+                <span className={`text-4xl font-black ${score >= 70 ? 'text-green-400' : 'text-red-400'}`}>{score}%</span>
+              </div>
+              <h3 className="text-3xl font-black text-white mb-3">
+                {score >= 70 ? '🎉 Excellent!' : '📚 Keep Learning!'}
+              </h3>
+              <p className="text-gray-400 mb-8">
+                {score >= 70
+                  ? `You scored ${score}% — outstanding performance!`
+                  : `You scored ${score}%. Review the material and try again.`}
+              </p>
+              <div className="flex gap-4 justify-center">
+                {score < 70 && (
+                  <button
+                    onClick={() => { setSubmitted(false); setAnswers({}); setScore(null); }}
+                    className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-full transition"
+                  >
+                    <RotateCcw className="w-4 h-4" /> Retake Quiz
+                  </button>
+                )}
+                <button
+                  onClick={() => onFinish(score)}
+                  className="flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-8 rounded-full transition transform hover:scale-105"
+                >
+                  {score >= 70 ? '🏆 Get Certificate' : 'Continue Learning'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit}>
+              {questions.length === 0 ? (
+                <p className="text-gray-400 text-center py-10">No quiz questions available for this course yet.</p>
+              ) : (
+                <div className="space-y-6">
+                  <p className="text-gray-400 text-sm border-b border-gray-700 pb-3">
+                    Answer all {questions.length} questions below.
+                  </p>
+                  {questions.map((q, qIdx) => (
+                    <div key={qIdx} className="bg-gray-800/50 border border-gray-700 rounded-xl p-5">
+                      <h4 className="text-base font-semibold text-white mb-4">
+                        <span className="text-red-400 mr-2">{qIdx + 1}.</span>{q.question}
+                      </h4>
+                      <div className="space-y-2">
+                        {(q.options || []).map((opt, oIdx) => (
+                          <label
+                            key={oIdx}
+                            className={`flex items-center gap-3 cursor-pointer p-3 rounded-lg border transition ${
+                              answers[qIdx] === opt
+                                ? 'bg-red-900/40 border-red-600 text-white'
+                                : 'border-gray-700 hover:border-gray-500 text-gray-300 hover:bg-gray-800'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name={`q-${qIdx}`}
+                              required
+                              className="sr-only"
+                              onChange={() => setAnswers(prev => ({ ...prev, [qIdx]: opt }))}
+                            />
+                            <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 transition ${
+                              answers[qIdx] === opt ? 'border-red-500 bg-red-500' : 'border-gray-500'
+                            }`} />
+                            {opt}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="mt-8">
+                <button
+                  type="submit"
+                  className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-4 rounded-xl text-lg transition transform hover:scale-[1.02] disabled:opacity-50"
+                  disabled={questions.length === 0}
+                >
+                  Submit Assessment
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Survey / Completion Screen ─────────────────────────────────────────────
+function SurveyScreen({ onFinish }) {
+  const [rating, setRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onFinish();
+  };
+
+  return (
+    <div className="flex-1 flex items-center justify-center bg-gray-950 p-8">
+      <div className="max-w-xl w-full text-center">
+        <div className="text-6xl mb-4">🎓</div>
+        <h2 className="text-4xl font-black text-white mb-2">Course Complete!</h2>
+        <p className="text-gray-400 mb-10 text-lg">You've mastered all the material. Please leave a quick rating!</p>
+
+        <form onSubmit={handleSubmit} className="bg-gray-900 border border-gray-700 rounded-2xl p-8 text-left space-y-6">
+          {/* Star rating */}
+          <div>
+            <label className="block text-sm font-bold text-gray-300 uppercase tracking-wider mb-3">Your Rating</label>
+            <div className="flex gap-2 justify-center">
+              {[1, 2, 3, 4, 5].map(star => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => setRating(star)}
+                  onMouseEnter={() => setHoverRating(star)}
+                  onMouseLeave={() => setHoverRating(0)}
+                  className="transition transform hover:scale-110"
+                >
+                  <Star
+                    className={`w-10 h-10 transition ${(hoverRating || rating) >= star ? 'text-yellow-400 fill-yellow-400' : 'text-gray-600'}`}
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-gray-300 uppercase tracking-wider mb-2">What did you enjoy most?</label>
+            <textarea required rows={3} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white placeholder-gray-500 focus:ring-2 focus:ring-red-600 focus:outline-none" placeholder="The video content was very clear..." />
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-gray-300 uppercase tracking-wider mb-2">Any suggestions for improvement?</label>
+            <textarea rows={2} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white placeholder-gray-500 focus:ring-2 focus:ring-red-600 focus:outline-none" placeholder="Optional..." />
+          </div>
+
+          <button
+            type="submit"
+            className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-4 rounded-xl text-lg flex items-center justify-center gap-2 transition transform hover:scale-[1.02]"
+          >
+            <Send className="w-5 h-5" /> Submit & Finish Course
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main CourseViewer ──────────────────────────────────────────────────────
 export default function CourseViewer({ course, onBack }) {
-  const { details, structure, content, course_quiz } = course || {};
-  
+  const { details, structure, content, quiz } = course || {};
+
   if (!course) return null;
 
   const [expandedModule, setExpandedModule] = useState(0);
   const [activeChap, setActiveChap] = useState({ modIdx: 0, chapIdx: 0 });
-  const [completedItems, setCompletedItems] = useState([]); // string keys "modIdx-chapIdx"
-  const [quizMode, setQuizMode] = useState(false);
+  const [completedItems, setCompletedItems] = useState([]);
+  const [quizOpen, setQuizOpen] = useState(false);
   const [surveyMode, setSurveyMode] = useState(false);
-  const [quizScore, setQuizScore] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Flatten chapters to count totals
+  // Count totals
   let totalItems = 0;
-  structure?.modules?.forEach(mod => {
-    totalItems += mod.chapters.length;
-  });
+  structure?.modules?.forEach(mod => { totalItems += (mod.chapters || []).length; });
 
   const progressPercent = totalItems > 0 ? Math.round((completedItems.length / totalItems) * 100) : 0;
-  const isCourseFinished = completedItems.length === totalItems;
+  const isCourseFinished = totalItems > 0 && completedItems.length >= totalItems;
+
+  const activeModule = structure?.modules?.[activeChap.modIdx];
+  const activeChapData = activeModule?.chapters?.[activeChap.chapIdx];
+  const activeChapContent = content?.find(c =>
+    c.module_title === activeModule?.title && c.title === activeChapData?.title
+  );
 
   const markComplete = () => {
-     const key = `${activeChap.modIdx}-${activeChap.chapIdx}`;
-     if (!completedItems.includes(key)) {
-        setCompletedItems([...completedItems, key]);
-     }
+    const key = `${activeChap.modIdx}-${activeChap.chapIdx}`;
+    if (!completedItems.includes(key)) setCompletedItems(prev => [...prev, key]);
   };
 
   const jumpTo = (mIdx, cIdx) => {
-     setQuizMode(false);
-     setSurveyMode(false);
-     setExpandedModule(mIdx);
-     setActiveChap({ modIdx: mIdx, chapIdx: cIdx });
+    setExpandedModule(mIdx);
+    setActiveChap({ modIdx: mIdx, chapIdx: cIdx });
   };
 
-  const activeChapData = structure.modules[activeChap.modIdx]?.chapters[activeChap.chapIdx];
-  const activeChapContent = content?.find(c => 
-     c.module_title === structure.modules[activeChap.modIdx]?.title && 
-     c.title === activeChapData?.title
-  );
-
-  const startQuiz = () => setQuizMode(true);
-  
-  const submitQuiz = (e) => {
-     e.preventDefault();
-     setQuizScore(100); 
+  const handleQuizFinish = (score) => {
+    setQuizOpen(false);
+    if (score >= 70) setSurveyMode(true);
   };
 
-  const startSurvey = () => {
-    setQuizMode(false);
-    setSurveyMode(true);
+  // Smart video renderer — YouTube embeds or custom player for MP4
+  const renderVideoComponent = (url) => {
+    if (!url) return null;
+    const ytMatch = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
+    if (ytMatch) {
+      return (
+        <iframe
+          src={`https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1`}
+          title="Video Player"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          className="w-full aspect-video border-0"
+        />
+      );
+    }
+    if (url.includes('.mp4') || url.includes('/uploads/')) {
+      return <CustomVideoPlayer src={url} />;
+    }
+    return (
+      <a href={url} target="_blank" rel="noreferrer" className="flex flex-col items-center justify-center py-20 bg-gray-900 border border-gray-700 text-white hover:bg-gray-800 transition">
+        <Video className="w-16 h-16 text-red-400 mb-4" />
+        <span className="font-semibold text-lg">Open External Video</span>
+        <span className="text-sm text-gray-400 mt-1">{url}</span>
+      </a>
+    );
   };
 
-  const finishSurvey = (e) => {
-    e.preventDefault();
-    alert("Thank you for your feedback! Course Complete.");
-    onBack();
-  }
-
-  // Smart Video Renderer
-  const renderVideo = (url) => {
-     if (!url) return null;
-
-     // Handle YouTube URLs
-     const ytMatch = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
-     if (ytMatch && ytMatch.length > 1) {
-         return (
-            <iframe 
-               src={`https://www.youtube.com/embed/${ytMatch[1]}`} 
-               title="YouTube video player" 
-               frameBorder="0" 
-               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-               allowFullScreen
-               className="w-full h-96 rounded-xl shadow-lg border-0"
-            ></iframe>
-         )
-     }
-
-     // Handle Raw Server URLs / regular MP4
-     if (url.includes('.mp4') || url.includes('/uploads/')) {
-         return (
-            <video 
-               src={url} 
-               controls 
-               autoPlay
-               className="w-full rounded-xl shadow-lg bg-black"
-            >
-               Your browser does not support HTML5 video.
-            </video>
-         )
-     }
-
-     // Fallback Link
-     return (
-        <a href={url} target="_blank" rel="noreferrer" className="flex flex-col items-center justify-center p-12 bg-gray-900 border border-gray-700 rounded-xl text-white hover:bg-gray-800 transition">
-             <Video className="w-16 h-16 text-indigo-400 mb-4" />
-             <span className="text-xl font-medium">Play External Video</span>
-             <span className="text-sm mt-2 text-indigo-300 block">{url}</span>
-        </a>
-     )
+  if (surveyMode) {
+    return <SurveyScreen onFinish={onBack} />;
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
-      <header className="bg-indigo-700 shadow-md text-white sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex items-center justify-between">
-          <div className="flex items-center">
-             <button onClick={onBack} className="text-indigo-200 hover:text-white mr-4 transition">
-                <ChevronLeft className="h-6 w-6" />
-             </button>
-             <h1 className="text-xl font-bold truncate max-w-lg">{details?.title}</h1>
+    <div className="min-h-screen bg-gray-950 flex flex-col font-sans text-white">
+
+      {/* ── Quiz Modal ── */}
+      {quizOpen && (
+        <QuizModal
+          quiz={quiz}
+          onClose={() => setQuizOpen(false)}
+          onFinish={handleQuizFinish}
+        />
+      )}
+
+      {/* ── Top Navigation Bar ── */}
+      <header className="bg-black/80 backdrop-blur-md border-b border-gray-800 sticky top-0 z-40">
+        <div className="flex items-center justify-between h-14 px-4 gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              onClick={onBack}
+              className="flex-shrink-0 text-gray-400 hover:text-white transition p-1"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <h1 className="text-sm font-bold text-white truncate max-w-sm">{details?.title}</h1>
           </div>
-          <div className="flex items-center w-64">
-             <div className="mr-3 text-sm font-semibold whitespace-nowrap">{progressPercent}% Completed</div>
-             <div className="w-full bg-indigo-900 rounded-full h-2.5">
-               <div className="bg-green-400 h-2.5 rounded-full" style={{ width: `${progressPercent}%` }}></div>
-             </div>
+
+          {/* Progress bar */}
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <span className="text-xs text-gray-400 whitespace-nowrap">{completedItems.length}/{totalItems} lessons</span>
+            <div className="w-32 sm:w-48 bg-gray-800 rounded-full h-1.5">
+              <div
+                className="bg-red-500 h-1.5 rounded-full transition-all duration-500"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+            <span className="text-xs font-bold text-white whitespace-nowrap">{progressPercent}%</span>
           </div>
+
+          <button
+            onClick={() => setSidebarOpen(o => !o)}
+            className="sm:hidden text-gray-400 hover:text-white transition"
+          >
+            <ChevronRight className={`w-5 h-5 transition-transform ${sidebarOpen ? 'rotate-180' : ''}`} />
+          </button>
         </div>
       </header>
 
-      <main className="flex-1 max-w-full w-full flex overflow-hidden">
-        {/* LMS Sidebar Navigation */}
-        <aside className="w-80 bg-white border-r border-gray-200 overflow-y-auto flex-shrink-0 shadow-inner">
-           <div className="p-4 bg-gray-50 border-b">
-              <h2 className="font-bold text-gray-800 uppercase text-xs tracking-wider">Course Curriculum</h2>
-           </div>
-           <nav className="divide-y divide-gray-100">
-             {structure?.modules?.map((mod, mIdx) => (
-               <div key={mIdx}>
-                  <div 
-                    onClick={() => setExpandedModule(expandedModule === mIdx ? null : mIdx)}
-                    className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 bg-white group transition"
-                  >
-                     <span className="font-semibold text-gray-900 text-sm">{mod.title}</span>
-                     {expandedModule === mIdx ? <ChevronDown className="h-4 w-4 text-gray-400 group-hover:text-indigo-600"/> : <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-indigo-600"/>}
+      {/* ── Main Layout ── */}
+      <main className="flex flex-1 overflow-hidden" style={{ height: 'calc(100vh - 56px)' }}>
+
+        {/* ── Sidebar ── */}
+        <aside className={`${sidebarOpen ? 'w-72 sm:w-80' : 'w-0'} bg-gray-900 border-r border-gray-800 flex-shrink-0 overflow-y-auto transition-all duration-300 flex flex-col`}>
+          <div className="p-4 border-b border-gray-800 flex-shrink-0">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Course Curriculum</p>
+          </div>
+
+          <nav className="flex-1 overflow-y-auto divide-y divide-gray-800/50">
+            {structure?.modules?.map((mod, mIdx) => (
+              <div key={mIdx}>
+                <button
+                  onClick={() => setExpandedModule(expandedModule === mIdx ? null : mIdx)}
+                  className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-800 transition text-left"
+                >
+                  <span className="text-sm font-semibold text-gray-200 leading-snug pr-2">{mod.title}</span>
+                  {expandedModule === mIdx
+                    ? <ChevronDown className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                    : <ChevronRight className="w-4 h-4 text-gray-500 flex-shrink-0" />}
+                </button>
+
+                {expandedModule === mIdx && (
+                  <div className="bg-gray-950/60">
+                    {(mod.chapters || []).map((chap, cIdx) => {
+                      const key = `${mIdx}-${cIdx}`;
+                      const isDone = completedItems.includes(key);
+                      const isActive = activeChap.modIdx === mIdx && activeChap.chapIdx === cIdx;
+                      return (
+                        <button
+                          key={cIdx}
+                          onClick={() => jumpTo(mIdx, cIdx)}
+                          className={`w-full flex items-start gap-3 px-5 py-3 text-left text-sm transition border-l-2 ${
+                            isActive
+                              ? 'border-red-500 bg-gray-800 text-white'
+                              : 'border-transparent hover:border-gray-600 hover:bg-gray-800/50 text-gray-400'
+                          }`}
+                        >
+                          <span className="mt-0.5 flex-shrink-0">
+                            {isDone
+                              ? <CheckCircle className="w-4 h-4 text-green-400" />
+                              : <PlayCircle className={`w-4 h-4 ${isActive ? 'text-red-400' : 'text-gray-600'}`} />}
+                          </span>
+                          <span className={`leading-snug ${isActive ? 'font-medium' : ''}`}>{chap.title}</span>
+                        </button>
+                      );
+                    })}
                   </div>
-                  
-                  {expandedModule === mIdx && (
-                    <div className="bg-gray-50 border-t border-b border-gray-100">
-                      {mod.chapters.map((chap, cIdx) => {
-                         const key = `${mIdx}-${cIdx}`;
-                         const isDone = completedItems.includes(key);
-                         const isActive = activeChap.modIdx === mIdx && activeChap.chapIdx === cIdx && !quizMode && !surveyMode;
+                )}
+              </div>
+            ))}
+          </nav>
 
-                         return (
-                           <div 
-                             key={cIdx}
-                             onClick={() => jumpTo(mIdx, cIdx)}
-                             className={`pl-8 pr-4 py-3 flex items-start cursor-pointer transition text-sm
-                               ${isActive ? 'bg-indigo-50 border-l-4 border-indigo-600' : 'border-l-4 border-transparent hover:bg-gray-100'}
-                             `}
-                           >
-                              <div className="mt-0.5 mr-3">
-                                {isDone ? <CheckCircle className="w-4 h-4 text-green-500" /> : <PlayCircle className="w-4 h-4 text-gray-400" />}
-                              </div>
-                              <span className={`${isActive ? 'text-indigo-900 font-medium' : 'text-gray-600'}`}>{chap.title}</span>
-                           </div>
-                         );
-                      })}
-                    </div>
-                  )}
-               </div>
-             ))}
-
-             {/* Final Actions Sidebar Item */}
-             <div className="p-4 bg-gray-50">
-               <button 
-                  onClick={startQuiz}
-                  disabled={!isCourseFinished}
-                  className={`w-full flex items-center justify-center py-2 px-4 rounded text-sm font-medium transition shadow-sm
-                    ${isCourseFinished ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}
-                  `}
-               >
-                 <ClipboardList className="w-4 h-4 mr-2" />
-                 Final Course Exam
-               </button>
-             </div>
-           </nav>
+          {/* Final Exam Button */}
+          <div className="p-4 border-t border-gray-800 flex-shrink-0">
+            <button
+              onClick={() => setQuizOpen(true)}
+              disabled={!isCourseFinished}
+              className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-bold transition ${
+                isCourseFinished
+                  ? 'bg-red-600 hover:bg-red-500 text-white'
+                  : 'bg-gray-800 text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              <ClipboardList className="w-4 h-4" />
+              {isCourseFinished ? 'Take Final Exam' : `Complete all lessons first`}
+            </button>
+          </div>
         </aside>
 
-        {/* LMS Content Area */}
-        <section className="flex-1 bg-white overflow-y-auto p-4 sm:p-8 lg:p-12 relative">
-           
-           {surveyMode ? (
-              <div className="max-w-2xl mx-auto py-12">
-                 <div className="text-center mb-10">
-                    <ThumbsUp className="w-16 h-16 text-indigo-500 mx-auto mb-4" />
-                    <h2 className="text-3xl font-bold text-gray-900">Congratulations</h2>
-                    <p className="text-gray-600">You've successfully mastered the course material!</p>
-                 </div>
-                 
-                 <form onSubmit={finishSurvey} className="bg-gray-50 p-6 sm:p-8 border border-gray-200 rounded-xl shadow-sm">
-                    <h3 className="font-bold text-gray-800 border-b pb-4 mb-6">Course Feedback Survey (Required)</h3>
-                    
-                    <div className="space-y-6">
-                       <div>
-                         <label className="block text-sm font-medium text-gray-700 mb-2">How satisfied are you with this course?</label>
-                         <select required className="block w-full border-gray-300 rounded-md p-2 border shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                            <option value="">Select rating...</option>
-                            <option value="5">Extremely Satisfied</option>
-                            <option value="4">Satisfied</option>
-                            <option value="3">Neutral</option>
-                            <option value="2">Unsatisfied</option>
-                            <option value="1">Extremely Unsatisfied</option>
-                         </select>
-                       </div>
-                       <div>
-                         <label className="block text-sm font-medium text-gray-700 mb-2">What was your favorite module and why?</label>
-                         <textarea required rows={3} className="block w-full border-gray-300 rounded-md p-2 border shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
-                       </div>
-                       <div>
-                         <label className="block text-sm font-medium text-gray-700 mb-2">How could this course be improved?</label>
-                         <textarea rows={2} className="block w-full border-gray-300 rounded-md p-2 border shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
-                       </div>
-                    </div>
+        {/* ── Content Area ── */}
+        <section className="flex-1 overflow-y-auto bg-gray-950">
 
-                    <div className="mt-8">
-                       <button type="submit" className="w-full flex justify-center py-3 border border-transparent rounded-md shadow flex items-center text-sm font-medium text-white bg-green-600 hover:bg-green-700">
-                          <Send className="w-4 h-4 mr-2" /> Complete Course & Submit Feedback
-                       </button>
-                    </div>
-                 </form>
+          {!activeChapContent ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center max-w-md px-6">
+                <div className="text-6xl mb-4">📭</div>
+                <h3 className="text-xl font-bold text-white mb-2">Content Not Yet Generated</h3>
+                <p className="text-gray-400 text-sm">This chapter hasn't been generated yet. Go back to the Content editor and generate the lesson first.</p>
+                <button onClick={onBack} className="mt-6 bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-6 rounded-lg transition">
+                  Back to Editor
+                </button>
               </div>
+            </div>
+          ) : (
+            <div>
 
-           ) : quizMode ? (
-              <div className="max-w-4xl mx-auto py-8">
-                 <h2 className="text-3xl font-bold text-gray-900 mb-2">Global Course Assessment</h2>
-                 <p className="text-gray-500 mb-8 border-b pb-4">Test your knowledge across all modules.</p>
+              {/* Video / Image Hero Block */}
+              {(activeChapContent.video_url || activeChapContent.content_type === 'video') ? (
+                <div className="bg-black">
+                  {renderVideoComponent(activeChapContent.video_url)}
+                </div>
+              ) : activeChapContent.image_url ? (
+                <div className="relative bg-black h-72 sm:h-96 overflow-hidden flex items-center justify-center">
+                  <img
+                    src={activeChapContent.image_url}
+                    alt="Lesson Visual"
+                    className="absolute inset-0 w-full h-full object-cover opacity-30 blur-lg"
+                  />
+                  <img
+                    src={activeChapContent.image_url}
+                    alt="Lesson Visual"
+                    className="relative z-10 h-full max-w-full object-contain"
+                  />
+                </div>
+              ) : null}
 
-                 {quizScore !== null ? (
-                    <div className="bg-green-50 border-2 border-green-500 rounded-lg p-8 text-center text-green-900 shadow-sm animate-pulse-once">
-                       <CheckCircle className="w-16 h-16 mx-auto mb-4 text-green-500" />
-                       <h3 className="text-3xl font-black mb-2">You Passed! ({quizScore}%)</h3>
-                       <p className="mb-6">Outstanding performance on the final text.</p>
-                       <button 
-                         onClick={startSurvey}
-                         className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-full shadow-lg transition transform hover:scale-105"
-                       >
-                          Proceed to Certification Survey
-                       </button>
+              {/* Lesson Content */}
+              <div className="max-w-4xl mx-auto px-6 sm:px-10 lg:px-16 py-10">
+
+                {/* Breadcrumb */}
+                <p className="text-red-400 text-xs font-bold uppercase tracking-widest mb-3">
+                  Module {activeChap.modIdx + 1} — {activeModule?.title}
+                </p>
+                <h1 className="text-3xl md:text-4xl font-extrabold text-white mb-8 leading-tight">
+                  {activeChapData?.title}
+                </h1>
+
+                {/* AI Generated Text */}
+                {(!activeChapContent.content_type || activeChapContent.content_type === 'ai_generated') && (
+                  <div className="space-y-8">
+                    <div className="text-gray-300 text-lg leading-8 font-serif whitespace-pre-wrap">
+                      {activeChapContent.explanation}
                     </div>
-                 ) : (
-                    <form onSubmit={submitQuiz}>
-                      <div className="space-y-8">
-                         {course_quiz?.map((q, qIdx) => (
-                           <div key={qIdx} className="bg-white p-6 border rounded-lg shadow-sm font-serif">
-                              <h4 className="font-semibold text-lg text-gray-900 mb-4">{qIdx + 1}. {q.question}</h4>
-                              <div className="space-y-3 pl-2">
-                                 {q.options.map((opt, oIdx) => (
-                                   <label key={oIdx} className="flex items-center space-x-3 cursor-pointer group p-2 rounded hover:bg-indigo-50 transition border border-transparent hover:border-indigo-100">
-                                      <input type="radio" required name={`q-${qIdx}`} className="h-4 w-4 text-indigo-600 cursor-pointer" />
-                                      <span className="text-gray-700 group-hover:text-indigo-900">{opt}</span>
-                                   </label>
-                                 ))}
-                              </div>
-                           </div>
-                         ))}
+
+                    {/* Key Points */}
+                    {activeChapContent.key_points?.length > 0 && (
+                      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
+                        <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                          <span className="text-red-400">📌</span> Key Takeaways
+                        </h3>
+                        <ul className="space-y-3">
+                          {activeChapContent.key_points.map((kp, i) => (
+                            <li key={i} className="flex items-start gap-3 text-gray-300">
+                              <span className="text-red-400 font-bold mt-0.5 flex-shrink-0">→</span>
+                              <span>{kp}</span>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
-                      <div className="mt-10 mb-20 bg-gray-50 p-6 rounded-lg text-center shadow-inner border border-gray-200">
-                         <button type="submit" className="bg-indigo-600 text-white font-bold py-3 px-10 rounded shadow hover:bg-indigo-700 tracking-wide text-lg">
-                            Submit Exam
-                         </button>
+                    )}
+
+                    {/* Examples */}
+                    {activeChapContent.examples?.length > 0 && (
+                      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6">
+                        <h3 className="text-lg font-bold text-white mb-4">💡 Examples</h3>
+                        <ul className="space-y-3">
+                          {activeChapContent.examples.map((ex, i) => (
+                            <li key={i} className="text-gray-300 italic border-l-2 border-gray-600 pl-4">{ex}</li>
+                          ))}
+                        </ul>
                       </div>
-                    </form>
-                 )}
+                    )}
+                  </div>
+                )}
+
+                {/* Document Type */}
+                {activeChapContent.content_type === 'document' && (
+                  <div className="bg-gray-900 border border-gray-700 rounded-2xl p-10 text-center">
+                    <BookOpen className="w-16 h-16 mx-auto mb-4 text-blue-400" />
+                    <h3 className="text-2xl font-bold text-white mb-2">Reading Material</h3>
+                    <p className="text-gray-400 mb-6">The instructor has provided a document for this lesson.</p>
+                    <a
+                      href={activeChapContent.document_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-block bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-xl shadow-lg transition hover:-translate-y-0.5"
+                    >
+                      Open Document ↗
+                    </a>
+                  </div>
+                )}
+
+                {/* Mark Complete CTA */}
+                <div className="mt-12 bg-gray-900 border border-gray-800 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div>
+                    <p className="text-white font-semibold">Done with this lesson?</p>
+                    <p className="text-gray-500 text-sm mt-0.5">Mark it complete to track your progress.</p>
+                  </div>
+                  <button
+                    onClick={markComplete}
+                    className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition transform hover:scale-105 flex-shrink-0 ${
+                      completedItems.includes(`${activeChap.modIdx}-${activeChap.chapIdx}`)
+                        ? 'bg-green-900/50 text-green-400 border border-green-800'
+                        : 'bg-red-600 hover:bg-red-500 text-white'
+                    }`}
+                  >
+                    {completedItems.includes(`${activeChap.modIdx}-${activeChap.chapIdx}`)
+                      ? <><CheckCircle className="w-4 h-4" /> Completed</>
+                      : <><PlayCircle className="w-4 h-4" /> Mark as Complete</>
+                    }
+                  </button>
+                </div>
               </div>
-
-           ) : (
-              <div className="max-w-4xl mx-auto pb-20">
-                 {!activeChapContent ? (
-                    <div className="bg-red-50 text-red-600 p-6 rounded shadow border border-red-200 font-semibold flex items-center text-lg">
-                       Error: Content missing for this chapter.
-                    </div>
-                 ) : (
-                    <div className="animate-fade-in">
-                       <div className="mb-8">
-                          <h4 className="text-indigo-600 font-bold tracking-widest text-sm uppercase mb-1">
-                             Module {activeChap.modIdx + 1}: {structure.modules[activeChap.modIdx]?.title}
-                          </h4>
-                          <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900 mb-6 leading-tight">
-                             {activeChapData?.title}
-                          </h2>
-                       </div>
-                       
-                       {/* Render AI Document */}
-                       {(!activeChapContent.content_type || activeChapContent.content_type === 'ai_generated') && (
-                          <div className="prose prose-indigo max-w-none text-gray-700 text-lg leading-relaxed">
-                             <div className="whitespace-pre-wrap">{activeChapContent.explanation}</div>
-                             
-                             {activeChapContent.example && (
-                                <div className="mt-10 bg-indigo-50 border-l-4 border-indigo-600 p-6 rounded-r-lg">
-                                  <h4 className="text-xl font-bold text-indigo-900 mb-3 m-0">Case Study / Example</h4>
-                                  <div className="whitespace-pre-wrap italic text-indigo-800 m-0">{activeChapContent.example}</div>
-                                </div>
-                             )}
-                             
-                             {activeChapContent.code && (
-                                <div className="mt-10 shadow-lg rounded-xl overflow-hidden">
-                                  <div className="bg-gray-800 px-4 py-2 border-b border-gray-700 flex">
-                                     <div className="flex space-x-2">
-                                        <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                                        <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                                        <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                                     </div>
-                                  </div>
-                                  <pre className="bg-gray-900 text-gray-100 p-6 overflow-x-auto text-sm font-mono m-0">
-                                     {activeChapContent.code}
-                                  </pre>
-                                </div>
-                             )}
-
-                             {activeChapContent.summary && (
-                                <div className="mt-12 border-t border-gray-200 pt-8">
-                                  <h4 className="text-2xl font-bold text-gray-900 mb-4">Summary Recap</h4>
-                                  <p className="whitespace-pre-wrap font-medium">{activeChapContent.summary}</p>
-                                </div>
-                             )}
-                          </div>
-                       )}
-
-                       {/* Render External Video securely */}
-                       {activeChapContent.content_type === 'video' && (
-                          <div className="mt-6 mb-12">
-                             {renderVideo(activeChapContent.video_url)}
-                          </div>
-                       )}
-
-                       {/* Render External Document */}
-                       {activeChapContent.content_type === 'document' && (
-                          <div className="mt-6 mb-12">
-                             <div className="bg-blue-50 border-2 border-dashed border-blue-400 rounded-xl p-12 text-center">
-                                <BookOpen className="w-16 h-16 mx-auto mb-4 text-blue-600" />
-                                <h3 className="text-2xl font-bold text-blue-900 mb-2">Reading Material Attached</h3>
-                                <p className="text-blue-700 mb-6">Instructor has provided an external reference material for this chapter.</p>
-                                <a href={activeChapContent.document_url} target="_blank" rel="noreferrer" className="inline-block bg-blue-600 hover:bg-blue-700 text-white shadow-lg text-lg font-bold py-3 px-8 rounded-md transition hover:-translate-y-1">
-                                   Open Document
-                                </a>
-                             </div>
-                          </div>
-                       )}
-
-                       {/* Mark as complete CTA */}
-                       <div className="bg-gray-50 border border-gray-200 shadow-sm p-6 rounded-lg mt-16 flex items-center justify-between">
-                          <p className="text-gray-700 font-medium">Finished with this chapter?</p>
-                          <button 
-                             onClick={markComplete}
-                             className={`px-6 py-3 rounded-md font-bold shadow-sm flex items-center transition ${
-                               completedItems.includes(`${activeChap.modIdx}-${activeChap.chapIdx}`) 
-                               ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                               : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                             }`}
-                          >
-                             {completedItems.includes(`${activeChap.modIdx}-${activeChap.chapIdx}`) && <CheckCircle className="w-5 h-5 mr-2" />}
-                             {completedItems.includes(`${activeChap.modIdx}-${activeChap.chapIdx}`) ? 'Completed' : 'Mark as Complete'}
-                          </button>
-                       </div>
-                    </div>
-                 )}
-              </div>
-           )}
-
+            </div>
+          )}
         </section>
       </main>
     </div>

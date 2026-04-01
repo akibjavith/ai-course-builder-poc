@@ -1,0 +1,530 @@
+[
+  {
+    "sourceType": "external",
+    "details": {
+      "title": "Advanced Executive Program In Cybersecurity",
+      "description": "Build AI-powered security skills with 100+ guided assignments and 30+ case studies\nDefend against live cyber threats with 30+ hands-on tools\nTrain for CEH v13 with live training and exam voucher\nUnlock dedicated job search, profile building, and interview readiness",
+      "target_audience": "Graduates",
+      "difficulty": "beginner",
+      "duration": "3",
+      "learning_objectives": [
+        ""
+      ]
+    },
+    "content": []
+  },
+  {
+    "sourceType": "external",
+    "details": {
+      "title": "Advanced Executive Program In Cybersecurity",
+      "description": "Build AI-powered security skills with 100+ guided assignments and 30+ case studies\nDefend against live cyber threats with 30+ hands-on tools\nTrain for CEH v13 with live training and exam voucher\nUnlock dedicated job search, profile building, and interview readiness",
+      "target_audience": "Graduates",
+      "difficulty": "beginner",
+      "duration": "3",
+      "learning_objectives": [
+        ""
+      ]
+    },
+    "content": []
+  },
+  {
+    "sourceType": "external",
+    "details": {
+      "title": "Advanced Executive Program In Cybersecurity",
+      "description": "Build AI-powered security skills with 100+ guided assignments and 30+ case studies\nDefend against live cyber threats with 30+ hands-on tools\nTrain for CEH v13 with live training and exam voucher\nUnlock dedicated job search, profile building, and interview readiness",
+      "target_audience": "Graduates and Students",
+      "difficulty": "beginner",
+      "duration": "2",
+      "learning_objectives": [
+        ""
+      ],
+      "course_format": "pdf",
+      "thumbnail_url": null
+    },
+    "structure": {
+      "modules": [
+        {
+          "title": "Introduction to Cybersecurity",
+          "chapters": [
+            {
+              "title": "Understanding Cybersecurity Fundamentals"
+            },
+            {
+              "title": "Types of Cyber Threats"
+            },
+            {
+              "title": "Cybersecurity Frameworks and Standards"
+            }
+          ]
+        },
+        {
+          "title": "AI in Cybersecurity",
+          "chapters": [
+            {
+              "title": "Introduction to AI and Machine Learning"
+            },
+            {
+              "title": "AI Applications in Cybersecurity"
+            },
+            {
+              "title": "Building AI-Powered Security Tools"
+            }
+          ]
+        },
+        {
+          "title": "Certified Ethical Hacker (CEH) Preparation",
+          "chapters": [
+            {
+              "title": "Overview of CEH and Exam Structure"
+            },
+            {
+              "title": "Exam Preparation Strategies"
+            },
+            {
+              "title": "Practice Tests and Mock Exams"
+            }
+          ]
+        }
+      ]
+    },
+    "content": [
+      {
+        "module_title": "Introduction to Cybersecurity",
+        "title": "Understanding Cybersecurity Fundamentals",
+        "content_type": "video",
+        "video_url": "https://youtu.be/DjrbxmXwbBc?si=WbercM3XMUcoE8Dl",
+        "document_url": null,
+        "explanation": null,
+        "examples": null,
+        "key_points": null,
+        "voice_script": null,
+        "image_url": null
+      },
+      {
+        "module_title": "Introduction to Cybersecurity",
+        "title": "Types of Cyber Threats",
+        "content_type": "video",
+        "video_url": "https://youtu.be/E-4TfFDAtF0?si=u7H5oQIvsxoS_AyG",
+        "document_url": null,
+        "explanation": null,
+        "examples": null,
+        "key_points": null,
+        "voice_script": null,
+        "image_url": null
+      },
+      {
+        "module_title": "Introduction to Cybersecurity",
+        "title": "Cybersecurity Frameworks and Standards",
+        "content_type": "video",
+        "video_url": "https://youtu.be/5yfbcQw0hLY?si=CHLG89zQxc2Keg5y",
+        "document_url": null,
+        "explanation": null,
+        "examples": null,
+        "key_points": null,
+        "voice_script": null,
+        "image_url": null
+      },
+      {
+        "module_title": "AI in Cybersecurity",
+        "title": "Introduction to AI and Machine Learning",
+        "content_type": "video",
+        "video_url": "https://youtu.be/FmgIQBQ87fo?si=cE5bShdVulKbTd8-",
+        "document_url": null,
+        "explanation": null,
+        "examples": null,
+        "key_points": null,
+        "voice_script": null,
+        "image_url": null
+      },
+      {
+        "module_title": "AI in Cybersecurity",
+        "title": "AI Applications in Cybersecurity",
+        "content_type": "video",
+        "video_url": "https://youtu.be/JFXBjlT5cGU?si=FqXJ4urVG6CKLxhP",
+        "document_url": null,
+        "explanation": null,
+        "examples": null,
+        "key_points": null,
+        "voice_script": null,
+        "image_url": null
+      },
+      {
+        "module_title": "AI in Cybersecurity",
+        "title": "Building AI-Powered Security Tools",
+        "content_type": "video",
+        "video_url": "https://youtu.be/zV8Zy8-f4iA?si=tCp1hJChPPrgSnVx",
+        "document_url": null,
+        "explanation": null,
+        "examples": null,
+        "key_points": null,
+        "voice_script": null,
+        "image_url": null
+      },
+      {
+        "module_title": "Certified Ethical Hacker (CEH) Preparation",
+        "title": "Overview of CEH and Exam Structure",
+        "content_type": "video",
+        "video_url": "https://youtu.be/TVr0RZ1-74g?si=E0tkDYJRmLmi3j1Y",
+        "document_url": null,
+        "explanation": null,
+        "examples": null,
+        "key_points": null,
+        "voice_script": null,
+        "image_url": null
+      },
+      {
+        "module_title": "Certified Ethical Hacker (CEH) Preparation",
+        "title": "Exam Preparation Strategies",
+        "content_type": "video",
+        "video_url": "https://youtu.be/G9Px24hHlUA?si=pIfon5faxVdKUfCy",
+        "document_url": null,
+        "explanation": null,
+        "examples": null,
+        "key_points": null,
+        "voice_script": null,
+        "image_url": null
+      },
+      {
+        "module_title": "Certified Ethical Hacker (CEH) Preparation",
+        "title": "Practice Tests and Mock Exams",
+        "content_type": "video",
+        "video_url": "https://youtu.be/00LQNMX3R5c?si=EyBjGy1tEX2Aa3uZ",
+        "document_url": null,
+        "explanation": null,
+        "examples": null,
+        "key_points": null,
+        "voice_script": null,
+        "image_url": null
+      }
+    ],
+    "quiz": {
+      "questions": [
+        {
+          "question": "What is the primary goal of cybersecurity?",
+          "options": [
+            "To protect sensitive data",
+            "To develop new software",
+            "To enhance user experience",
+            "To minimize costs"
+          ],
+          "answer": "To protect sensitive data"
+        },
+        {
+          "question": "Which of the following is a type of cyber threat?",
+          "options": [
+            "Phishing",
+            "Web Development",
+            "Network Management",
+            "Data Analysis"
+          ],
+          "answer": "Phishing"
+        },
+        {
+          "question": "What does the NIST Cybersecurity Framework provide?",
+          "options": [
+            "A guide to software development",
+            "Best practices for cybersecurity",
+            "A list of programming languages",
+            "A framework for business management"
+          ],
+          "answer": "Best practices for cybersecurity"
+        },
+        {
+          "question": "In the context of AI in cybersecurity, what does machine learning primarily focus on?",
+          "options": [
+            "Creating user interfaces",
+            "Automating manual tasks",
+            "Analyzing and learning from data",
+            "Developing hardware"
+          ],
+          "answer": "Analyzing and learning from data"
+        },
+        {
+          "question": "Which of the following is an application of AI in cybersecurity?",
+          "options": [
+            "Data entry",
+            "Threat detection",
+            "Web design",
+            "Email marketing"
+          ],
+          "answer": "Threat detection"
+        },
+        {
+          "question": "What is the first step in preparing for the Certified Ethical Hacker (CEH) exam?",
+          "options": [
+            "Taking practice tests",
+            "Understanding the exam structure",
+            "Studying advanced hacking techniques",
+            "Joining a study group"
+          ],
+          "answer": "Understanding the exam structure"
+        },
+        {
+          "question": "What is a common strategy for preparing for cybersecurity certifications?",
+          "options": [
+            "Regularly updating social media",
+            "Engaging in online gaming",
+            "Practicing with mock exams",
+            "Avoiding all cybersecurity tools"
+          ],
+          "answer": "Practicing with mock exams"
+        },
+        {
+          "question": "What type of cyber threat involves deceiving users into providing personal information?",
+          "options": [
+            "Ransomware",
+            "Malware",
+            "Phishing",
+            "DDoS attacks"
+          ],
+          "answer": "Phishing"
+        },
+        {
+          "question": "Which cybersecurity framework is widely recognized and provides guidelines for managing cybersecurity risks?",
+          "options": [
+            "ISO 9001",
+            "NIST",
+            "Agile",
+            "Scrum"
+          ],
+          "answer": "NIST"
+        },
+        {
+          "question": "What is the importance of ethical hacking?",
+          "options": [
+            "To create malware",
+            "To detect vulnerabilities before they are exploited",
+            "To promote hacking",
+            "To sell personal data"
+          ],
+          "answer": "To detect vulnerabilities before they are exploited"
+        }
+      ]
+    }
+  },
+  {
+    "sourceType": "external",
+    "details": {
+      "title": "Advanced Executive Program In Cybersecurity",
+      "description": "Build AI-powered security skills with 100+ guided assignments and 30+ case studies\nDefend against live cyber threats with 30+ hands-on tools\nTrain for CEH v13 with live training and exam voucher\nUnlock dedicated job search, profile building, and interview readiness",
+      "target_audience": "Graduates and Students",
+      "difficulty": "beginner",
+      "duration": "2",
+      "learning_objectives": [
+        ""
+      ],
+      "course_format": "image",
+      "thumbnail_url": null
+    },
+    "structure": {
+      "modules": [
+        {
+          "title": "Module 1: Introduction to Cybersecurity",
+          "chapters": [
+            {
+              "title": "Chapter 1: Understanding Cybersecurity Basics"
+            },
+            {
+              "title": "Chapter 2: Cyber Threat Landscape"
+            },
+            {
+              "title": "Chapter 3: Key Concepts in Cybersecurity"
+            }
+          ]
+        },
+        {
+          "title": "Module 2: AI in Cybersecurity",
+          "chapters": [
+            {
+              "title": "Chapter 1: Introduction to AI and Machine Learning"
+            },
+            {
+              "title": "Chapter 2: AI Applications in Cybersecurity"
+            },
+            {
+              "title": "Chapter 3: Building AI-Powered Security Solutions"
+            }
+          ]
+        }
+      ]
+    },
+    "content": [
+      {
+        "module_title": "Module 1: Introduction to Cybersecurity",
+        "title": "Chapter 1: Understanding Cybersecurity Basics",
+        "content_type": "video",
+        "video_url": "https://youtu.be/kmJlnUfMd7I?si=8ysCaiBhNB2yVDGR",
+        "document_url": null,
+        "explanation": null,
+        "examples": null,
+        "key_points": null,
+        "voice_script": null,
+        "image_url": null
+      },
+      {
+        "module_title": "Module 1: Introduction to Cybersecurity",
+        "title": "Chapter 2: Cyber Threat Landscape",
+        "content_type": "video",
+        "video_url": "https://youtu.be/DjrbxmXwbBc?si=WbercM3XMUcoE8Dl",
+        "document_url": null,
+        "explanation": null,
+        "examples": null,
+        "key_points": null,
+        "voice_script": null,
+        "image_url": null
+      },
+      {
+        "module_title": "Module 1: Introduction to Cybersecurity",
+        "title": "Chapter 3: Key Concepts in Cybersecurity",
+        "content_type": "video",
+        "video_url": "https://youtu.be/E-4TfFDAtF0?si=u7H5oQIvsxoS_AyG",
+        "document_url": null,
+        "explanation": null,
+        "examples": null,
+        "key_points": null,
+        "voice_script": null,
+        "image_url": null
+      },
+      {
+        "module_title": "Module 2: AI in Cybersecurity",
+        "title": "Chapter 1: Introduction to AI and Machine Learning",
+        "content_type": "video",
+        "video_url": "https://youtu.be/5yfbcQw0hLY?si=CHLG89zQxc2Keg5y",
+        "document_url": null,
+        "explanation": null,
+        "examples": null,
+        "key_points": null,
+        "voice_script": null,
+        "image_url": null
+      },
+      {
+        "module_title": "Module 2: AI in Cybersecurity",
+        "title": "Chapter 2: AI Applications in Cybersecurity",
+        "content_type": "video",
+        "video_url": "https://youtu.be/G9Px24hHlUA?si=pIfon5faxVdKUfCy",
+        "document_url": null,
+        "explanation": null,
+        "examples": null,
+        "key_points": null,
+        "voice_script": null,
+        "image_url": null
+      },
+      {
+        "module_title": "Module 2: AI in Cybersecurity",
+        "title": "Chapter 3: Building AI-Powered Security Solutions",
+        "content_type": "video",
+        "video_url": "https://youtu.be/00LQNMX3R5c?si=EyBjGy1tEX2Aa3uZ",
+        "document_url": null,
+        "explanation": null,
+        "examples": null,
+        "key_points": null,
+        "voice_script": null,
+        "image_url": null
+      }
+    ],
+    "quiz": {
+      "questions": [
+        {
+          "question": "What is the primary goal of cybersecurity?",
+          "options": [
+            "To protect data and systems from cyber threats",
+            "To develop new technologies",
+            "To increase internet speed",
+            "To create more users online"
+          ],
+          "answer": "To protect data and systems from cyber threats"
+        },
+        {
+          "question": "Which of the following best describes the cyber threat landscape?",
+          "options": [
+            "A static environment with no changes",
+            "A constantly evolving set of threats and vulnerabilities",
+            "A list of all known malware",
+            "A place for hackers to communicate"
+          ],
+          "answer": "A constantly evolving set of threats and vulnerabilities"
+        },
+        {
+          "question": "Which of the following is NOT a key concept in cybersecurity?",
+          "options": [
+            "Confidentiality",
+            "Integrity",
+            "Availability",
+            "Invisibility"
+          ],
+          "answer": "Invisibility"
+        },
+        {
+          "question": "What is artificial intelligence (AI) in the context of cybersecurity?",
+          "options": [
+            "A tool for enhancing human capabilities",
+            "A replacement for human security professionals",
+            "A type of malware",
+            "A way to increase internet bandwidth"
+          ],
+          "answer": "A tool for enhancing human capabilities"
+        },
+        {
+          "question": "Which of the following is an application of AI in cybersecurity?",
+          "options": [
+            "Automating network monitoring",
+            "Creating social media accounts",
+            "Designing websites",
+            "Encrypting data"
+          ],
+          "answer": "Automating network monitoring"
+        },
+        {
+          "question": "What is a common use of machine learning in cybersecurity?",
+          "options": [
+            "Identifying patterns in data traffic",
+            "Creating new algorithms",
+            "Writing software manuals",
+            "Designing hardware"
+          ],
+          "answer": "Identifying patterns in data traffic"
+        },
+        {
+          "question": "Which of the following best describes a phishing attack?",
+          "options": [
+            "An attack that involves using fake websites to steal personal information",
+            "A type of denial-of-service attack",
+            "A method to improve network performance",
+            "A way to secure communications"
+          ],
+          "answer": "An attack that involves using fake websites to steal personal information"
+        },
+        {
+          "question": "What is the importance of building AI-powered security solutions?",
+          "options": [
+            "To automate responses to cyber incidents",
+            "To minimize human involvement in security",
+            "To replace traditional security measures",
+            "To enhance the aesthetics of security systems"
+          ],
+          "answer": "To automate responses to cyber incidents"
+        },
+        {
+          "question": "Which of the following is a key benefit of using AI in cybersecurity?",
+          "options": [
+            "Faster identification of threats",
+            "Reduced need for security training",
+            "Lower costs for software development",
+            "Elimination of all cyber threats"
+          ],
+          "answer": "Faster identification of threats"
+        },
+        {
+          "question": "What should organizations focus on to strengthen their cybersecurity posture?",
+          "options": [
+            "Adopting the latest technologies only",
+            "Ignoring employee training",
+            "Implementing a comprehensive security strategy",
+            "Limiting access to information"
+          ],
+          "answer": "Implementing a comprehensive security strategy"
+        }
+      ]
+    }
+  }
+]

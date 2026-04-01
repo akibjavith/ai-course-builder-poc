@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, User, UploadCloud, CheckCircle, Loader2, Database, Globe, Trash2, Plus } from 'lucide-react';
-import { uploadDoc, generateStructure } from '../api';
+import { Bot, User, UploadCloud, CheckCircle, Loader2, Database, Globe, Trash2, Plus, RefreshCw, Pencil } from 'lucide-react';
+import { uploadDoc, uploadChapterMedia, generateCourseOutline, generateLessonContent, generateVoiceScript, generateImagePrompt, generateImage, storeCourse } from '../api';
 
 export default function InteractiveCourseCreator({ courseData, updateCourseData, onNext }) {
   const [messages, setMessages] = useState([
@@ -27,7 +27,10 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
   const [learningObjectives, setLearningObjectives] = useState(courseData?.details?.learning_objectives || ['']);
   const [duration, setDuration] = useState(courseData?.details?.duration || '');
 
-
+  // New states for form additions
+  const [courseFormat, setCourseFormat] = useState(courseData?.details?.course_format || 'video');
+  const [courseImageFile, setCourseImageFile] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -51,22 +54,86 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
     
     // Remove the form, show user message
     removeMessageByType('form_title_desc');
-    addMessage({ sender: 'user', type: 'user_text', content: `**Title:** ${title}\n**Description:** ${description}` });
+    addMessage({ sender: 'user', type: 'user_text', content: `**Title:** ${title}\n**Description:** ${description}`, restoresForm: 'form_title_desc' });
 
     // Next bot question
     setTimeout(() => {
-      addMessage({ sender: 'bot', type: 'bot_text', content: "Got it! Who is the target audience, what's the difficulty level, and what is the estimated duration of that course?" });
+      addMessage({ sender: 'bot', type: 'bot_text', content: "Got it! Who is the target audience and what is the difficulty level for this course?" });
       addMessage({ sender: 'bot', type: 'form_audience_diff' });
     }, 500);
   };
 
+  // --- EDITING FEATURE ---
+  const handleEditMessage = (msgId, restoresForm) => {
+    // Find the message
+    const idx = messages.findIndex(m => m.id === msgId);
+    if (idx === -1 || !restoresForm) return;
+    
+    // Slice everything off from this point onward
+    const sliced = messages.slice(0, idx);
+    
+    // Append the form again and update the messages array
+    setMessages([...sliced, { id: Date.now(), sender: 'bot', type: restoresForm }]);
+  };
+
   const submitAudienceDiff = () => {
-    if (!audience || !duration) return;
-    updateCourseData('details', { ...courseData.details, target_audience: audience, difficulty, duration });
+    if (!audience || !difficulty) return;
+    updateCourseData('details', { ...courseData.details, target_audience: audience, difficulty, duration: "Flexible" });
     
     removeMessageByType('form_audience_diff');
-    addMessage({ sender: 'user', type: 'user_text', content: `**Audience:** ${audience}\n**Difficulty:** ${difficulty}\n**Duration:** ${duration}` });
+    addMessage({ sender: 'user', type: 'user_text', content: `**Audience:** ${audience}\n**Difficulty:** ${difficulty}`, restoresForm: 'form_audience_diff' });
 
+    setTimeout(() => {
+      addMessage({ sender: 'bot', type: 'bot_text', content: "Great! Now, what type of course format would you like to build?" });
+      addMessage({ sender: 'bot', type: 'form_format' });
+    }, 500);
+  };
+  const submitFormat = () => {
+    updateCourseData('details', { ...courseData.details, course_format: courseFormat });
+    removeMessageByType('form_format');
+    addMessage({ sender: 'user', type: 'user_text', content: `**Format:** ${courseFormat}`, restoresForm: 'form_format' });
+
+    setTimeout(() => {
+       addMessage({ sender: 'bot', type: 'bot_text', content: "Got it! Would you like to upload a custom Course Profile Image? If you skip, I'll generate a stunning one for you using AI." });
+       addMessage({ sender: 'bot', type: 'form_course_image' });
+    }, 500);
+  };
+
+  const skipCourseImage = async () => {
+     removeMessageByType('form_course_image');
+     addMessage({ sender: 'user', type: 'user_text', content: "Auto-generate one for me.", restoresForm: 'form_course_image' });
+     
+     const loaderId = Date.now();
+     setMessages(prev => [...prev, { id: loaderId, sender: 'bot', type: 'bot_loading' }]);
+     
+     try {
+       const promptResp = await generateImagePrompt({ lesson_text: `${title} - ${description}` });
+       const imgResp = await generateImage({ prompt: promptResp.prompt });
+       updateCourseData('details', { ...courseData.details, thumbnail_url: imgResp.image_url });
+     } catch(e) {
+       console.error("AI Image Generation failed:", e);
+     }
+     
+     setMessages(prev => prev.filter(m => m.id !== loaderId));
+     askForDocument();
+  };
+
+  const handleUploadImage = async () => {
+     if (!courseImageFile) return;
+     setUploadingImage(true);
+     try {
+        const res = await uploadChapterMedia(courseImageFile);
+        updateCourseData('details', { ...courseData.details, thumbnail_url: res.url });
+        removeMessageByType('form_course_image');
+        addMessage({ sender: 'user', type: 'user_text', content: "Uploaded custom course image.", restoresForm: 'form_course_image' });
+        askForDocument();
+     } catch (err) {
+        alert("Failed to upload image. " + (err.message));
+        setUploadingImage(false);
+     }
+  };
+
+  const askForDocument = () => {
     setTimeout(() => {
       addMessage({ sender: 'bot', type: 'bot_text', content: "Perfect! Lastly, do you have any specific source documents (PDF/DOCX) you'd like me to base this course on? If you upload a file, I'll use it as 'Internal Context'. Otherwise, I'll rely on my 'External AI' knowledge." });
       addMessage({ sender: 'bot', type: 'form_upload' });
@@ -76,7 +143,7 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
   const skipUploadAndGenerate = async () => {
     updateCourseData('sourceType', 'external');
     removeMessageByType('form_upload');
-    addMessage({ sender: 'user', type: 'user_text', content: "No documents to upload. Please use external knowledge." });
+    addMessage({ sender: 'user', type: 'user_text', content: "No documents to upload. Please use external knowledge.", restoresForm: 'form_upload' });
     startGeneration('external');
   };
 
@@ -89,7 +156,7 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
       updateCourseData('sourceType', 'internal');
       
       removeMessageByType('form_upload');
-      addMessage({ sender: 'user', type: 'user_text', content: `Uploaded ${file.name}. Please use internal document knowledge.` });
+      addMessage({ sender: 'user', type: 'user_text', content: `Uploaded ${file.name}. Please use internal document knowledge.`, restoresForm: 'form_upload' });
       startGeneration('internal');
     } catch (err) {
       alert("Failed to upload document: " + (err.response?.data?.detail || err.message));
@@ -99,20 +166,30 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
   };
 
   const startGeneration = async (sourceType) => {
-    addMessage({ sender: 'bot', type: 'bot_text', content: "Excellent! I'm putting together a comprehensive course outline based on everything you've told me so far. One moment..." });
-    const loadMsgId = Date.now();
-    setMessages(prev => [...prev, { id: loadMsgId, sender: 'bot', type: 'bot_loading' }]);
-    
+    // 1️⃣ Generate outline
+    addMessage({ sender: 'bot', type: 'bot_text', content: "Generating course outline..." });
+    const outlineMsgId = Date.now();
+    setMessages(prev => [...prev, { id: outlineMsgId, sender: 'bot', type: 'bot_loading' }]);
+    let processedModules = [];
     try {
-      const data = await generateStructure(sourceType, courseData.details);
-      updateCourseData('structure', data.data);
-      
-      // Remove loading
-      setMessages(prev => prev.filter(m => m.id !== loadMsgId));
+      const outlineResp = await generateCourseOutline({
+        course_title: courseData.details.title,
+        description: courseData.details.description,
+        difficulty_level: courseData.details.difficulty,
+        target_audience: courseData.details.target_audience,
+      });
+      // Assume response shape { modules: [{ title, lessons: [{ title }] }] }
+      // Convert to UI-friendly structure with chapters array
+      processedModules = outlineResp.modules.map(m => ({
+        title: m.title,
+        chapters: m.chapters ? m.chapters.map(c => ({ title: c.title })) : []
+      }));
+      updateCourseData('structure', { modules: processedModules });
+      setMessages(prev => prev.filter(m => m.id !== outlineMsgId));
       addMessage({ sender: 'bot', type: 'bot_text', content: "Here's the structure I came up with! Feel free to review it, edit module and chapter titles, add or remove them as needed. Once you are happy with it, click 'Confirm & Create Content'." });
       addMessage({ sender: 'bot', type: 'card_structure' });
     } catch (err) {
-      setMessages(prev => prev.filter(m => m.id !== loadMsgId));
+      setMessages(prev => prev.filter(m => m.id !== outlineMsgId));
       addMessage({ sender: 'bot', type: 'bot_text', content: "Uh oh, something went wrong while generating the structure. You can try hitting 'Confirm & Create Content' below to bypass or refresh to try again." });
       addMessage({ sender: 'bot', type: 'card_structure' }); // Let them manually build it
     }
@@ -150,7 +227,7 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
   };
 
   const handleConfirmStructure = () => {
-    // We update the content via onNext
+    // Move to next step (Content editor) after all lessons processed
     onNext();
   };
 
@@ -225,15 +302,7 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Duration</label>
-            <input 
-              type="text" value={duration} onChange={(e) => setDuration(e.target.value)} 
-              placeholder="e.g. 2 hours"
-              className="w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Difficulty</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Difficulty Level</label>
             <select 
               value={difficulty} onChange={(e) => setDifficulty(e.target.value)}
               className="w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm"
@@ -245,11 +314,71 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
           </div>
           <button 
             onClick={submitAudienceDiff}
-            disabled={!audience || !duration}
+            disabled={!audience}
             className="w-full bg-indigo-600 text-white rounded-md py-2 font-medium hover:bg-indigo-700 disabled:opacity-50 transition"
           >
             Submit Audience Info
           </button>
+        </div>
+      );
+    }
+
+    // form_audience_diff removed.
+
+    if (msg.type === 'form_format') {
+      return (
+        <div className="space-y-4 w-full md:w-96 rounded-lg">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Course Format</label>
+            <select 
+              value={courseFormat} onChange={(e) => setCourseFormat(e.target.value)}
+              className="w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm"
+            >
+              <option value="pdf">PDF</option>
+              <option value="video">Video</option>
+              <option value="audio">Audio</option>
+              <option value="txt">Text</option>
+              <option value="slides">Slides</option>
+            </select>
+          </div>
+          <button 
+            onClick={submitFormat}
+            className="w-full bg-indigo-600 text-white rounded-md py-2 font-medium hover:bg-indigo-700 transition"
+          >
+            Confirm Format
+          </button>
+        </div>
+      );
+    }
+
+    if (msg.type === 'form_course_image') {
+      return (
+        <div className="space-y-4 w-full md:w-96 rounded-lg bg-indigo-50/50 p-4 border border-indigo-100">
+          <div className="border-2 border-dashed border-indigo-200 rounded-lg p-6 flex flex-col items-center justify-center bg-white text-center">
+            <UploadCloud className="h-10 w-10 text-indigo-400 mb-3" />
+            <p className="text-sm text-gray-600 mb-4">Upload a JPG/PNG thumbnail for your course dashboard.</p>
+            <input 
+               type="file" 
+               accept="image/png, image/jpeg" 
+               onChange={(e) => setCourseImageFile(e.target.files[0])}
+               className="text-sm w-full file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+            />
+          </div>
+          <div className="flex flex-col space-y-3 pt-2">
+            <button 
+              onClick={handleUploadImage}
+              disabled={!courseImageFile || uploadingImage}
+              className="w-full bg-indigo-600 text-white rounded-md py-2 font-medium hover:bg-indigo-700 disabled:opacity-50 transition flex items-center justify-center"
+            >
+              {uploadingImage ? <><Loader2 className="animate-spin h-4 w-4 mr-2" /> Uploading...</> : 'Upload Thumbnail'}
+            </button>
+            <button 
+              onClick={skipCourseImage}
+              className="w-full bg-white border border-gray-300 text-gray-700 rounded-md py-2 font-medium hover:bg-gray-50 transition shadow-sm"
+            >
+              Skip & Auto-Generate Image
+            </button>
+          </div>
         </div>
       );
     }
@@ -353,7 +482,16 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
              </button>
            </div>
            
-           <div className="bg-white px-4 py-3 border-t border-gray-100 flex justify-end">
+           <div className="bg-white px-4 py-3 border-t border-gray-100 flex justify-between">
+             <button 
+               onClick={() => {
+                 removeMessageByType('card_structure');
+                 startGeneration(courseData.sourceType);
+               }}
+               className="bg-white border border-gray-300 text-gray-700 font-medium px-4 py-2 rounded-lg hover:bg-gray-50 flex items-center shadow-sm transition"
+             >
+               <RefreshCw className="w-4 h-4 mr-2" /> Regenerate Outline
+             </button>
              <button 
                onClick={handleConfirmStructure}
                className="bg-indigo-600 text-white font-medium px-5 py-2 rounded-lg hover:bg-indigo-700 shadow-sm flex items-center transition"
@@ -401,6 +539,15 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
                 >
                   {renderMessageContent(msg)}
                 </div>
+                
+                {msg.sender === 'user' && msg.restoresForm && (
+                   <button 
+                     onClick={() => handleEditMessage(msg.id, msg.restoresForm)}
+                     className="text-xs text-gray-400 mt-1 flex items-center hover:text-indigo-600 transition"
+                   >
+                      <Pencil className="w-3 h-3 mr-1" /> Edit
+                   </button>
+                )}
               </div>
             </div>
           </div>
