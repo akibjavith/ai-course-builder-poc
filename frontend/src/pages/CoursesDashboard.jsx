@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { getCourses } from '../api';
-import { Loader2, BookOpen, Clock, Users, PlayCircle, ExternalLink, Trash2 } from 'lucide-react';
+import { getCourses, deleteCourse } from '../api';
+import { Loader2, BookOpen, Clock, Users, PlayCircle, ExternalLink, Trash2, Edit3 } from 'lucide-react';
 
-export default function CoursesDashboard({ onViewCourse }) {
+export default function CoursesDashboard({ onViewCourse, onEditCourse }) {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -18,6 +18,16 @@ export default function CoursesDashboard({ onViewCourse }) {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async (courseId) => {
+    if (!window.confirm("Are you sure you want to delete this course?")) return;
+    try {
+      await deleteCourse(courseId);
+      fetchCourses();
+    } catch (err) {
+      console.error("Failed to delete course", err);
     }
   };
 
@@ -106,12 +116,26 @@ export default function CoursesDashboard({ onViewCourse }) {
                      </div>
                   </div>
 
-                  <div className="p-4 bg-gray-50 border-t border-gray-100">
+                  <div className="p-4 bg-gray-50 border-t border-gray-100 flex flex-col sm:flex-row gap-2">
                     <button 
                       onClick={() => onViewCourse && onViewCourse(course)}
-                      className="w-full bg-white border border-gray-200 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 text-gray-700 text-sm font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2 shadow-sm"
+                      className="flex-1 bg-white border border-gray-200 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 text-gray-700 text-sm font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2 shadow-sm"
                     >
-                       <PlayCircle className="w-4 h-4" /> Start Learning
+                       <PlayCircle className="w-4 h-4" /> Start
+                    </button>
+                    <button 
+                      onClick={() => onEditCourse && onEditCourse(course)}
+                      className="bg-white border border-gray-200 hover:bg-yellow-50 hover:text-yellow-600 hover:border-yellow-200 text-gray-600 text-sm font-bold py-2.5 px-4 rounded-xl transition flex items-center justify-center shadow-sm"
+                      title="Edit Course"
+                    >
+                       <Edit3 className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => handleDelete(course.id)}
+                      className="bg-white border border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-gray-600 text-sm font-bold py-2.5 px-4 rounded-xl transition flex items-center justify-center shadow-sm"
+                      title="Delete Course"
+                    >
+                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                </div>

@@ -41,6 +41,28 @@ class ChapterContent(BaseModel):
     video_url: Optional[str] = None
     document_url: Optional[str] = None
 
+class GenerateFlashcardsRequest(BaseModel):
+    text: str
+    
+class GenerateMCQRequest(BaseModel):
+    course_title: str
+    module_title: str
+    chapter_title: Optional[str] = None
+    assessment_text: Optional[str] = None
+    
+class GenerateAssessmentRequest(BaseModel):
+    course_title: str
+    module_title: str
+    assessment_text: Optional[str] = None
+    
+class MCQItem(BaseModel):
+    question: str
+    options: List[str]
+    answer: str
+    
+class MCQResponse(BaseModel):
+    mcqs: List[MCQItem]
+
 class GenerateContentRequest(BaseModel):
     course_title: str
     module_title: str
@@ -98,3 +120,31 @@ class ImageResponse(BaseModel):
 
 class StoreCourseRequest(BaseModel):
     course_json: dict
+
+class GenerateTitleRequest(BaseModel):
+    description: str
+
+class GenerateTitleResponse(BaseModel):
+    title: str
+
+class FetchWebRequest(BaseModel):
+    url: str
+
+class FetchYouTubeRequest(BaseModel):
+    youtube_url: str
+
+class GenerateOutlineBaseRequest(BaseModel):
+    description: str
+    modules_count: int
+    chapters_per_module: int
+    assessments_per_module: int
+
+class GenerateVoiceScriptReq(BaseModel):
+    text: str
+
+class ExportChapterRequest(BaseModel):
+    course_title: str
+    module_title: str
+    chapter_title: str
+    content: dict
+    format: str # 'pdf', 'pptx', 'txt', 'mp4'

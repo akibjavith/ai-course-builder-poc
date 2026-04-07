@@ -43,6 +43,20 @@ function App() {
     setCourseData(prev => ({ ...prev, [key]: value }));
   };
 
+  const handleEditCourse = (course) => {
+    // Populate courseData with existing course data
+    setCourseData({
+      id: course.id,
+      sourceType: course.sourceType || course.details?.source_type || 'external',
+      details: course.details || { title: '', description: '', target_audience: '', difficulty: 'beginner', duration: '', learning_objectives: [''] },
+      structure: course.structure || { modules: [] },
+      content: course.content || [],
+      quiz: course.quiz || []
+    });
+    setCurrentStep(1);
+    setView('builder');
+  };
+
   if (view === 'dashboard') {
     return (
       <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
@@ -55,7 +69,7 @@ function App() {
                <h1 className="text-2xl font-black text-gray-900 tracking-tight">AI Course Builder</h1>
             </div>
             <button 
-              onClick={() => setView('builder')}
+              onClick={() => { resetBuilder(); setView('builder'); }}
               className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition shadow-sm active:scale-95"
             >
               + Create New Course
@@ -64,7 +78,10 @@ function App() {
         </header>
         <main>
           <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-            <CoursesDashboard onViewCourse={(course) => { setViewingCourse(course); setView('viewer'); }} />
+            <CoursesDashboard 
+               onViewCourse={(course) => { setViewingCourse(course); setView('viewer'); }} 
+               onEditCourse={handleEditCourse}
+            />
           </div>
         </main>
       </div>

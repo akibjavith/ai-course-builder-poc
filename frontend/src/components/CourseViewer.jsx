@@ -5,6 +5,7 @@ import {
   ThumbsUp, Play, Pause, Volume2, VolumeX, Maximize,
   X, Star, RotateCcw
 } from 'lucide-react';
+import QuizViewer from './QuizViewer';
 
 // ─── Custom HTML5 Video Player ─────────────────────────────────────────────
 function CustomVideoPlayer({ src }) {
@@ -368,9 +369,13 @@ export default function CourseViewer({ course, onBack }) {
     if (score >= 70) setSurveyMode(true);
   };
 
-  // Smart video renderer — YouTube embeds or custom player for MP4
-  const renderVideoComponent = (url) => {
+  // Smart media renderer — handles Video, Audio, PDF, and Documents
+  const renderMediaComponent = (url) => {
     if (!url) return null;
+
+    const lowerUrl = url.toLowerCase();
+
+    // YouTube Embed
     const ytMatch = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
     if (ytMatch) {
       return (
@@ -383,14 +388,64 @@ export default function CourseViewer({ course, onBack }) {
         />
       );
     }
-    if (url.includes('.mp4') || url.includes('/uploads/')) {
+
+    // Audio Files
+    if (lowerUrl.includes('.mp3') || lowerUrl.includes('.wav')) {
+      return (
+        <div className="flex flex-col items-center justify-center py-16 bg-gray-900 w-full h-64 border-b border-gray-800">
+           <Volume2 className="w-16 h-16 text-indigo-400 mb-6 animate-pulse" />
+           <audio controls autoPlay controlsList="nodownload" className="w-11/12 max-w-md">
+             <source src={url} />
+             Your browser does not support the audio element.
+           </audio>
+        </div>
+      );
+    }
+
+    // PDF Files
+    if (lowerUrl.includes('.pdf')) {
+      return (
+        <div className="w-full h-[70vh] bg-gray-200">
+           <object data={url} type="application/pdf" className="w-full h-full">
+               <embed src={url} type="application/pdf" className="w-full h-full" />
+               <div className="flex flex-col items-center justify-center h-full p-10 bg-gray-900 border border-gray-700 text-white text-center">
+                  <BookOpen className="w-16 h-16 text-red-500 mb-4" />
+                  <span className="font-bold text-lg mb-2">PDF Viewing Not Supported</span>
+                  <span className="text-sm text-gray-400 mb-4">Your browser doesn't natively support embedded PDFs.</span>
+                  <a href={url} target="_blank" rel="noreferrer" className="bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-6 rounded-lg transition">
+                     Download PDF
+                  </a>
+               </div>
+           </object>
+        </div>
+      );
+    }
+
+    // Office Documents (PPT, DOC, etc)
+    if (lowerUrl.includes('.ppt') || lowerUrl.includes('.pptx') || lowerUrl.includes('.doc') || lowerUrl.includes('.docx')) {
+      return (
+        <div className="flex flex-col items-center justify-center py-24 bg-gray-900 border-b border-gray-800 text-white text-center">
+          <BookOpen className="w-16 h-16 text-blue-400 mb-4" />
+          <h3 className="text-2xl font-bold text-white mb-2">Office Document</h3>
+          <p className="text-gray-400 max-w-md mx-auto mb-6">This document format cannot be previewed natively in the browser. Please download it to view.</p>
+          <a href={url} target="_blank" rel="noreferrer" className="inline-block bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-xl shadow-lg transition hover:-translate-y-0.5">
+             Download to View 
+          </a>
+        </div>
+      );
+    }
+
+    // Video Files (fallback based on structure from before)
+    if (lowerUrl.includes('.mp4') || lowerUrl.includes('/uploads/')) {
       return <CustomVideoPlayer src={url} />;
     }
+
+    // General fallback
     return (
       <a href={url} target="_blank" rel="noreferrer" className="flex flex-col items-center justify-center py-20 bg-gray-900 border border-gray-700 text-white hover:bg-gray-800 transition">
         <Video className="w-16 h-16 text-red-400 mb-4" />
-        <span className="font-semibold text-lg">Open External Video</span>
-        <span className="text-sm text-gray-400 mt-1">{url}</span>
+        <span className="font-semibold text-lg">Open Media File</span>
+        <span className="text-sm text-gray-400 mt-1 truncate max-w-sm">{url}</span>
       </a>
     );
   };
@@ -534,8 +589,8 @@ export default function CourseViewer({ course, onBack }) {
 
               {/* Video / Image Hero Block */}
               {(activeChapContent.video_url || activeChapContent.content_type === 'video') ? (
-                <div className="bg-black">
-                  {renderVideoComponent(activeChapContent.video_url)}
+                <div className="bg-black flex items-center justify-center">
+                  {renderMediaComponent(activeChapContent.video_url)}
                 </div>
               ) : activeChapContent.image_url ? (
                 <div className="relative bg-black h-72 sm:h-96 overflow-hidden flex items-center justify-center">
@@ -638,6 +693,13 @@ export default function CourseViewer({ course, onBack }) {
                     }
                   </button>
                 </div>
+
+                {/* Chapter MCQs Assessment */}
+                {activeChapContent.mcqs && (
+                  <div className="mt-12 bg-gray-900 border border-gray-800 rounded-2xl p-4 sm:p-8 overflow-hidden shadow-inner font-sans">
+                     <QuizViewer questions={activeChapContent.mcqs} title={`${activeChapData?.title} Chapter Quiz`} lightMode={false} />
+                  </div>
+                )}
               </div>
             </div>
           )}

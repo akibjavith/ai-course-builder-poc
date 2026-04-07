@@ -1,6 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, User, UploadCloud, CheckCircle, Loader2, Database, Globe, Trash2, Plus, RefreshCw, Pencil } from 'lucide-react';
-import { uploadDoc, uploadChapterMedia, generateCourseOutline, generateLessonContent, generateVoiceScript, generateImagePrompt, generateImage, storeCourse } from '../api';
+import { Bot, User, UploadCloud, CheckCircle, Loader2, Database, Globe, Trash2, Plus, RefreshCw, Pencil, Link, Video } from 'lucide-react';
+import { 
+  uploadDoc, uploadChapterMedia, generateCourseOutline, generateLessonContent, 
+  generateVoiceScript, generateImagePrompt, generateImage, storeCourse,
+  generateCourseTitle, uploadThumbnail, fetchWebDocument, fetchYouTubeDocument
+} from '../api';
+import OutlineForm from './OutlineForm';
+import Chatbot from './Chatbot';
 
 export default function InteractiveCourseCreator({ courseData, updateCourseData, onNext }) {
   const [messages, setMessages] = useState([
@@ -16,21 +22,24 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
 
-  // Form states locally so we don't mess up courseData until confirmed
   const [title, setTitle] = useState(courseData?.details?.title || '');
   const [description, setDescription] = useState(courseData?.details?.description || '');
   const [audience, setAudience] = useState(courseData?.details?.target_audience || '');
   const [difficulty, setDifficulty] = useState(courseData?.details?.difficulty || 'beginner');
+  
+  // Tab states for upload
+  const [activeUploadTab, setActiveUploadTab] = useState('file');
   const [file, setFile] = useState(null);
-  const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [webUrl, setWebUrl] = useState('');
+  const [youtubeUrl, setYoutubeUrl] = useState('');
   const [uploading, setUploading] = useState(false);
-  const [learningObjectives, setLearningObjectives] = useState(courseData?.details?.learning_objectives || ['']);
-  const [duration, setDuration] = useState(courseData?.details?.duration || '');
 
-  // New states for form additions
-  const [courseFormat, setCourseFormat] = useState(courseData?.details?.course_format || 'video');
   const [courseImageFile, setCourseImageFile] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+
+  // States for final chapters rendering
+  // (Removed editingChapters state from here)
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -47,32 +56,43 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
     setMessages((prev) => [...prev, { id: Date.now() + Math.random(), ...msg }]);
   };
 
-  // Handlers for steps
-  const submitTitleDesc = () => {
-    if (!title || !description) return;
-    updateCourseData('details', { ...courseData.details, title, description });
+  const submitTitleDesc = async () => {
+    if (!description) {
+      alert("Description is required.");
+      return;
+    }
     
-    // Remove the form, show user message
-    removeMessageByType('form_title_desc');
-    addMessage({ sender: 'user', type: 'user_text', content: `**Title:** ${title}\n**Description:** ${description}`, restoresForm: 'form_title_desc' });
+    let finalTitle = title;
+    if (!title) {
+        addMessage({ sender: 'bot', type: 'bot_text', content: "Generating a perfect title for you..." });
+        try {
+            const resp = await generateCourseTitle(description);
+            finalTitle = resp.title;
+            // Title constraint: <= 50 chars
+            if (finalTitle.length > 50) finalTitle = finalTitle.substring(0, 47) + "...";
+            setTitle(finalTitle);
+        } catch (e) {
+            console.error(e);
+            finalTitle = "My AI Generated Course";
+            setTitle(finalTitle);
+        }
+    }
 
-    // Next bot question
+    updateCourseData('details', { ...courseData.details, title: finalTitle, description });
+    
+    removeMessageByType('form_title_desc');
+    addMessage({ sender: 'user', type: 'user_text', content: `**Title:** ${finalTitle}\n**Description:** ${description}`, restoresForm: 'form_title_desc' });
+
     setTimeout(() => {
       addMessage({ sender: 'bot', type: 'bot_text', content: "Got it! Who is the target audience and what is the difficulty level for this course?" });
       addMessage({ sender: 'bot', type: 'form_audience_diff' });
     }, 500);
   };
 
-  // --- EDITING FEATURE ---
   const handleEditMessage = (msgId, restoresForm) => {
-    // Find the message
     const idx = messages.findIndex(m => m.id === msgId);
     if (idx === -1 || !restoresForm) return;
-    
-    // Slice everything off from this point onward
     const sliced = messages.slice(0, idx);
-    
-    // Append the form again and update the messages array
     setMessages([...sliced, { id: Date.now(), sender: 'bot', type: restoresForm }]);
   };
 
@@ -82,16 +102,6 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
     
     removeMessageByType('form_audience_diff');
     addMessage({ sender: 'user', type: 'user_text', content: `**Audience:** ${audience}\n**Difficulty:** ${difficulty}`, restoresForm: 'form_audience_diff' });
-
-    setTimeout(() => {
-      addMessage({ sender: 'bot', type: 'bot_text', content: "Great! Now, what type of course format would you like to build?" });
-      addMessage({ sender: 'bot', type: 'form_format' });
-    }, 500);
-  };
-  const submitFormat = () => {
-    updateCourseData('details', { ...courseData.details, course_format: courseFormat });
-    removeMessageByType('form_format');
-    addMessage({ sender: 'user', type: 'user_text', content: `**Format:** ${courseFormat}`, restoresForm: 'form_format' });
 
     setTimeout(() => {
        addMessage({ sender: 'bot', type: 'bot_text', content: "Got it! Would you like to upload a custom Course Profile Image? If you skip, I'll generate a stunning one for you using AI." });
@@ -108,7 +118,12 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
      
      try {
        const promptResp = await generateImagePrompt({ lesson_text: `${title} - ${description}` });
+       // Assuming generateImage returns a DALL-E/similar URL
        const imgResp = await generateImage({ prompt: promptResp.prompt });
+       // We fetch/download it and upload via our backend to persist it
+       // Wait, for this demo we'll assume generateImage already handles saving or we use the URL directly 
+       // but typically we'd send it to uploadThumbnail if it returned binary. 
+       // If it returns a URL, let's just save the URL.
        updateCourseData('details', { ...courseData.details, thumbnail_url: imgResp.image_url });
      } catch(e) {
        console.error("AI Image Generation failed:", e);
@@ -122,83 +137,78 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
      if (!courseImageFile) return;
      setUploadingImage(true);
      try {
-        const res = await uploadChapterMedia(courseImageFile);
+        const res = await uploadThumbnail(courseImageFile);
         updateCourseData('details', { ...courseData.details, thumbnail_url: res.url });
         removeMessageByType('form_course_image');
         addMessage({ sender: 'user', type: 'user_text', content: "Uploaded custom course image.", restoresForm: 'form_course_image' });
         askForDocument();
      } catch (err) {
         alert("Failed to upload image. " + (err.message));
+     } finally {
         setUploadingImage(false);
      }
   };
 
   const askForDocument = () => {
     setTimeout(() => {
-      addMessage({ sender: 'bot', type: 'bot_text', content: "Perfect! Lastly, do you have any specific source documents (PDF/DOCX) you'd like me to base this course on? If you upload a file, I'll use it as 'Internal Context'. Otherwise, I'll rely on my 'External AI' knowledge." });
+      addMessage({ sender: 'bot', type: 'bot_text', content: "Perfect! Lastly, do you have any specific source documents you'd like me to base this course on? You can upload a file, paste a Web URL, or link a YouTube Video!" });
       addMessage({ sender: 'bot', type: 'form_upload' });
     }, 500);
+  };
+
+  const handleUploadAndGenerate = async () => {
+    setUploading(true);
+    try {
+      if (activeUploadTab === 'file' && file) {
+        await uploadDoc(file);
+        addMessage({ sender: 'user', type: 'user_text', content: `Uploaded ${file.name}. Please use internal document knowledge.`, restoresForm: 'form_upload' });
+      } else if (activeUploadTab === 'web' && webUrl) {
+        await fetchWebDocument(webUrl);
+        addMessage({ sender: 'user', type: 'user_text', content: `Fetched web content from ${webUrl}.`, restoresForm: 'form_upload' });
+      } else if (activeUploadTab === 'youtube' && youtubeUrl) {
+        await fetchYouTubeDocument(youtubeUrl);
+        addMessage({ sender: 'user', type: 'user_text', content: `Fetched transcript from ${youtubeUrl}.`, restoresForm: 'form_upload' });
+      } else {
+        setUploading(false);
+        return;
+      }
+      
+      updateCourseData('sourceType', 'internal');
+      removeMessageByType('form_upload');
+      askForOutlineSkeleton();
+    } catch (err) {
+      alert("Failed to fetch document: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setUploading(false);
+    }
   };
 
   const skipUploadAndGenerate = async () => {
     updateCourseData('sourceType', 'external');
     removeMessageByType('form_upload');
     addMessage({ sender: 'user', type: 'user_text', content: "No documents to upload. Please use external knowledge.", restoresForm: 'form_upload' });
-    startGeneration('external');
+    askForOutlineSkeleton();
   };
 
-  const handleUploadAndGenerate = async () => {
-    if (!file) return;
-    setUploading(true);
-    try {
-      await uploadDoc(file);
-      setUploadSuccess(true);
-      updateCourseData('sourceType', 'internal');
-      
-      removeMessageByType('form_upload');
-      addMessage({ sender: 'user', type: 'user_text', content: `Uploaded ${file.name}. Please use internal document knowledge.`, restoresForm: 'form_upload' });
-      startGeneration('internal');
-    } catch (err) {
-      alert("Failed to upload document: " + (err.response?.data?.detail || err.message));
-    } finally {
-      setUploading(false);
-    }
+  const askForOutlineSkeleton = () => {
+    setTimeout(() => {
+      addMessage({ sender: 'bot', type: 'bot_text', content: "Awesome! Let's generate the outline. How many modules and chapters would you like?" });
+      addMessage({ sender: 'bot', type: 'form_outline_skeleton' });
+    }, 500);
   };
 
-  const startGeneration = async (sourceType) => {
-    // 1️⃣ Generate outline
-    addMessage({ sender: 'bot', type: 'bot_text', content: "Generating course outline..." });
-    const outlineMsgId = Date.now();
-    setMessages(prev => [...prev, { id: outlineMsgId, sender: 'bot', type: 'bot_loading' }]);
-    let processedModules = [];
-    try {
-      const outlineResp = await generateCourseOutline({
-        course_title: courseData.details.title,
-        description: courseData.details.description,
-        difficulty_level: courseData.details.difficulty,
-        target_audience: courseData.details.target_audience,
-      });
-      // Assume response shape { modules: [{ title, lessons: [{ title }] }] }
-      // Convert to UI-friendly structure with chapters array
-      processedModules = outlineResp.modules.map(m => ({
-        title: m.title,
-        chapters: m.chapters ? m.chapters.map(c => ({ title: c.title })) : []
-      }));
-      updateCourseData('structure', { modules: processedModules });
-      setMessages(prev => prev.filter(m => m.id !== outlineMsgId));
-      addMessage({ sender: 'bot', type: 'bot_text', content: "Here's the structure I came up with! Feel free to review it, edit module and chapter titles, add or remove them as needed. Once you are happy with it, click 'Confirm & Create Content'." });
-      addMessage({ sender: 'bot', type: 'card_structure' });
-    } catch (err) {
-      setMessages(prev => prev.filter(m => m.id !== outlineMsgId));
-      addMessage({ sender: 'bot', type: 'bot_text', content: "Uh oh, something went wrong while generating the structure. You can try hitting 'Confirm & Create Content' below to bypass or refresh to try again." });
-      addMessage({ sender: 'bot', type: 'card_structure' }); // Let them manually build it
-    }
+  // Callback from OutlineForm
+  const handleOutlineGenerated = (modules, settings) => {
+    updateCourseData('structure', { modules, settings });
+    removeMessageByType('form_outline_skeleton');
+    addMessage({ sender: 'user', type: 'user_text', content: `Generated outline skeleton.`, restoresForm: 'form_outline_skeleton' });
+    addMessage({ sender: 'bot', type: 'bot_text', content: "Here's the structure. Review or edit, then click Confirm." });
+    addMessage({ sender: 'bot', type: 'card_structure' });
   };
 
 
-  // Helpers for Structure editor
   const handleAddModule = () => {
-    const modules = [...courseData.structure.modules, { title: 'New Module', chapters: [] }];
+    const modules = [...(courseData.structure?.modules || []), { title: 'New Module', chapters: [] }];
     updateCourseData('structure', { modules });
   };
   const handleRemoveModule = (modIdx) => {
@@ -227,19 +237,26 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
   };
 
   const handleConfirmStructure = () => {
-    // Move to next step (Content editor) after all lessons processed
+    removeMessageByType('card_structure');
+    addMessage({ sender: 'user', type: 'user_text', content: `Structure confirmed! Ready to build chapters.`, restoresForm: 'card_structure' });
     onNext();
   };
 
+  const handleRegenerateOutline = () => {
+    removeMessageByType('card_structure');
+    addMessage({ sender: 'bot', type: 'form_outline_skeleton' });
+  };
 
-  // RENDERERS
+  // Removed handleSaveChapterContent and handlePublishCourse from here
+
+
+
   const renderMessageContent = (msg) => {
     if (msg.type === 'bot_text') {
       return <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">{msg.content}</p>;
     }
     
     if (msg.type === 'user_text') {
-      // Very basic markdown parse for bold
       const parts = msg.content.split('**');
       return (
         <p className="text-white leading-relaxed whitespace-pre-wrap">
@@ -261,27 +278,32 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
       return (
         <div className="space-y-4 w-full md:w-96 rounded-lg">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Course Title</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+              Course Title <span className="text-xs text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded ml-2 font-semibold">Optional</span>
+            </label>
             <input 
               type="text" value={title} onChange={(e) => setTitle(e.target.value)} 
-              placeholder="e.g. Introduction to React 18"
-              className="w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+              placeholder="Leave blank for AI generation (max 50 chars)"
+              className="w-full bg-white text-gray-900 border border-gray-300 rounded-md shadow-sm p-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
               autoFocus
+              maxLength={50}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1 flex justify-between">
+              Description <span className="text-red-500">*</span>
+            </label>
             <textarea 
               value={description} onChange={(e) => setDescription(e.target.value)} 
               rows={3}
               placeholder="What will students learn?"
-              className="w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+              className="w-full bg-white text-gray-900 border border-gray-300 rounded-md shadow-sm p-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
             />
           </div>
           <button 
             onClick={submitTitleDesc}
-            disabled={!title || !description}
-            className="w-full bg-indigo-600 text-white rounded-md py-2 font-medium hover:bg-indigo-700 disabled:opacity-50 transition"
+            disabled={!description}
+            className="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-md py-2.5 font-bold text-sm hover:from-indigo-600 hover:to-indigo-700 border-none shadow-sm disabled:opacity-50 transition transform active:scale-[0.98]"
           >
             Submit Details
           </button>
@@ -297,7 +319,7 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
             <input 
               type="text" value={audience} onChange={(e) => setAudience(e.target.value)} 
               placeholder="e.g. Frontend Developers"
-              className="w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm"
+              className="w-full bg-white text-gray-900 border border-gray-300 rounded-md shadow-sm p-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
               autoFocus
             />
           </div>
@@ -305,17 +327,29 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
             <label className="block text-sm font-medium text-gray-700 mb-1">Difficulty Level</label>
             <select 
               value={difficulty} onChange={(e) => setDifficulty(e.target.value)}
-              className="w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm"
+              className="w-full bg-white text-gray-900 border border-gray-300 rounded-md shadow-sm p-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
             >
               <option value="beginner">Beginner</option>
               <option value="intermediate">Intermediate</option>
               <option value="advanced">Advanced</option>
             </select>
           </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Course Objectives (comma separated)</label>
+            <input 
+              type="text" 
+              value={courseData.details?.learning_objectives?.join(", ") || ""} 
+              onChange={(e) => updateCourseData('details', { ...courseData.details, learning_objectives: e.target.value.split(',').map(s=>s.trim()) })} 
+              placeholder="e.g. Learn React, Master Hooks"
+              className="w-full bg-white text-gray-900 border border-gray-300 rounded-md shadow-sm p-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+            />
+          </div>
+
           <button 
             onClick={submitAudienceDiff}
             disabled={!audience}
-            className="w-full bg-indigo-600 text-white rounded-md py-2 font-medium hover:bg-indigo-700 disabled:opacity-50 transition"
+            className="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-md py-2.5 font-bold text-sm hover:from-indigo-600 hover:to-indigo-700 disabled:opacity-50 transition shadow-sm transform active:scale-[0.98]"
           >
             Submit Audience Info
           </button>
@@ -323,60 +357,31 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
       );
     }
 
-    // form_audience_diff removed.
-
-    if (msg.type === 'form_format') {
-      return (
-        <div className="space-y-4 w-full md:w-96 rounded-lg">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Course Format</label>
-            <select 
-              value={courseFormat} onChange={(e) => setCourseFormat(e.target.value)}
-              className="w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm"
-            >
-              <option value="pdf">PDF</option>
-              <option value="video">Video</option>
-              <option value="audio">Audio</option>
-              <option value="txt">Text</option>
-              <option value="slides">Slides</option>
-            </select>
-          </div>
-          <button 
-            onClick={submitFormat}
-            className="w-full bg-indigo-600 text-white rounded-md py-2 font-medium hover:bg-indigo-700 transition"
-          >
-            Confirm Format
-          </button>
-        </div>
-      );
-    }
-
     if (msg.type === 'form_course_image') {
       return (
-        <div className="space-y-4 w-full md:w-96 rounded-lg bg-indigo-50/50 p-4 border border-indigo-100">
-          <div className="border-2 border-dashed border-indigo-200 rounded-lg p-6 flex flex-col items-center justify-center bg-white text-center">
+        <div className="space-y-4 w-full md:w-96 rounded-lg bg-indigo-50/50 p-4 border border-indigo-100 backdrop-blur-sm">
+          <div className="border-2 border-dashed border-indigo-200 rounded-lg p-6 flex flex-col items-center justify-center bg-white/70 text-center text-sm">
             <UploadCloud className="h-10 w-10 text-indigo-400 mb-3" />
-            <p className="text-sm text-gray-600 mb-4">Upload a JPG/PNG thumbnail for your course dashboard.</p>
             <input 
                type="file" 
                accept="image/png, image/jpeg" 
                onChange={(e) => setCourseImageFile(e.target.files[0])}
-               className="text-sm w-full file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+               className="w-full file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
             />
           </div>
-          <div className="flex flex-col space-y-3 pt-2">
+          <div className="flex flex-col space-y-2 pt-2">
             <button 
               onClick={handleUploadImage}
               disabled={!courseImageFile || uploadingImage}
-              className="w-full bg-indigo-600 text-white rounded-md py-2 font-medium hover:bg-indigo-700 disabled:opacity-50 transition flex items-center justify-center"
+              className="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-md py-2.5 font-bold text-sm shadow-sm flex items-center justify-center disabled:opacity-50"
             >
               {uploadingImage ? <><Loader2 className="animate-spin h-4 w-4 mr-2" /> Uploading...</> : 'Upload Thumbnail'}
             </button>
             <button 
               onClick={skipCourseImage}
-              className="w-full bg-white border border-gray-300 text-gray-700 rounded-md py-2 font-medium hover:bg-gray-50 transition shadow-sm"
+              className="w-full bg-white border border-gray-300 text-gray-700 rounded-md py-2 font-bold text-sm hover:bg-gray-50 transition shadow-sm"
             >
-              Skip & Auto-Generate Image
+              Skip & Auto-Generate
             </button>
           </div>
         </div>
@@ -385,69 +390,81 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
 
     if (msg.type === 'form_upload') {
       return (
-        <div className="space-y-4 w-full md:w-96 rounded-lg bg-indigo-50/50 p-4 border border-indigo-100">
-          <div className="border-2 border-dashed border-indigo-200 rounded-lg p-6 flex flex-col items-center justify-center bg-white text-center">
-            <UploadCloud className="h-10 w-10 text-indigo-400 mb-3" />
-            <p className="text-sm text-gray-600 mb-4">Upload a PDF or DOCX file to use as course material context.</p>
-            <input 
-               type="file" 
-               accept=".pdf,.docx" 
-               onChange={(e) => setFile(e.target.files[0])}
-               className="text-sm w-full file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-            />
+        <div className="space-y-4 w-full md:w-96 rounded-lg bg-indigo-50/50 p-4 border border-indigo-100 backdrop-blur-sm">
+          <div className="flex space-x-1 bg-white p-1 rounded-md shadow-sm mb-4">
+             <button onClick={()=>setActiveUploadTab('file')} className={`flex-1 flex justify-center py-1.5 text-xs font-bold rounded ${activeUploadTab === 'file' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:bg-gray-50'}`}>
+                <UploadCloud className="w-3.5 h-3.5 mr-1" /> File
+             </button>
+             <button onClick={()=>setActiveUploadTab('web')} className={`flex-1 flex justify-center py-1.5 text-xs font-bold rounded ${activeUploadTab === 'web' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:bg-gray-50'}`}>
+                <Globe className="w-3.5 h-3.5 mr-1" /> Web URL
+             </button>
+             <button onClick={()=>setActiveUploadTab('youtube')} className={`flex-1 flex justify-center py-1.5 text-xs font-bold rounded ${activeUploadTab === 'youtube' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:bg-gray-50'}`}>
+                <Video className="w-3.5 h-3.5 mr-1" /> YouTube
+             </button>
+          </div>
+
+          <div className="bg-white/70 border border-indigo-100 rounded-lg p-5 flex flex-col justify-center text-center">
+            {activeUploadTab === 'file' && (
+              <>
+                 <input type="file" accept=".pdf,.docx,.txt,.csv" onChange={(e) => setFile(e.target.files[0])} className="text-sm w-full file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700"/>
+              </>
+            )}
+            {activeUploadTab === 'web' && (
+              <div className="flex relative items-center">
+                 <Link className="absolute left-3 w-4 h-4 text-gray-400" />
+                 <input type="url" value={webUrl} onChange={e=>setWebUrl(e.target.value)} placeholder="https://example.com" className="w-full pl-9 pr-3 py-2 text-sm bg-white text-gray-900 border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500"/>
+              </div>
+            )}
+            {activeUploadTab === 'youtube' && (
+              <div className="flex relative items-center">
+                 <Video className="absolute left-3 w-4 h-4 text-gray-400" />
+                 <input type="url" value={youtubeUrl} onChange={e=>setYoutubeUrl(e.target.value)} placeholder="YouTube Video URL" className="w-full pl-9 pr-3 py-2 text-sm bg-white text-gray-900 border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500"/>
+              </div>
+            )}
           </div>
           
-          <div className="flex flex-col space-y-3 pt-2">
+          <div className="flex flex-col space-y-2 pt-2">
             <button 
               onClick={handleUploadAndGenerate}
-              disabled={!file || uploading}
-              className="w-full bg-indigo-600 text-white rounded-md py-2 font-medium hover:bg-indigo-700 disabled:opacity-50 transition shadow-sm flex items-center justify-center"
+              disabled={uploading || (activeUploadTab==='file'&&!file) || (activeUploadTab==='web'&&!webUrl) || (activeUploadTab==='youtube'&&!youtubeUrl)}
+              className="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-md py-2.5 font-bold text-sm shadow-sm disabled:opacity-50 flex justify-center items-center"
             >
-              {uploading ? <><Loader2 className="animate-spin h-4 w-4 mr-2" /> Uploading...</> : 'Upload & Generate Structure'}
+              {uploading ? <><Loader2 className="animate-spin h-4 w-4 mr-2" /> Processing...</> : 'Import Context'}
             </button>
-            
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-300"></div></div>
-              <div className="relative flex justify-center text-sm"><span className="px-2 bg-indigo-50/50 text-gray-500">Or</span></div>
-            </div>
-
-            <button 
-              onClick={skipUploadAndGenerate}
-              className="w-full bg-white border border-gray-300 text-gray-700 rounded-md py-2 font-medium hover:bg-gray-50 transition shadow-sm"
-            >
-              Skip Upload & Generate Structure
+            <button onClick={skipUploadAndGenerate} className="w-full bg-white border border-gray-300 text-gray-700 rounded-md py-2 font-bold text-sm hover:bg-gray-50 transition shadow-sm">
+              Skip Import
             </button>
           </div>
         </div>
       );
     }
 
+    if (msg.type === 'form_outline_skeleton') {
+      return (
+         <OutlineForm description={courseData.details.description} onOutlineGenerated={handleOutlineGenerated} />
+      );
+    }
+
     if (msg.type === 'card_structure') {
       const { structure } = courseData;
       return (
-        <div className="w-full md:min-w-[500px] bg-white border border-indigo-200 shadow-md rounded-xl overflow-hidden mt-2">
-           <div className="bg-indigo-50 px-4 py-3 border-b border-indigo-100 flex justify-between items-center">
-             <h3 className="font-semibold text-indigo-900 flex items-center">
-               Course Structure Outline
-             </h3>
+        <div className="w-full md:min-w-[500px] bg-white border border-indigo-200 shadow-md rounded-xl overflow-hidden mt-2 backdrop-blur-md">
+           <div className="bg-indigo-50 px-4 py-3 border-b border-indigo-100">
+             <h3 className="font-semibold text-indigo-900 flex items-center text-sm">Course Structure Outline</h3>
            </div>
            
            <div className="p-4 bg-gray-50 space-y-4 max-h-[500px] overflow-y-auto">
              {!structure?.modules?.length ? (
-               <p className="text-center text-gray-500 text-sm py-4">No structure found or generation failed. Add modules manually.</p>
+               <p className="text-center text-gray-500 text-sm py-4">No structure found.</p>
              ) : (
                 structure.modules.map((mod, modIdx) => (
                   <div key={modIdx} className="border border-gray-200 rounded-lg p-3 bg-white shadow-sm transition hover:shadow-md">
                     <div className="flex justify-between items-center mb-3">
                       <input 
-                        type="text" 
-                        value={mod.title} 
-                        onChange={(e) => handleModuleTitleChange(modIdx, e.target.value)}
-                        className="font-bold text-gray-800 text-base border-b border-transparent hover:border-gray-300 focus:border-indigo-500 focus:outline-none p-1 w-full mr-4 bg-transparent"
+                        type="text" value={mod.title} onChange={(e) => handleModuleTitleChange(modIdx, e.target.value)}
+                        className="font-bold text-gray-800 text-sm border-b border-transparent hover:border-gray-300 focus:outline-none p-1 w-full mr-4 bg-transparent"
                       />
-                      <button onClick={() => handleRemoveModule(modIdx)} className="text-red-400 hover:text-red-600 p-1 rounded transition">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <button onClick={() => handleRemoveModule(modIdx)} className="text-red-400 hover:text-red-600 p-1 rounded transition"><Trash2 className="h-4 w-4" /></button>
                     </div>
 
                     <div className="pl-4 space-y-2 border-l-2 border-indigo-100 ml-1 pb-1">
@@ -455,105 +472,56 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
                         <div key={chapIdx} className="flex items-center justify-between group bg-gray-50/50 rounded p-1 -ml-2 pl-2">
                           <div className="w-1.5 h-1.5 rounded-full bg-indigo-300 mr-2 flex-shrink-0"></div>
                           <input 
-                            type="text" 
-                            value={chap.title} 
-                            onChange={(e) => handleChapterTitleChange(modIdx, chapIdx, e.target.value)}
-                            className="text-sm font-medium border-b border-transparent hover:border-gray-300 focus:border-indigo-500 focus:outline-none p-1 w-full mr-2 bg-transparent text-gray-700"
+                            type="text" value={chap.title} onChange={(e) => handleChapterTitleChange(modIdx, chapIdx, e.target.value)}
+                            className="text-sm font-medium border-b border-transparent hover:border-gray-300 focus:outline-none p-1 w-full mr-2 bg-transparent text-gray-700"
                           />
-                          <button onClick={() => handleRemoveChapter(modIdx, chapIdx)} className="text-gray-400 group-hover:text-red-500 opacity-0 group-hover:opacity-100 p-1 rounded transition">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          <button onClick={() => handleRemoveChapter(modIdx, chapIdx)} className="text-gray-400 group-hover:text-red-500 opacity-0 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
                         </div>
                       ))}
-                      
-                      <button onClick={() => handleAddChapter(modIdx)} className="mt-2 text-xs flex items-center text-indigo-500 font-medium hover:text-indigo-700 px-2 py-1 rounded-md hover:bg-indigo-50 transition -ml-2">
+                      <button onClick={() => handleAddChapter(modIdx)} className="mt-2 text-xs flex items-center text-indigo-500 font-bold hover:text-indigo-700 px-2 py-1 rounded-md hover:bg-indigo-50 transition -ml-2">
                         <Plus className="h-3 w-3 mr-1" /> Add Chapter
                       </button>
                     </div>
                   </div>
                 ))
              )}
-
-             <button 
-               onClick={handleAddModule}
-               className="inline-flex items-center justify-center w-full px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm font-medium text-gray-600 bg-white hover:bg-gray-50 hover:border-indigo-300 hover:text-indigo-600 transition"
-             >
+             <button onClick={handleAddModule} className="inline-flex items-center justify-center w-full px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm font-bold text-gray-500 bg-white hover:bg-gray-50 hover:text-indigo-600 transition">
                <Plus className="h-4 w-4 mr-1" /> Add Module
              </button>
            </div>
            
-           <div className="bg-white px-4 py-3 border-t border-gray-100 flex justify-between">
-             <button 
-               onClick={() => {
-                 removeMessageByType('card_structure');
-                 startGeneration(courseData.sourceType);
-               }}
-               className="bg-white border border-gray-300 text-gray-700 font-medium px-4 py-2 rounded-lg hover:bg-gray-50 flex items-center shadow-sm transition"
-             >
-               <RefreshCw className="w-4 h-4 mr-2" /> Regenerate Outline
+           <div className="bg-white px-4 py-3 border-t border-gray-100 flex justify-between items-center">
+             <button onClick={handleRegenerateOutline} className="text-sm font-bold text-gray-500 hover:text-indigo-600 transition flex items-center bg-gray-50 px-3 py-2 rounded shadow-sm border border-gray-200">
+                <RefreshCw className="w-4 h-4 mr-2" /> Regenerate Outline
              </button>
-             <button 
-               onClick={handleConfirmStructure}
-               className="bg-indigo-600 text-white font-medium px-5 py-2 rounded-lg hover:bg-indigo-700 shadow-sm flex items-center transition"
-             >
-               <CheckCircle className="w-4 h-4 mr-2" /> Confirm & Create Content
+             <button onClick={handleConfirmStructure} className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white font-bold px-5 py-2.5 rounded-lg hover:from-indigo-600 hover:to-indigo-700 shadow-sm flex items-center transition">
+               <CheckCircle className="w-4 h-4 mr-2" /> Confirm & Edit Content
              </button>
            </div>
         </div>
       );
     }
-
     return null;
   };
 
+  // Removed editingChapters render block
+
+
   return (
-    <div className="flex flex-col h-[calc(100vh-250px)] min-h-[500px] border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white">
-      {/* Header */}
-      <div className="bg-indigo-600 px-6 py-4 flex items-center">
+    <div className="flex flex-col h-[calc(100vh-200px)] min-h-[500px] border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white/90 backdrop-blur-sm">
+      <div className="bg-gradient-to-r from-indigo-600 to-indigo-800 px-6 py-4 flex items-center shadow-sm">
         <Bot className="text-indigo-100 w-8 h-8 mr-3" />
         <div>
            <h2 className="text-lg font-bold text-white">Course Creation Assistant</h2>
-           <p className="text-indigo-200 text-xs">I'll help you prepare your course in seconds.</p>
+           <p className="text-indigo-200 text-xs font-medium">I'll help you prepare your course in seconds.</p>
         </div>
       </div>
 
-      {/* Chat Area */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50 space-y-6">
-        {messages.map((msg) => (
-          <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`flex max-w-[90%] sm:max-w-[80%] ${msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-              
-              {/* Avatar */}
-              <div className={`flex-shrink-0 flex items-center justify-center h-8 w-8 rounded-full ${msg.sender === 'user' ? 'bg-indigo-100 ml-3' : 'bg-indigo-600 mr-3'}`}>
-                {msg.sender === 'user' ? <User className="h-5 w-5 text-indigo-700" /> : <Bot className="h-5 w-5 text-white" />}
-              </div>
-
-              {/* Message Bubble */}
-              <div className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}>
-                <div 
-                  className={`relative rounded-2xl px-4 py-3 shadow-sm ${
-                    msg.sender === 'user'
-                      ? 'bg-indigo-600 text-white rounded-tr-none'
-                      : 'bg-white text-gray-800 border border-gray-200 rounded-tl-none'
-                  } ${msg.type.startsWith('form') || msg.type === 'card_structure' ? 'w-full' : ''}`}
-                >
-                  {renderMessageContent(msg)}
-                </div>
-                
-                {msg.sender === 'user' && msg.restoresForm && (
-                   <button 
-                     onClick={() => handleEditMessage(msg.id, msg.restoresForm)}
-                     className="text-xs text-gray-400 mt-1 flex items-center hover:text-indigo-600 transition"
-                   >
-                      <Pencil className="w-3 h-3 mr-1" /> Edit
-                   </button>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
+      <Chatbot 
+        messages={messages} 
+        renderMessageContent={renderMessageContent} 
+        handleEditMessage={handleEditMessage} 
+      />
     </div>
   );
 }

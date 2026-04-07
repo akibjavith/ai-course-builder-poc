@@ -13,3 +13,7 @@ pypdf
 docx2txt
 requests
 imageio-ffmpeg
+PyMuPDF
+python-docx
+python-pptx
+youtube-transcript-api

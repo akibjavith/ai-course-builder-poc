@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { storeCourse } from '../api';
-import { Loader2, CheckCircle, Database, Download } from 'lucide-react';
+import { Loader2, CheckCircle, Database } from 'lucide-react';
 
 export default function PublishDashboard({ courseData, onBack, onComplete }) {
   const [saving, setSaving] = useState(false);
@@ -9,40 +9,7 @@ export default function PublishDashboard({ courseData, onBack, onComplete }) {
 
   const { details, structure, content } = courseData;
 
-  const downloadJSON = () => {
-    const dataStr = JSON.stringify(courseData, null, 2);
-    const blob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${details.title || 'course'}_full.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
 
-  const downloadTXT = () => {
-    let textStr = `# ${details.title}\n\n${details.description}\n\n`;
-    (structure.modules || []).forEach(mod => {
-        textStr += `## ${mod.title}\n\n`;
-        (mod.chapters || []).forEach(chap => {
-            textStr += `### ${chap.title}\n\n`;
-            const cData = (content || []).find(c => c.module_title === mod.title && c.title === chap.title);
-            if (cData && cData.explanation) {
-                textStr += `${cData.explanation}\n\n`;
-                if (cData.key_points && cData.key_points.length) {
-                    textStr += `**Key Points:**\n` + cData.key_points.map(kp => `- ${kp}`).join("\n") + "\n\n";
-                }
-            }
-        });
-    });
-    const blob = new Blob([textStr], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${details.title || 'course'}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -97,8 +64,8 @@ export default function PublishDashboard({ courseData, onBack, onComplete }) {
                        return (
                          <div key={j} className="flex justify-between items-center text-xs py-1 px-2 rounded bg-white border border-gray-100">
                            <span className="font-medium text-gray-700">{chap.title}</span>
-                           <span className={cData ? "text-green-600 font-semibold" : "text-red-500 font-semibold"}>
-                             {cData ? (cData.content_type === 'ai_generated' ? 'AI Ready' : 'Manual Ready') : "Missing Content"}
+                           <span className={cData ? "text-green-600 font-semibold italic" : "text-red-500 font-semibold animate-pulse"}>
+                             {cData ? ((cData.files && cData.files.length > 0) ? `${cData.files.length} Internal Item(s)` : 'AI Text Ready') : "Missing Content"}
                            </span>
                          </div>
                        );
@@ -115,16 +82,10 @@ export default function PublishDashboard({ courseData, onBack, onComplete }) {
                <h3 className="text-lg font-bold flex items-center mb-1">
                  <CheckCircle className="w-5 h-5 mr-2 text-indigo-200" /> Course Assembly Complete!
                </h3>
-               <p className="text-indigo-200 text-sm">Download your JSON file directly, or publish it to the platform database.</p>
+               <p className="text-indigo-200 text-sm">Publish it to the platform database to start learning.</p>
                {errorMsg && <p className="text-red-300 text-xs mt-2 font-medium">{errorMsg}</p>}
              </div>
              <div className="flex space-x-3 w-full md:w-auto">
-                <button 
-                  onClick={details.course_format === 'txt' ? downloadTXT : downloadJSON} 
-                  className="flex-1 md:flex-none bg-indigo-500 hover:bg-indigo-400 text-white border border-indigo-400 px-4 py-2.5 text-sm rounded-lg font-medium transition shadow-sm flex items-center justify-center"
-                >
-                  <Download className="w-4 h-4 mr-2" /> Download {details.course_format === 'txt' ? 'Course TXT' : 'Course JSON'}
-                </button>
                 <button 
                   onClick={handleSave}
                   disabled={saving}

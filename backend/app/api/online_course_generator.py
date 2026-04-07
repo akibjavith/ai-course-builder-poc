@@ -159,7 +159,22 @@ async def generate_image(payload: Dict[str, str]):
             n=1,
             size="1024x1024"
         )
-        return ImageResponse(image_url=response.data[0].url).dict()
+        url = response.data[0].url
+        
+        # Download the image to avoid expiration
+        import requests
+        import uuid
+        import os
+        img_data = requests.get(url).content
+        unique_filename = f"dalle_{uuid.uuid4().hex[:8]}.png"
+        os.makedirs("uploads", exist_ok=True)
+        file_path = os.path.join("uploads", unique_filename)
+        with open(file_path, "wb") as f:
+            f.write(img_data)
+            
+        # Return a relative path; the frontend will prepend its API_URL
+        image_path = f"/uploads/{unique_filename}"
+        return ImageResponse(image_url=image_path).dict()
     except Exception as e:
         print("Dalle error", e)
         # Fallback to avoid complete pipeline failure
@@ -179,7 +194,8 @@ async def compile_video_endpoint(req: VideoCompileRequest):
             lesson_text=req.script_text, 
             output_filename=filename
         )
-        return {"video_url": f"http://localhost:8001{video_url}"}
+        # Return the video path relative to the API host
+        return {"video_url": video_url}
     except Exception as e:
         # Fallback
         raise HTTPException(status_code=500, detail=str(e))

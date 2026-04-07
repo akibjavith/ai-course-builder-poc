@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { uploadChapterMedia, startAsyncGeneration, checkAsyncStatus } from '../api';
 import { Loader2, CheckCircle2, ChevronDown, ChevronRight, Video, FileText, Bot, Upload, PlayCircle, RefreshCw } from 'lucide-react';
+import ChapterEditor from './ChapterEditor';
+import ModuleAssessmentBox from './ModuleAssessmentBox';
+import QuizViewer from './QuizViewer';
 
 export default function HybridContentEditor({ courseData, updateCourseData, onNext, onBack }) {
   const { structure, details, sourceType, content = [] } = courseData;
@@ -36,6 +39,14 @@ export default function HybridContentEditor({ courseData, updateCourseData, onNe
        updatedContent.push(entry);
     }
     updateCourseData('content', updatedContent);
+  };
+
+  const handleSaveChapterContent = (modIdx, chapIdx, contentObj) => {
+    const modules = [...(courseData.structure.modules || [])];
+    if (modules[modIdx] && modules[modIdx].chapters[chapIdx]) {
+      modules[modIdx].chapters[chapIdx].content = contentObj;
+      updateCourseData('structure', { ...courseData.structure, modules });
+    }
   };
 
   const getChapContent = (moduleTitle, chapterTitle) => {
@@ -244,130 +255,46 @@ export default function HybridContentEditor({ courseData, updateCourseData, onNe
          )}
       </div>
 
-      {/* CHAPTER LIST ACCORDION */}
-      <div className="space-y-4 mb-8">
-        <h4 className="font-semibold text-gray-800 border-b pb-2">Manual Overrides & Details</h4>
-        {flatChapters.map((c, i) => {
-          const key = `${c.moduleTitle}-${c.chapterTitle}`;
-          const isGeneratingChap = loadingMap[key];
-          const hasContent = isCompleted(c.moduleTitle, c.chapterTitle);
-          const expanded = expandedChapter === key;
-          const chapData = getChapContent(c.moduleTitle, c.chapterTitle);
-
-          return (
-            <div key={i} className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm hover:shadow transition">
-              <div 
-                className="p-4 flex justify-between items-center cursor-pointer hover:bg-gray-50 bg-white"
-                onClick={() => setExpandedChapter(expanded ? null : key)}
-              >
-                <div className="flex items-center">
-                  {expanded ? <ChevronDown className="h-4 w-4 text-gray-400 mr-2" /> : <ChevronRight className="h-4 w-4 text-gray-400 mr-2" />}
-                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider w-32 truncate">{c.moduleTitle}</span>
-                  <span className="text-sm font-medium text-gray-900 ml-4">{c.chapterTitle}</span>
-                </div>
-                
-                <div className="flex items-center">
-                   {hasContent && <CheckCircle2 className="h-5 w-5 text-green-500 mr-4" />}
-                   {hasContent && (
-                       <span className="mr-4 text-xs font-medium px-2 py-1 bg-gray-100 rounded text-gray-600 uppercase tracking-wider">
-                          {chapData.content_type === 'ai_generated' ? 'AI Generated' : 'Manual Upload'}
-                       </span>
-                   )}
-                   {!hasContent && (
-                       <span className="mr-4 text-xs font-medium px-2 py-1 bg-orange-50 text-orange-600 rounded uppercase tracking-wider">
-                          Pending
-                       </span>
-                   )}
-                   <span className="text-sm text-indigo-600 font-medium">{expanded ? "Close" : "Edit"}</span>
-                </div>
-              </div>
-
-              {expanded && (
-                <div className="p-4 bg-gray-50 border-t border-gray-200 text-sm">
-                   
-                   {hasContent && chapData.content_type === 'ai_generated' ? (
-                       <div className="mb-6 border rounded-lg bg-white overflow-hidden shadow-sm">
-                          <div className="bg-green-50 px-4 py-3 flex justify-between items-center border-b border-green-100">
-                             <h4 className="font-semibold text-green-800 flex items-center text-sm"><CheckCircle2 className="h-4 w-4 mr-2 text-green-600"/> Auto-Generated Preview</h4>
-                             <button 
-                               onClick={() => handleRegenerateLesson(c)}
-                               className="text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded text-xs font-medium flex items-center shadow-sm transition"
-                             >
-                               <RefreshCw className="w-3 h-3 mr-1" /> Regenerate Text & Media
-                             </button>
-                          </div>
-                          <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-                             <div className="md:col-span-2">
-                               <p className="text-xs text-gray-700 leading-relaxed font-mono whitespace-pre-wrap max-h-40 overflow-y-auto">
-                                 {chapData.explanation}
-                               </p>
-                             </div>
-                             {chapData.image_url && (
-                                <div className="rounded-md overflow-hidden bg-gray-100 border border-gray-200">
-                                   <img src={chapData.image_url} alt="AI Vis" className="w-full h-full object-cover" />
-                                </div>
-                             )}
-                          </div>
-                          {chapData.video_url && (
-                             <div className="bg-indigo-50 border-t border-indigo-100 px-4 py-2 text-xs font-medium text-indigo-700 flex items-center">
-                               <Video className="w-3.5 h-3.5 mr-2" /> 
-                               Video Compiled Successfully
-                             </div>
-                          )}
-                       </div>
-                   ) : null}
-
-                   <div className="p-4 border border-dashed border-gray-300 rounded-lg bg-white relative">
-                      {isGeneratingChap && (
-                         <div className="absolute inset-0 bg-white/80 z-10 flex items-center justify-center rounded-lg">
-                            <Loader2 className="h-6 w-6 text-indigo-500 animate-spin" />
-                         </div>
-                      )}
-
-                      <h4 className="font-semibold text-gray-700 flex items-center mb-2">Attach External Media (Manual Override)</h4>
-                      <p className="text-xs text-gray-500 mb-4">Paste a YouTube/Vimeo/Drive link, OR upload your own local MP4/PDF.</p>
-                      
-                      {/* File Upload Area */}
-                      <div className="grid grid-cols-2 gap-4 mb-4">
-                         <label className="border-2 border-dashed border-gray-200 hover:border-indigo-300 rounded-lg p-4 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition">
-                             <Upload className="h-6 w-6 text-indigo-400 mb-2"/>
-                             <span className="font-medium text-xs text-gray-700">Upload Video File (.mp4)</span>
-                             <input type="file" accept="video/mp4,video/webm" className="hidden" onChange={(e) => handleFileUpload(e, c, 'video')} />
-                         </label>
-
-                         <label className="border-2 border-dashed border-gray-200 hover:border-blue-300 rounded-lg p-4 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition">
-                             <Upload className="h-6 w-6 text-blue-400 mb-2"/>
-                             <span className="font-medium text-xs text-gray-700">Upload Document (.pdf)</span>
-                             <input type="file" accept="application/pdf" className="hidden" onChange={(e) => handleFileUpload(e, c, 'document')} />
-                         </label>
-                      </div>
-
-                      <div className="flex items-center text-xs text-gray-400 mb-4 px-2 uppercase tracking-widest font-bold">
-                         <div className="flex-1 border-b"></div><span className="px-2">OR Paste Link</span><div className="flex-1 border-b"></div>
-                      </div>
-
-                      {/* URL Input Area */}
-                      <input 
-                         type="text"
-                         placeholder="https://youtube.com/..."
-                         value={manualLinks[key] || chapData?.video_url || chapData?.document_url || ''}
-                         onChange={(e) => setManualLinks({...manualLinks, [key]: e.target.value})}
-                         className="w-full border border-gray-300 p-2 rounded text-sm mb-3 focus:ring focus:ring-indigo-100"
-                      />
-                      <div className="flex space-x-2">
-                         <button onClick={() => handleManualSave(c, 'video')} className="text-xs bg-gray-800 text-white px-3 py-2 rounded flex items-center shadow-sm hover:bg-gray-700">
-                            <Video className="w-3 h-3 mr-1"/> Attach Link as Video
-                         </button>
-                         <button onClick={() => handleManualSave(c, 'document')} className="text-xs bg-gray-800 text-white px-3 py-2 rounded flex items-center shadow-sm hover:bg-gray-700">
-                            <FileText className="w-3 h-3 mr-1"/> Attach Link as Doc
-                         </button>
-                      </div>
-                   </div>
-                </div>
-              )}
+      {/* CHAPTER LIST - NEW INTEGRATED EDITOR */}
+      <div className="space-y-12 mb-12">
+        {(structure.modules || []).map((mod, mIdx) => (
+          <div key={mIdx} className="space-y-6">
+            <div className="flex justify-between items-center border-b-2 border-indigo-200 pb-2">
+               <h3 className="text-2xl font-bold text-indigo-900">{mod.title}</h3>
+               <ModuleAssessmentBox 
+                  mIdx={mIdx} 
+                  mod={mod} 
+                  courseTitle={details.title} 
+                  assessmentText={structure.settings?.assessmentText} 
+                  onAssessmentSaved={(mcqs) => {
+                     const newModules = [...structure.modules];
+                     newModules[mIdx].assessment = mcqs;
+                     updateCourseData('structure', { ...structure, modules: newModules });
+                  }}
+               />
             </div>
-          );
-        })}
+            
+            {mod.assessment && (
+               <div className="bg-white rounded-lg shadow-sm overflow-hidden border border-indigo-100">
+                  <QuizViewer questions={mod.assessment} title={`${mod.title} Assessment`} />
+               </div>
+            )}
+
+            <div className="space-y-6 pl-4 border-l-4 border-indigo-100 mt-6 font-sans">
+               {(mod.chapters || []).map((chap, cIdx) => (
+                  <ChapterEditor 
+                     key={cIdx} 
+                     courseTitle={details.title}
+                     moduleTitle={mod.title}
+                     chapter={chap}
+                     courseData={courseData}
+                     onSave={(contentObj) => handleSaveChapterContent(mIdx, cIdx, contentObj)}
+                     onRegenerate={() => {}} // Could link to specific regenerate logic if needed
+                  />
+               ))}
+            </div>
+          </div>
+        ))}
       </div>
 
       <div className="mt-8 flex justify-between pt-4 border-t border-gray-200">
@@ -375,11 +302,28 @@ export default function HybridContentEditor({ courseData, updateCourseData, onNe
           Back
         </button>
         <button 
-          onClick={onNext}
-          disabled={!allGenerated || globalProgress.active}
+          onClick={() => {
+            // Validation: Ensure every chapter has content.files set
+            const modules = structure.modules || [];
+            let missing = [];
+            modules.forEach(m => {
+              m.chapters.forEach(c => {
+                if (!c.content?.files || c.content.files.length === 0) {
+                  missing.push(`${m.title}: ${c.title}`);
+                }
+              });
+            });
+
+            if (missing.length > 0) {
+              alert("The following chapters are missing internal/generated documents: \n\n" + missing.join("\n") + "\n\nPlease generate content or upload a file for each.");
+              return;
+            }
+            onNext();
+          }}
+          disabled={globalProgress.active}
           className="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 font-medium disabled:opacity-50 transition shadow-sm"
         >
-          {allGenerated ? 'Review & Publish' : 'Finish Generating Above First'}
+          Next: Review Final Course
         </button>
       </div>
     </div>

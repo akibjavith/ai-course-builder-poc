@@ -23,6 +23,7 @@ def generate_chapter_content(course_title, module_title, chapter_title, source_t
     else:
         prompt_str += "\nUse your internal knowledge to provide an in-depth, accurate explanation.\n"
         
+    prompt_str += "\nCRITICAL REQUIREMENT: The `explanation` field MUST contain a highly detailed, comprehensive text that is AT LEAST 300 words long. Expand on topics deeply to meet this strict word count requirement."
     prompt_str += "\nOutput MUST be a JSON matching the required schema. If the domain is non-technical (e.g., medical, business), YOU MUST set the `code` and `example` fields to null. Never hallucinate code where not applicable."
     
     prompt = ChatPromptTemplate.from_messages([
@@ -86,4 +87,42 @@ def generate_course_quiz(course_title, modules, source_type, audience, difficult
         "modules_str": mod_str
     })
     
+    return response.model_dump()
+
+def generate_brief_title(description: str) -> str:
+    from pydantic import BaseModel
+    from langchain_openai import ChatOpenAI
+    from langchain_core.prompts import ChatPromptTemplate
+    
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "You are an expert copywriter. Generate a concise, engaging course title based on the description. The title MUST be under 50 characters."),
+        ("user", "{description}")
+    ])
+    try:
+        class TitleResp(BaseModel):
+            title: str
+        chain = prompt | llm.with_structured_output(TitleResp)
+        response = chain.invoke({"description": description})
+        # ensure it's under 50
+        if len(response.title) > 50:
+            return response.title[:47] + "..."
+        return response.title
+    except Exception:
+        return "AI Course Builder Course"
+
+def generate_outline_skeleton(description: str, modules_count: int, chapters_count: int) -> dict:
+    from schemas import CourseStructureResponse
+    from langchain_openai import ChatOpenAI
+    from langchain_core.prompts import ChatPromptTemplate
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
+    
+    prompt_str = f"Create a structured course outline with exactly {modules_count} modules. Each module must have exactly {chapters_count} chapters based on the following course description:\n{{description}}"
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "You are an expert instructional designer. Generate a structured course outline matching the exact number of requested modules and chapters. Ensure the JSON conforms to the exact schema."),
+        ("user", prompt_str)
+    ])
+    chain = prompt | llm.with_structured_output(CourseStructureResponse)
+    response = chain.invoke({"description": description})
     return response.model_dump()

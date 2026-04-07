@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8001'; // FastAPI running on your Wi-Fi IP
+const API_URL =  'http://localhost:8000'; // FastAPI running on your Wi-Fi IP
 
 export const uploadDoc = async (file) => {
   const formData = new FormData();
@@ -93,9 +93,76 @@ export const checkAsyncStatus = async (taskId) => {
 };
 
 export const storeCourse = async (payload) => {
-  // payload = { course_json: {...} }
-  // Route to /course/create which uses course_store.py so dashboard can read it back
-  const response = await axios.post(`${API_URL}/course/create`, payload.course_json);
+  const courseId = payload.course_json.id;
+  if (courseId) {
+    const response = await axios.put(`${API_URL}/course/${courseId}`, payload.course_json);
+    return response.data;
+  } else {
+    const response = await axios.post(`${API_URL}/course/create`, payload.course_json);
+    return response.data;
+  }
+};
+
+export const deleteCourse = async (courseId) => {
+  const response = await axios.delete(`${API_URL}/course/${courseId}`);
+  return response.data;
+};
+
+export const uploadThumbnail = async (file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await axios.post(`${API_URL}/course/upload-thumbnail`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
+  return response.data;
+};
+
+export const generateCourseTitle = async (description) => {
+  const response = await axios.post(`${API_URL}/course/generate-title`, { description });
+  return response.data;
+};
+
+export const fetchWebDocument = async (url) => {
+  const response = await axios.post(`${API_URL}/course/fetch-web`, { url });
+  return response.data;
+};
+
+export const fetchYouTubeDocument = async (youtubeUrl) => {
+  const response = await axios.post(`${API_URL}/course/fetch-youtube`, { youtube_url: youtubeUrl });
+  return response.data;
+};
+
+export const generateOutlineSkeleton = async (payload) => {
+  const response = await axios.post(`${API_URL}/course/generate-outline`, payload);
+  return response.data;
+};
+
+export const exportChapter = async (payload) => {
+  const response = await axios.post(`${API_URL}/course/export`, payload);
+  return response.data;
+};
+
+export const generateFlashcards = async (payload) => {
+  const response = await axios.post(`${API_URL}/course/flashcards`, payload);
+  return response.data;
+};
+
+export const uploadFile = async (file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await axios.post(`${API_URL}/course/upload-media`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
+  return response.data;
+};
+
+export const generateMCQs = async (payload) => {
+  const response = await axios.post(`${API_URL}/course/mcq`, payload);
+  return response.data;
+};
+
+export const generateAssessment = async (payload) => {
+  const response = await axios.post(`${API_URL}/course/assessment`, payload);
   return response.data;
 };
 
