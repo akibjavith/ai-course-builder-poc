@@ -27,3 +27,12 @@ frontend/yarn-error.log*
 *.njsproj
 *.sln
 *.sw?
+
+# venv files
+.venv/
+__pycache__/
+*.pyc
+node_modules/
+.env
+backend/data/chroma/
+*.sqlite3
