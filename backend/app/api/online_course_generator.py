@@ -172,9 +172,10 @@ async def generate_image(payload: Dict[str, str]):
         with open(file_path, "wb") as f:
             f.write(img_data)
             
-        # Return a relative path; the frontend will prepend its API_URL
-        image_path = f"/uploads/{unique_filename}"
-        return ImageResponse(image_url=image_path).dict()
+        # Return an absolute URL; the frontend will use this directly
+        base_url = os.getenv("PUBLIC_ASSET_URL", "http://localhost:8000")
+        image_url = f"{base_url}/uploads/{unique_filename}"
+        return ImageResponse(image_url=image_url).dict()
     except Exception as e:
         print("Dalle error", e)
         # Fallback to avoid complete pipeline failure
@@ -230,38 +231,46 @@ async def async_course_worker(task_id: str, req: GenerateAsyncRequest):
                 source_type=req.source_type,
                 audience=req.audience,
                 difficulty=req.difficulty,
-                objectives=req.objectives
+                objectives=req.objectives,
+                output_format=req.course_format
             )
             
             voice_script = None
             image_url = None
             video_url = None
+            html_content = content.get("html_content")
+            content_type = 'ai_generated'
             
             if req.course_format == 'video':
                 TASK_STORE[task_id]["message"] = f"Generating audio & images for {job.chapterTitle}..."
-                voice_resp = await generate_voice({"lesson_text": content.explanation})
-                prompt_resp = await generate_image_prompt({"lesson_text": content.explanation})
+                voice_resp = await generate_voice({"lesson_text": content.get("explanation", "")})
+                prompt_resp = await generate_image_prompt({"lesson_text": content.get("explanation", "")})
                 image_resp = await generate_image({"prompt": prompt_resp["prompt"]})
                 
                 TASK_STORE[task_id]["message"] = f"Compiling MP4 for {job.chapterTitle}..."
-                vreq = VideoCompileRequest(image_url=image_resp["image_url"], script_text=content.explanation)
+                vreq = VideoCompileRequest(image_url=image_resp["image_url"], script_text=content.get("explanation", ""))
                 video_resp = await compile_video_endpoint(vreq)
                 
                 voice_script = voice_resp["voice_script"]
                 image_url = image_resp["image_url"]
                 video_url = video_resp["video_url"]
+                content_type = 'video'
             elif req.course_format == 'image':
-                prompt_resp = await generate_image_prompt({"lesson_text": content.explanation})
+                prompt_resp = await generate_image_prompt({"lesson_text": content.get("explanation", "")})
                 image_resp = await generate_image({"prompt": prompt_resp["prompt"]})
                 image_url = image_resp["image_url"]
+                content_type = 'image'
+            elif req.course_format == 'html':
+                content_type = 'html'
 
             results.append({
                 "module_title": job.moduleTitle,
                 "title": job.chapterTitle,
-                "content_type": 'ai_generated',
-                "explanation": content.explanation,
-                "examples": content.examples,
-                "key_points": content.key_points,
+                "content_type": content_type,
+                "explanation": content.get("explanation", ""),
+                "html_content": html_content,
+                "examples": content.get("examples", []),
+                "key_points": content.get("key_points", []),
                 "voice_script": voice_script,
                 "image_url": image_url,
                 "video_url": video_url,

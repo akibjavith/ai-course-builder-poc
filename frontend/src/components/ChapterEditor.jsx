@@ -8,9 +8,12 @@ import {
   generateChapter, generateVoiceScript, exportChapter, 
   generateFlashcards, uploadFile 
 } from '../api';
+import PremiumRichEditor from './PremiumRichEditor';
 
 export default function ChapterEditor({ courseTitle, moduleTitle, chapter, courseData, onSave, onRegenerate }) {
   const [content, setContent] = useState(chapter.content?.explanation || "");
+  const [htmlContent, setHtmlContent] = useState(chapter.content?.html_content || "");
+  const [editorMode, setEditorMode] = useState(chapter.content?.content_type === 'html' ? 'rich' : 'text');
   const [audioUrl, setAudioUrl] = useState(chapter.content?.audio_url || null);
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -31,8 +34,10 @@ export default function ChapterEditor({ courseTitle, moduleTitle, chapter, cours
   const [showLinkInput, setShowLinkInput] = useState(false);
 
   useEffect(() => {
-    if (chapter.content?.explanation) {
-      setContent(chapter.content.explanation);
+    if (chapter.content) {
+      setContent(chapter.content.explanation || "");
+      setHtmlContent(chapter.content.html_content || "");
+      setEditorMode(chapter.content.content_type === 'html' ? 'rich' : 'text');
       setIsEditing(false);
     } else if (!isEditing && !isLoading && !content) {
       // Auto-trigger AI generation on first load if empty
@@ -59,7 +64,9 @@ export default function ChapterEditor({ courseTitle, moduleTitle, chapter, cours
         objectives: courseData.details?.learning_objectives || []
       });
       const generatedExpl = resp.content?.explanation || "";
-      if (countWords(generatedExpl) < 250) {
+      const generatedHtml = resp.content?.html_content || "";
+      
+      if (countWords(generatedHtml || generatedExpl) < 250) {
         setWordCountError(true);
       } else {
         setWordCountError(false);
@@ -75,7 +82,16 @@ export default function ChapterEditor({ courseTitle, moduleTitle, chapter, cours
       }
 
       setContent(generatedExpl);
-      onSave({ ...resp.content, explanation: generatedExpl, audio_url: newAudioUrl });
+      setHtmlContent(generatedHtml);
+      if (generatedHtml) setEditorMode('rich');
+      
+      onSave({ 
+        ...resp.content, 
+        explanation: generatedExpl, 
+        html_content: generatedHtml,
+        audio_url: newAudioUrl,
+        content_type: generatedHtml ? 'html' : 'ai_generated'
+      });
       setIsEditing(false);
     } catch (err) {
       console.error(err);
@@ -86,17 +102,35 @@ export default function ChapterEditor({ courseTitle, moduleTitle, chapter, cours
   };
 
   const handleSave = () => {
-    if (countWords(content) < 250) {
+    const activeText = editorMode === 'rich' ? htmlContent : content;
+    const wordCount = countWords(activeText);
+    
+    if (wordCount < 250 && files.length === 0) {
       setWordCountError(true);
-      return;
-    }
-    if (files.length === 0) {
-      alert("Please upload at least one file (or generate one) for this chapter.");
+      alert("Please provide more content (250+ words) or upload a file for this chapter.");
       return;
     }
     setWordCountError(false);
-    onSave({ ...chapter.content, explanation: content, audio_url: audioUrl, flashcards, files });
+    onSave({ 
+      ...chapter.content, 
+      explanation: content, 
+      html_content: htmlContent,
+      audio_url: audioUrl, 
+      flashcards, 
+      mcqs, 
+      files,
+      content_type: editorMode === 'rich' ? 'html' : 'ai_generated'
+    });
     setIsEditing(false);
+  };
+
+  const syncToRichText = () => {
+    if (!htmlContent || htmlContent === '<p><br></p>') {
+      // Basic conversion: separate by double newlines for paragraphs
+      const paragraphs = content.split(/\n\n+/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
+      setHtmlContent(paragraphs || '<p><br></p>');
+    }
+    setEditorMode('rich');
   };
 
   const handleLinkAdd = () => {
@@ -234,6 +268,23 @@ export default function ChapterEditor({ courseTitle, moduleTitle, chapter, cours
            )}
         </h4>
         <div className="flex gap-2">
+          {isEditing && (
+            <div className="flex bg-gray-100 rounded-lg p-1 mr-2">
+              <button 
+                onClick={() => setEditorMode('text')}
+                className={`px-3 py-1 text-xs font-bold rounded-md transition ${editorMode === 'text' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                Plain Text
+              </button>
+              <button 
+                onClick={syncToRichText}
+                className={`px-3 py-1 text-xs font-bold rounded-md transition ${editorMode === 'rich' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                Rich Text
+              </button>
+            </div>
+          )}
+
           {!isEditing && !audioUrl && (
             <button onClick={handleTTS} className="p-2 rounded-md transition flex items-center bg-gray-50 text-gray-500 hover:text-indigo-600" title="Generate Audio">
               <Volume2 className="w-4 h-4" />
@@ -242,11 +293,11 @@ export default function ChapterEditor({ courseTitle, moduleTitle, chapter, cours
           
           {!isEditing ? (
             <button onClick={() => setIsEditing(true)} className="text-sm bg-gray-100 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-200 font-bold transition flex items-center">
-              Edit Text
+              Edit {editorMode === 'rich' ? 'Lesson' : 'Text'}
             </button>
           ) : (
             <button onClick={handleSave} className="text-sm bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 font-bold flex items-center shadow-sm transition">
-              <Save className="w-4 h-4 mr-2" /> Save Content
+              <Save className="w-4 h-4 mr-2" /> Save Changes
             </button>
           )}
         </div>
@@ -262,23 +313,34 @@ export default function ChapterEditor({ courseTitle, moduleTitle, chapter, cours
         <div className="min-h-[200px]">
           {isEditing ? (
             <div className="bg-white flex flex-col h-full space-y-2">
-               <textarea 
-                 value={content} 
-                 onChange={(e) => setContent(e.target.value)} 
-                 className="w-full min-h-[300px] p-4 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-700 text-base leading-relaxed bg-indigo-50/10 shadow-inner resize-y transition-colors"
-                 placeholder="Write your chapter content here or click Regenerate to try AI again..."
-               />
+               {editorMode === 'rich' ? (
+                 <PremiumRichEditor 
+                    value={htmlContent} 
+                    onChange={setHtmlContent}
+                    placeholder="Paste your internal document content here or let AI generate it..."
+                 />
+               ) : (
+                 <textarea 
+                   value={content} 
+                   onChange={(e) => setContent(e.target.value)} 
+                   className="w-full min-h-[300px] p-4 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-700 text-base leading-relaxed bg-indigo-50/10 shadow-inner resize-y transition-colors"
+                   placeholder="Write your chapter content here or click Regenerate to try AI again..."
+                 />
+               )}
                <div className="flex justify-between items-center px-1">
-                 <span className={`text-xs uppercase tracking-wider font-bold ${countWords(content) < 250 ? 'text-orange-500' : 'text-green-600'}`}>
-                    Word Count: {countWords(content)} <span className="text-gray-400 font-medium normal-case">(250 minimum)</span>
+                 <span className={`text-xs uppercase tracking-wider font-bold ${countWords(editorMode === 'rich' ? htmlContent : content) < 250 ? 'text-orange-500' : 'text-green-600'}`}>
+                    Word Count: {countWords(editorMode === 'rich' ? htmlContent : content)} <span className="text-gray-400 font-medium normal-case">(250 minimum)</span>
                  </span>
                  {wordCountError && <span className="text-red-500 text-xs font-bold bg-red-50 px-2 py-1 rounded">⚠️ Too short! Add more detail.</span>}
                </div>
             </div>
           ) : (
             <div className="prose prose-indigo max-w-none text-gray-700 leading-relaxed bg-gray-50/50 p-6 rounded-lg border border-gray-100">
-               {/* Just render it with paragraph breaks, fallback if it has raw HTML */}
-               <div dangerouslySetInnerHTML={{ __html: content.replace(/\n/g, '<br/>') }} />
+               {editorMode === 'rich' ? (
+                 <div dangerouslySetInnerHTML={{ __html: htmlContent }} />
+               ) : (
+                 <div dangerouslySetInnerHTML={{ __html: content.replace(/\n/g, '<br/>') }} />
+               )}
             </div>
           )}
           
@@ -378,7 +440,17 @@ export default function ChapterEditor({ courseTitle, moduleTitle, chapter, cours
         <>
         {audioUrl && <TTSPlayer audioUrl={audioUrl} />}
         {flashcards && <div className="mt-8"><FlashcardViewer flashcards={flashcards} /></div>}
-        {mcqs && <div className="mt-8"><QuizViewer questions={mcqs} title={`${chapter.title} MCQs`} /></div>}
+        
+        {generatingMcqs ? (
+          <div className="mt-8 p-8 border-2 border-dashed border-indigo-100 rounded-2xl bg-indigo-50/30 flex flex-col items-center justify-center animate-pulse">
+            <Loader2 className="w-8 h-8 text-indigo-400 animate-spin mb-4" />
+            <p className="text-indigo-600 font-bold text-sm">GENEROATING INTERACTIVE MCQS...</p>
+            <p className="text-indigo-400 text-xs mt-1">Analyzing lesson content to create relevant questions</p>
+          </div>
+        ) : mcqs ? (
+          <div className="mt-8"><QuizViewer questions={mcqs} title={`${chapter.title} MCQs`} /></div>
+        ) : null}
+
         <div className="flex flex-wrap items-center justify-between border-t border-gray-100 pt-4 mt-6 gap-4 bg-gray-50/30 rounded-b-lg -mx-5 -mb-5 px-5 pb-5">
           <button onClick={handleGenerate} className="text-xs flex items-center text-indigo-600 hover:text-indigo-800 font-bold bg-indigo-50 px-3 py-2 rounded-md transition shadow-sm border border-indigo-100">
              <RefreshCw className="w-3.5 h-3.5 mr-2" /> REWRITE WITH AI

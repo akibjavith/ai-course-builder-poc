@@ -33,8 +33,9 @@ class CourseQuiz(BaseModel):
 
 class ChapterContent(BaseModel):
     title: str
-    content_type: str = "ai_generated" # ai_generated, video, document
+    content_type: str = "ai_generated" # ai_generated, video, document, html
     explanation: Optional[str] = None
+    html_content: Optional[str] = None
     example: Optional[str] = None
     code: Optional[str] = None
     summary: Optional[str] = None

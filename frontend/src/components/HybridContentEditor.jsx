@@ -46,6 +46,19 @@ export default function HybridContentEditor({ courseData, updateCourseData, onNe
     if (modules[modIdx] && modules[modIdx].chapters[chapIdx]) {
       modules[modIdx].chapters[chapIdx].content = contentObj;
       updateCourseData('structure', { ...courseData.structure, modules });
+
+      // Also sync to global content array for CourseViewer
+      const entry = {
+        module_title: modules[modIdx].title,
+        title: modules[modIdx].chapters[chapIdx].title,
+        explanation: contentObj.explanation,
+        flashcards: contentObj.flashcards,
+        mcqs: contentObj.mcqs,
+        audio_url: contentObj.audio_url,
+        files: contentObj.files || [],
+        content_type: contentObj.content_type || (contentObj.explanation ? 'ai_generated' : 'document')
+      };
+      saveContentEntry(entry);
     }
   };
 
@@ -302,24 +315,26 @@ export default function HybridContentEditor({ courseData, updateCourseData, onNe
           Back
         </button>
         <button 
-          onClick={() => {
-            // Validation: Ensure every chapter has content.files set
-            const modules = structure.modules || [];
-            let missing = [];
-            modules.forEach(m => {
-              m.chapters.forEach(c => {
-                if (!c.content?.files || c.content.files.length === 0) {
-                  missing.push(`${m.title}: ${c.title}`);
-                }
-              });
+        onClick={() => {
+          // Validation: Ensure every chapter has EITHER AI text OR files set
+          const modules = structure.modules || [];
+          let missing = [];
+          modules.forEach(m => {
+            m.chapters.forEach(c => {
+              const hasText = c.content?.explanation && c.content.explanation.length > 200;
+              const hasFiles = c.content?.files && c.content.files.length > 0;
+              if (!hasText && !hasFiles) {
+                missing.push(`${m.title}: ${c.title}`);
+              }
             });
+          });
 
-            if (missing.length > 0) {
-              alert("The following chapters are missing internal/generated documents: \n\n" + missing.join("\n") + "\n\nPlease generate content or upload a file for each.");
-              return;
-            }
-            onNext();
-          }}
+          if (missing.length > 0) {
+            alert("The following chapters are missing content: \n\n" + missing.join("\n") + "\n\nPlease generate AI text or upload a file/link for each.");
+            return;
+          }
+          onNext();
+        }}
           disabled={globalProgress.active}
           className="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 font-medium disabled:opacity-50 transition shadow-sm"
         >

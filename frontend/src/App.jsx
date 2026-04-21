@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { PlayCircle } from 'lucide-react';
 import Stepper from './components/Stepper';
+import SourceSelection from './components/SourceSelection';
+import CourseDetails from './components/CourseDetails';
 import InteractiveCourseCreator from './components/InteractiveCourseCreator';
 import HybridContentEditor from './components/HybridContentEditor';
 import PublishDashboard from './components/PublishDashboard';
@@ -26,7 +28,7 @@ function App() {
     content: [] // from Step 4
   });
 
-  const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, 3));
+  const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, 5));
   const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1));
   const resetBuilder = () => {
     setCurrentStep(1);
@@ -106,18 +108,18 @@ function App() {
           </div>
         </header>
 
-      <div className="max-w-4xl mx-auto pb-12 px-4 sm:px-6 lg:px-8">
+      <div className={`mx-auto pb-12 px-4 sm:px-6 lg:px-8 transition-all duration-500 ${currentStep === 2 ? 'max-w-7xl' : 'max-w-4xl'}`}>
         <Stepper currentStep={currentStep} />
         
           {currentStep === 1 && (
-            <InteractiveCourseCreator 
+            <SourceSelection 
               courseData={courseData} 
               updateCourseData={updateCourseData} 
               onNext={nextStep} 
             />
           )}
           {currentStep === 2 && (
-            <HybridContentEditor 
+            <CourseDetails 
               courseData={courseData} 
               updateCourseData={updateCourseData} 
               onNext={nextStep} 
@@ -125,6 +127,22 @@ function App() {
             />
           )}
           {currentStep === 3 && (
+            <InteractiveCourseCreator 
+              courseData={courseData} 
+              updateCourseData={updateCourseData} 
+              onNext={nextStep} 
+              onBack={prevStep}
+            />
+          )}
+          {currentStep === 4 && (
+            <HybridContentEditor 
+              courseData={courseData} 
+              updateCourseData={updateCourseData} 
+              onNext={nextStep} 
+              onBack={prevStep}
+            />
+          )}
+          {currentStep === 5 && (
             <PublishDashboard 
               courseData={courseData} 
               onBack={prevStep}

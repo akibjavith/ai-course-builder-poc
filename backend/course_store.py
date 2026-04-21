@@ -25,8 +25,9 @@ def save_course(course_id: str, course_data: dict):
             for c in m.get("chapters", []):
                 content = c.get("content", {})
                 files = content.get("files", [])
-                if not files:
-                    raise ValueError(f"Validation Error: Chapter '{c.get('title')}' in module '{m.get('title')}' must contain at least one file.")
+                explanation = content.get("explanation", "")
+                if not files and (not explanation or len(explanation) < 200):
+                    raise ValueError(f"Validation Error: Chapter '{c.get('title')}' in module '{m.get('title')}' must contain at least one file or AI content.")
                     
     store = _load_store()
     course_data["id"] = course_id
@@ -56,8 +57,9 @@ def update_course(course_id: str, course_data: dict):
             for c in m.get("chapters", []):
                 content = c.get("content", {})
                 files = content.get("files", [])
-                if not files:
-                    raise ValueError(f"Validation Error: Chapter '{c.get('title')}' in module '{m.get('title')}' must contain at least one file.")
+                explanation = content.get("explanation", "")
+                if not files and (not explanation or len(explanation) < 200):
+                    raise ValueError(f"Validation Error: Chapter '{c.get('title')}' in module '{m.get('title')}' must contain at least one file or AI content.")
 
     store = _load_store()
     if course_id in store:

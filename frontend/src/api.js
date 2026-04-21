@@ -166,3 +166,14 @@ export const generateAssessment = async (payload) => {
   return response.data;
 };
 
+export const autoFillCourseDetails = async () => {
+  const response = await axios.post(`${API_URL}/course/auto-fill`);
+  return response.data;
+};
+
+export const chatWithAI = async (messages) => {
+  const response = await axios.post(`${API_URL}/course/chat`, { messages });
+  return response.data;
+};
+
+

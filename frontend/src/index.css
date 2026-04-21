@@ -9,6 +9,9 @@
     background-color: #f9fafb;
     color: #111827;
   }
+  input[type="file"] {
+    color: #4b5563; /* transition to gray-600 for visibility */
+  }
 }
 
 @layer utilities {
@@ -32,4 +35,98 @@
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* Rich Content Styles */
+.rich-content {
+  color: #d1d5db; /* gray-300 */
+}
+.rich-content h1, .rich-content h2, .rich-content h3 {
+  color: #ffffff;
+  font-weight: 800;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+}
+.rich-content h1 { font-size: 2.25rem; }
+.rich-content h2 { font-size: 1.875rem; border-bottom: 1px solid #374151; padding-bottom: 0.5rem; }
+.rich-content h3 { font-size: 1.5rem; }
+.rich-content p {
+  line-height: 1.8;
+  margin-bottom: 1.25rem;
+}
+.rich-content ul, .rich-content ol {
+  margin-bottom: 1.25rem;
+  padding-left: 1.5rem;
+}
+.rich-content ul { list-style-type: disc; }
+.rich-content ol { list-style-type: decimal; }
+.rich-content li { margin-bottom: 0.5rem; }
+.rich-content strong { color: #ffffff; font-weight: 700; }
+.rich-content blockquote {
+  border-left: 4px solid #4f46e5;
+  padding-left: 1rem;
+  font-style: italic;
+  color: #9ca3af;
+  margin: 2rem 0;
+}
+
+/* Fix for Blank ReactQuill Editor */
+.quill-editor-container {
+  background: white;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+}
+
+.quill-editor-container .ql-container {
+  min-height: 350px;
+  font-family: 'Inter', sans-serif;
+  font-size: 1rem;
+}
+
+.quill-editor-container .ql-editor {
+  min-height: 350px;
+}
+
+.quill-editor-container .ql-toolbar {
+  border-top: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: 1px solid #e5e7eb !important;
+  background: #f9fafb;
+}
+
+/* Premium Custom Editor Area */
+.premium-editor-area {
+  font-family: 'Inter', sans-serif;
+}
+.premium-editor-area h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #111827;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+.premium-editor-area h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1f2937;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+.premium-editor-area p {
+  margin-bottom: 1rem;
+}
+.premium-editor-area ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
+}
+.premium-editor-area ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
+}
+.premium-editor-area li {
+  margin-bottom: 0.25rem;
 }

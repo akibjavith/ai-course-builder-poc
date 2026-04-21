@@ -34,16 +34,16 @@ export default function FlashcardViewer({ flashcards }) {
           {/* Front */}
           <div className="absolute w-full h-full backface-hidden glass-dark rounded-xl p-6 flex flex-col items-center justify-center text-center shadow-lg border border-indigo-500/30">
             <h3 className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-4 bg-indigo-900/30 px-3 py-1 rounded-full">Question</h3>
-            <p className="text-xl font-medium text-gray-100">{currentCard.question}</p>
-            <div className="absolute bottom-4 flex items-center text-gray-500 text-xs mt-4 opacity-0 group-hover:opacity-100 transition-opacity">
+            <p className="text-xl font-bold text-white leading-relaxed">{currentCard.question}</p>
+            <div className="absolute bottom-4 flex items-center text-gray-400 text-xs mt-4 opacity-0 group-hover:opacity-100 transition-opacity">
                <RefreshCw className="w-3 h-3 mr-1" /> Click to flip
             </div>
           </div>
 
           {/* Back */}
-          <div className="absolute w-full h-full backface-hidden rotate-y-180 glass rounded-xl p-6 flex flex-col items-center justify-center text-center shadow-lg border border-purple-500/30 bg-purple-900/20">
+          <div className="absolute w-full h-full backface-hidden rotate-y-180 glass-dark rounded-xl p-6 flex flex-col items-center justify-center text-center shadow-lg border border-purple-500/30 bg-purple-900/40">
             <h3 className="text-xs font-bold uppercase tracking-widest text-purple-400 mb-4 bg-purple-900/30 px-3 py-1 rounded-full">Answer</h3>
-            <p className="text-lg text-gray-200">{currentCard.answer}</p>
+            <p className="text-lg font-medium text-white leading-relaxed">{currentCard.answer}</p>
           </div>
           
         </div>

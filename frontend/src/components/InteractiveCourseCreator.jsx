@@ -26,6 +26,7 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
   const [description, setDescription] = useState(courseData?.details?.description || '');
   const [audience, setAudience] = useState(courseData?.details?.target_audience || '');
   const [difficulty, setDifficulty] = useState(courseData?.details?.difficulty || 'beginner');
+  const [courseFormat, setCourseFormat] = useState(courseData?.details?.course_format || 'video');
   
   // Tab states for upload
   const [activeUploadTab, setActiveUploadTab] = useState('file');
@@ -98,10 +99,16 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
 
   const submitAudienceDiff = () => {
     if (!audience || !difficulty) return;
-    updateCourseData('details', { ...courseData.details, target_audience: audience, difficulty, duration: "Flexible" });
+    updateCourseData('details', { 
+      ...courseData.details, 
+      target_audience: audience, 
+      difficulty, 
+      course_format: courseFormat,
+      duration: "Flexible" 
+    });
     
     removeMessageByType('form_audience_diff');
-    addMessage({ sender: 'user', type: 'user_text', content: `**Audience:** ${audience}\n**Difficulty:** ${difficulty}`, restoresForm: 'form_audience_diff' });
+    addMessage({ sender: 'user', type: 'user_text', content: `**Audience:** ${audience}\n**Difficulty:** ${difficulty}\n**Format:** ${courseFormat}`, restoresForm: 'form_audience_diff' });
 
     setTimeout(() => {
        addMessage({ sender: 'bot', type: 'bot_text', content: "Got it! Would you like to upload a custom Course Profile Image? If you skip, I'll generate a stunning one for you using AI." });
@@ -335,6 +342,18 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
             </select>
           </div>
           
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Course Format</label>
+            <select 
+              value={courseFormat} onChange={(e) => setCourseFormat(e.target.value)}
+              className="w-full bg-white text-gray-900 border border-gray-300 rounded-md shadow-sm p-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+            >
+              <option value="video">🎥 Video Course (AI Avatars)</option>
+              <option value="image">🖼️ Image + Text Slate</option>
+              <option value="html">🌐 HTML Rich Lesson</option>
+            </select>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Course Objectives (comma separated)</label>
             <input 

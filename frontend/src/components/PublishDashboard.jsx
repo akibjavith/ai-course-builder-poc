@@ -65,7 +65,11 @@ export default function PublishDashboard({ courseData, onBack, onComplete }) {
                          <div key={j} className="flex justify-between items-center text-xs py-1 px-2 rounded bg-white border border-gray-100">
                            <span className="font-medium text-gray-700">{chap.title}</span>
                            <span className={cData ? "text-green-600 font-semibold italic" : "text-red-500 font-semibold animate-pulse"}>
-                             {cData ? ((cData.files && cData.files.length > 0) ? `${cData.files.length} Internal Item(s)` : 'AI Text Ready') : "Missing Content"}
+                             {cData 
+                               ? ((cData.files && cData.files.length > 0) 
+                                   ? `${cData.files.length} Internal Item(s)` 
+                                   : (cData.explanation ? 'AI Text Ready' : 'AI Processing')) 
+                               : "Missing Content"}
                            </span>
                          </div>
                        );

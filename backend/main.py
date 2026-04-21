@@ -388,3 +388,27 @@ Assessment Guidelines: {req.assessment_text or 'None'}"""
         return {"status": "success", "mcqs": completion.choices[0].message.parsed.model_dump().get("mcqs")}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/course/auto-fill")
+async def api_auto_fill():
+    from content_generator import generate_course_details_from_context
+    details = generate_course_details_from_context()
+    if not details:
+        raise HTTPException(status_code=400, detail="No source documents found. Please upload documents in Step 1 first.")
+    return {"status": "success", "details": details}
+
+@app.post("/course/chat")
+async def api_chat(req: dict):
+    from openai import OpenAI
+    client = OpenAI()
+    
+    messages = req.get("messages", [])
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages
+        )
+        return {"status": "success", "reply": response.choices[0].message.content}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

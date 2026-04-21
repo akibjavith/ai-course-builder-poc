@@ -74,7 +74,11 @@ export default function CoursesDashboard({ onViewCourse, onEditCourse }) {
                   {/* Thumbnail / Header */}
                   <div className="relative h-48 w-full overflow-hidden bg-gray-100 border-b border-gray-100">
                      {data.thumbnail_url ? (
-                        <img src={data.thumbnail_url} alt="Cover" className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
+                        <img 
+                          src={data.thumbnail_url.startsWith('/uploads') ? `http://localhost:8000${data.thumbnail_url}` : data.thumbnail_url} 
+                          alt="Cover" 
+                          className="w-full h-full object-cover group-hover:scale-105 transition duration-500" 
+                        />
                      ) : (
                         <div className="w-full h-full bg-gradient-to-br from-indigo-50 to-gray-100 flex items-center justify-center">
                            <PlayCircle className="w-16 h-16 text-indigo-200" />

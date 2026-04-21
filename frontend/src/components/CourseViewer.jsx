@@ -3,9 +3,10 @@ import {
   ChevronLeft, ChevronDown, ChevronRight, BookOpen,
   CheckCircle, Video, PlayCircle, ClipboardList, Send,
   ThumbsUp, Play, Pause, Volume2, VolumeX, Maximize,
-  X, Star, RotateCcw
+  X, Star, RotateCcw, Bot, Link
 } from 'lucide-react';
 import QuizViewer from './QuizViewer';
+import FlashcardViewer from './FlashcardViewer';
 
 // ─── Custom HTML5 Video Player ─────────────────────────────────────────────
 function CustomVideoPlayer({ src }) {
@@ -330,7 +331,7 @@ function SurveyScreen({ onFinish }) {
 
 // ─── Main CourseViewer ──────────────────────────────────────────────────────
 export default function CourseViewer({ course, onBack }) {
-  const { details, structure, content, quiz } = course || {};
+  const { details, structure, content, quiz, mcqs } = course || {};
 
   if (!course) return null;
 
@@ -351,7 +352,8 @@ export default function CourseViewer({ course, onBack }) {
   const activeModule = structure?.modules?.[activeChap.modIdx];
   const activeChapData = activeModule?.chapters?.[activeChap.chapIdx];
   const activeChapContent = content?.find(c =>
-    c.module_title === activeModule?.title && c.title === activeChapData?.title
+    (c.module_title || "").trim().toLowerCase() === (activeModule?.title || "").trim().toLowerCase() && 
+    (c.title || "").trim().toLowerCase() === (activeChapData?.title || "").trim().toLowerCase()
   );
 
   const markComplete = () => {
@@ -374,9 +376,12 @@ export default function CourseViewer({ course, onBack }) {
     if (!url) return null;
 
     const lowerUrl = url.toLowerCase();
+    
+    // Ensure relative uploads URLs use the API base
+    const finalUrl = url.startsWith('/uploads/') ? `http://localhost:8000${url}` : url;
 
     // YouTube Embed
-    const ytMatch = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
+    const ytMatch = finalUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
     if (ytMatch) {
       return (
         <iframe
@@ -395,7 +400,7 @@ export default function CourseViewer({ course, onBack }) {
         <div className="flex flex-col items-center justify-center py-16 bg-gray-900 w-full h-64 border-b border-gray-800">
            <Volume2 className="w-16 h-16 text-indigo-400 mb-6 animate-pulse" />
            <audio controls autoPlay controlsList="nodownload" className="w-11/12 max-w-md">
-             <source src={url} />
+             <source src={finalUrl} />
              Your browser does not support the audio element.
            </audio>
         </div>
@@ -406,13 +411,13 @@ export default function CourseViewer({ course, onBack }) {
     if (lowerUrl.includes('.pdf')) {
       return (
         <div className="w-full h-[70vh] bg-gray-200">
-           <object data={url} type="application/pdf" className="w-full h-full">
-               <embed src={url} type="application/pdf" className="w-full h-full" />
+           <object data={finalUrl} type="application/pdf" className="w-full h-full">
+               <embed src={finalUrl} type="application/pdf" className="w-full h-full" />
                <div className="flex flex-col items-center justify-center h-full p-10 bg-gray-900 border border-gray-700 text-white text-center">
                   <BookOpen className="w-16 h-16 text-red-500 mb-4" />
                   <span className="font-bold text-lg mb-2">PDF Viewing Not Supported</span>
                   <span className="text-sm text-gray-400 mb-4">Your browser doesn't natively support embedded PDFs.</span>
-                  <a href={url} target="_blank" rel="noreferrer" className="bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-6 rounded-lg transition">
+                  <a href={finalUrl} target="_blank" rel="noreferrer" className="bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-6 rounded-lg transition">
                      Download PDF
                   </a>
                </div>
@@ -428,24 +433,24 @@ export default function CourseViewer({ course, onBack }) {
           <BookOpen className="w-16 h-16 text-blue-400 mb-4" />
           <h3 className="text-2xl font-bold text-white mb-2">Office Document</h3>
           <p className="text-gray-400 max-w-md mx-auto mb-6">This document format cannot be previewed natively in the browser. Please download it to view.</p>
-          <a href={url} target="_blank" rel="noreferrer" className="inline-block bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-xl shadow-lg transition hover:-translate-y-0.5">
+          <a href={finalUrl} target="_blank" rel="noreferrer" className="inline-block bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-xl shadow-lg transition hover:-translate-y-0.5">
              Download to View 
           </a>
         </div>
       );
     }
 
-    // Video Files (fallback based on structure from before)
-    if (lowerUrl.includes('.mp4') || lowerUrl.includes('/uploads/')) {
-      return <CustomVideoPlayer src={url} />;
+    // Video Files
+    if (lowerUrl.includes('.mp4') || finalUrl.includes('/uploads/')) {
+      return <CustomVideoPlayer src={finalUrl} />;
     }
 
     // General fallback
     return (
-      <a href={url} target="_blank" rel="noreferrer" className="flex flex-col items-center justify-center py-20 bg-gray-900 border border-gray-700 text-white hover:bg-gray-800 transition">
+      <a href={finalUrl} target="_blank" rel="noreferrer" className="flex flex-col items-center justify-center py-20 bg-gray-900 border border-gray-700 text-white hover:bg-gray-800 transition">
         <Video className="w-16 h-16 text-red-400 mb-4" />
         <span className="font-semibold text-lg">Open Media File</span>
-        <span className="text-sm text-gray-400 mt-1 truncate max-w-sm">{url}</span>
+        <span className="text-sm text-gray-400 mt-1 truncate max-w-sm">{finalUrl}</span>
       </a>
     );
   };
@@ -595,12 +600,12 @@ export default function CourseViewer({ course, onBack }) {
               ) : activeChapContent.image_url ? (
                 <div className="relative bg-black h-72 sm:h-96 overflow-hidden flex items-center justify-center">
                   <img
-                    src={activeChapContent.image_url}
+                    src={activeChapContent.image_url.startsWith('/uploads') ? `http://localhost:8000${activeChapContent.image_url}` : activeChapContent.image_url}
                     alt="Lesson Visual"
                     className="absolute inset-0 w-full h-full object-cover opacity-30 blur-lg"
                   />
                   <img
-                    src={activeChapContent.image_url}
+                    src={activeChapContent.image_url.startsWith('/uploads') ? `http://localhost:8000${activeChapContent.image_url}` : activeChapContent.image_url}
                     alt="Lesson Visual"
                     className="relative z-10 h-full max-w-full object-contain"
                   />
@@ -618,9 +623,29 @@ export default function CourseViewer({ course, onBack }) {
                   {activeChapData?.title}
                 </h1>
 
-                {/* AI Generated Text */}
-                {(!activeChapContent.content_type || activeChapContent.content_type === 'ai_generated') && (
-                  <div className="space-y-8">
+                {/* Lesson Files / Links Gallery */}
+                {activeChapContent.files?.length > 0 && (
+                  <div className="mb-10 flex flex-wrap gap-4">
+                     {activeChapContent.files.filter(f => f.type !== 'video' && !f.url.endsWith('.mp3')).map((file, fIdx) => (
+                        <div key={fIdx} className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col items-center justify-center w-full sm:w-auto min-w-[150px] hover:border-red-500/50 transition">
+                           <div className="w-10 h-10 rounded-lg bg-gray-800 flex items-center justify-center mb-2">
+                              {file.type === 'link' ? <Link className="w-5 h-5 text-indigo-400" /> : <PlayCircle className="w-5 h-5 text-red-500" />}
+                           </div>
+                           <a href={file.url.startsWith('/uploads/') ? `http://localhost:8000${file.url}` : file.url} target="_blank" rel="noreferrer" className="text-xs font-bold text-white hover:text-red-400 transition truncate max-w-[120px]">
+                              {file.name || 'View Resource'}
+                           </a>
+                        </div>
+                     ))}
+                  </div>
+                )}
+
+                {/* AI Generated Text or HTML Content */}
+                {(activeChapContent.content_type === 'html' || activeChapContent.html_content) ? (
+                   <div className="rich-content animate-fade-in">
+                      <div dangerouslySetInnerHTML={{ __html: activeChapContent.html_content }} />
+                   </div>
+                ) : (!activeChapContent.content_type || activeChapContent.content_type === 'ai_generated') && (
+                  <div className="space-y-8 animate-fade-in">
                     <div className="text-gray-300 text-lg leading-8 font-serif whitespace-pre-wrap">
                       {activeChapContent.explanation}
                     </div>
@@ -656,20 +681,13 @@ export default function CourseViewer({ course, onBack }) {
                   </div>
                 )}
 
-                {/* Document Type */}
-                {activeChapContent.content_type === 'document' && (
-                  <div className="bg-gray-900 border border-gray-700 rounded-2xl p-10 text-center">
-                    <BookOpen className="w-16 h-16 mx-auto mb-4 text-blue-400" />
-                    <h3 className="text-2xl font-bold text-white mb-2">Reading Material</h3>
-                    <p className="text-gray-400 mb-6">The instructor has provided a document for this lesson.</p>
-                    <a
-                      href={activeChapContent.document_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-block bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-xl shadow-lg transition hover:-translate-y-0.5"
-                    >
-                      Open Document ↗
-                    </a>
+                {/* Lesson Flashcards Section */}
+                {activeChapContent.flashcards?.length > 0 && (
+                  <div className="mt-12 bg-gray-900 border border-gray-800 rounded-3xl p-8 shadow-inner border-t-4 border-t-indigo-500/50">
+                     <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
+                        <Bot className="text-indigo-400 w-6 h-6" /> Lesson Mastery Cards
+                     </h3>
+                     <FlashcardViewer flashcards={activeChapContent.flashcards} />
                   </div>
                 )}
 
@@ -695,9 +713,9 @@ export default function CourseViewer({ course, onBack }) {
                 </div>
 
                 {/* Chapter MCQs Assessment */}
-                {activeChapContent.mcqs && (
-                  <div className="mt-12 bg-gray-900 border border-gray-800 rounded-2xl p-4 sm:p-8 overflow-hidden shadow-inner font-sans">
-                     <QuizViewer questions={activeChapContent.mcqs} title={`${activeChapData?.title} Chapter Quiz`} lightMode={false} />
+                {(activeChapContent.mcqs || mcqs) && (
+                  <div className="mt-12 bg-gray-900 border border-gray-800 rounded-2xl p-4 sm:p-8 overflow-hidden shadow-inner font-sans border-t-4 border-t-green-500/50">
+                     <QuizViewer questions={activeChapContent.mcqs || mcqs} title={`${activeChapData?.title} Chapter Quiz`} lightMode={false} />
                   </div>
                 )}
               </div>

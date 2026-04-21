@@ -3,19 +3,19 @@ from langchain_core.prompts import ChatPromptTemplate
 from schemas import ChapterContent, CourseQuiz
 from rag_pipeline import retrieve_context
 
-def generate_chapter_content(course_title, module_title, chapter_title, source_type, audience, difficulty, objectives) -> dict:
+def generate_chapter_content(course_title, module_title, chapter_title, source_type, audience, difficulty, objectives, output_format="text") -> dict:
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.5)
     
     context = ""
     if source_type == "internal":
         context = retrieve_context(chapter_title)
         
-    prompt_str = """
+    prompt_str = f"""
     You are an expert technical writer and instructor.
-    Write the content for the chapter '{chapter_title}' which is part of the module '{module_title}' in the course '{course_title}'.
-    Target Audience: {audience}
-    Difficulty: {difficulty}
-    Course Objectives: {objectives}
+    Write the content for the chapter '{{chapter_title}}' which is part of the module '{{module_title}}' in the course '{{course_title}}'.
+    Target Audience: {{audience}}
+    Difficulty: {{difficulty}}
+    Course Objectives: {{objectives}}
     """
     
     if context:
@@ -23,7 +23,11 @@ def generate_chapter_content(course_title, module_title, chapter_title, source_t
     else:
         prompt_str += "\nUse your internal knowledge to provide an in-depth, accurate explanation.\n"
         
-    prompt_str += "\nCRITICAL REQUIREMENT: The `explanation` field MUST contain a highly detailed, comprehensive text that is AT LEAST 300 words long. Expand on topics deeply to meet this strict word count requirement."
+    if output_format == "html":
+        prompt_str += "\nCRITICAL REQUIREMENT: The `html_content` field MUST contain a highly detailed, comprehensive lesson written in semantic HTML. Use <h2>, <h3>, <p>, <ul>, <li>, <strong>, and <em> tags. Do NOT include <html>, <body>, or <head> tags. The content should be AT LEAST 500 words long and styled for a premium educational experience. Ensure the `explanation` field is also populated with a text-only summary."
+    else:
+        prompt_str += "\nCRITICAL REQUIREMENT: The `explanation` field MUST contain a highly detailed, comprehensive text that is AT LEAST 300 words long. Expand on topics deeply to meet this strict word count requirement."
+    
     prompt_str += "\nOutput MUST be a JSON matching the required schema. If the domain is non-technical (e.g., medical, business), YOU MUST set the `code` and `example` fields to null. Never hallucinate code where not applicable."
     
     prompt = ChatPromptTemplate.from_messages([
@@ -126,3 +130,45 @@ def generate_outline_skeleton(description: str, modules_count: int, chapters_cou
     chain = prompt | llm.with_structured_output(CourseStructureResponse)
     response = chain.invoke({"description": description})
     return response.model_dump()
+
+def generate_course_details_from_context() -> dict:
+    from schemas import CourseDetails
+    from langchain_openai import ChatOpenAI
+    from langchain_core.prompts import ChatPromptTemplate
+    from rag_pipeline import retrieve_context
+    
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.5)
+    
+    # Retrieve a broad set of context to understand the whole course
+    context = retrieve_context("General overview and summary of the entire document", k=15)
+    
+    if not context:
+        return None
+
+    prompt_str = f"""
+    You are an expert instructional designer. 
+    Analyze the provided documentation context and extract the course metadata.
+    
+    Context:
+    {context}
+    
+    Provide:
+    1. A concise course title (max 50 chars)
+    2. A detailed description (max 1000 chars)
+    3. Target audience
+    4. Difficulty level (beginner, intermediate, or advanced)
+    5. Estimated duration (e.g., '10 hours')
+    6. At least 3 specific learning objectives
+    
+    Output MUST be a JSON matching the CourseDetails schema.
+    """
+    
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "You are an expert educator. Your response must be a valid JSON matching the schema."),
+        ("user", prompt_str)
+    ])
+    
+    chain = prompt | llm.with_structured_output(CourseDetails)
+    response = chain.invoke({})
+    return response.model_dump()
+
