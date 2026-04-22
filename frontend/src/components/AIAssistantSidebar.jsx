@@ -78,6 +78,7 @@ export default function AIAssistantSidebar({ details, onApply, onClose }) {
                description: metadata.description || '',
                target_audience: metadata.target_audience || '',
                difficulty: metadata.difficulty || 'beginner',
+               duration: metadata.duration || '',
                learning_objectives: Array.isArray(metadata.learning_objectives) ? metadata.learning_objectives : []
              } 
            }]);
@@ -115,23 +116,27 @@ export default function AIAssistantSidebar({ details, onApply, onClose }) {
   };
 
   return (
-    <div className={`flex flex-col bg-white rounded-3xl border border-gray-100 shadow-2xl overflow-hidden animate-in slide-in-from-right duration-500 transition-all ${isMinimized ? 'h-[72px]' : 'h-full flex-1'}`}>
+    <div className={`flex flex-col bg-white rounded-3xl border border-slate-100 shadow-2xl overflow-hidden animate-in slide-in-from-right duration-500 transition-all ${isMinimized ? 'h-[72px] w-[320px]' : 'h-[750px] flex-1'}`}>
       {/* Header */}
       <div className="bg-white border-b border-gray-50 p-4 flex items-center justify-between relative z-10">
         <div className="flex items-center gap-2">
-          <h3 className="font-black text-sm text-gray-900 tracking-tight flex items-center gap-2">
+          <h3 className="font-bold text-sm text-slate-900 tracking-tight flex items-center gap-2">
             AI Assistant
-            <span className="bg-indigo-50 text-indigo-600 text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">BETA</span>
+            <span className="bg-sky-50 text-sky-600 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">BETA</span>
           </h3>
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={() => setMessages([{ id: 1, sender: 'ai', text: "Let's start over! What subject are we working on?", type: 'text' }])} className="p-2 hover:bg-gray-50 rounded-lg transition text-gray-400" title="Refresh">
+          <button onClick={() => setMessages([{ id: 1, sender: 'ai', text: "Let's start over! What subject are we working on?", type: 'text' }])} className="p-2 hover:bg-slate-50 rounded-lg transition text-slate-400" title="Refresh">
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
-          <button className="p-2 hover:bg-gray-50 rounded-lg transition text-gray-400" title="Maximize">
-            <Maximize2 className="w-3.5 h-3.5" />
+          <button 
+            onClick={() => setIsMinimized(!isMinimized)} 
+            className="p-2 hover:bg-slate-50 rounded-lg transition text-slate-400" 
+            title={isMinimized ? "Expand" : "Minimize"}
+          >
+            {isMinimized ? <Maximize2 className="w-3.5 h-3.5" /> : <Minus className="w-3.5 h-3.5" />}
           </button>
-          <button onClick={onClose} className="p-2 hover:bg-gray-50 rounded-lg transition text-gray-400" title="Close">
+          <button onClick={onClose} className="p-2 hover:bg-slate-50 rounded-lg transition text-slate-400" title="Close">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -140,23 +145,23 @@ export default function AIAssistantSidebar({ details, onApply, onClose }) {
       {!isMinimized && (
         <>
           {/* Scope Dropdown */}
-          <div className="px-4 py-3 bg-white border-b border-gray-50">
-             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Current Scope</label>
+          <div className="px-4 py-3 bg-white border-b border-slate-50">
+             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Current Scope</label>
              <div className="relative">
                 <button 
                   onClick={() => setShowScopeDropdown(!showScopeDropdown)}
-                  className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 border border-indigo-200 rounded-xl text-xs font-bold text-indigo-600"
+                  className="w-full flex items-center justify-between px-3 py-2 bg-slate-50 border border-sky-200 rounded-xl text-xs font-bold text-sky-600"
                 >
                   {currentScope}
                   <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showScopeDropdown ? 'rotate-180' : ''}`} />
                 </button>
                 {showScopeDropdown && (
-                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-100 rounded-xl shadow-xl py-1 overflow-hidden">
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-slate-100 rounded-xl shadow-xl py-1 overflow-hidden">
                     {['Step 2: Course Details', 'Step 3: Course Structure', 'Step 4: Course Content'].map(scope => (
                        <button 
                          key={scope}
                          onClick={() => { setCurrentScope(scope); setShowScopeDropdown(false); }}
-                         className={`w-full text-left px-3 py-2 text-[11px] font-medium hover:bg-gray-50 ${currentScope === scope ? 'text-indigo-600 bg-indigo-50/50' : 'text-gray-600'}`}
+                         className={`w-full text-left px-3 py-2 text-[11px] font-medium hover:bg-slate-50 ${currentScope === scope ? 'text-sky-600 bg-sky-50/50' : 'text-slate-600'}`}
                        >
                          {scope}
                          {currentScope === scope && <CheckCircle2 className="w-3 h-3 inline float-right mt-0.5" />}
@@ -172,66 +177,70 @@ export default function AIAssistantSidebar({ details, onApply, onClose }) {
             {messages.map((msg) => (
               <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in duration-300`}>
                 <div className={`flex max-w-[95%] gap-3 ${msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm border ${msg.sender === 'user' ? 'bg-indigo-600 border-indigo-600' : 'bg-indigo-50 border-indigo-100'}`}>
-                    {msg.sender === 'user' ? <User className="w-4 h-4 text-white" /> : <Bot className="w-4 h-4 text-indigo-600" />}
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm border ${msg.sender === 'user' ? 'bg-sky-600 border-sky-600' : 'bg-sky-50 border-sky-100'}`}>
+                    {msg.sender === 'user' ? <User className="w-4 h-4 text-white" /> : <Bot className="w-4 h-4 text-sky-600" />}
                   </div>
                   
                   {msg.type === 'text' ? (
-                    <div className={`px-4 py-3 rounded-2xl text-[13px] leading-relaxed shadow-sm ${msg.sender === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-gray-50 text-gray-800 rounded-tl-none border border-gray-100'}`}>
+                    <div className={`px-4 py-3 rounded-2xl text-[13px] leading-relaxed shadow-sm ${msg.sender === 'user' ? 'bg-sky-600 text-white rounded-tr-none' : 'bg-slate-50 text-slate-800 rounded-tl-none border border-slate-100'}`}>
                       {msg.text}
                     </div>
                   ) : (
-                    <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm space-y-4 animate-in zoom-in-95 duration-300 w-full">
-                      <p className="text-[11px] text-gray-500 font-medium mb-3">Here's a suggested course outline and details based on your request:</p>
+                    <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm space-y-4 animate-in zoom-in-95 duration-300 w-full">
+                      <p className="text-[11px] text-slate-500 font-medium mb-3">Here's a suggested course outline and details based on your request:</p>
                       
-                      <div className="space-y-2 border-l-2 border-indigo-100 pl-4 py-1">
+                      <div className="space-y-2 border-l-2 border-sky-100 pl-4 py-1">
                         <div className="flex gap-2 text-[11px]">
-                          <span className="font-bold text-gray-900 flex-shrink-0">Course Title:</span>
+                          <span className="font-bold text-slate-900 flex-shrink-0">Course Title:</span>
                           <input 
-                            className="w-full bg-transparent border-none p-0 focus:ring-0 font-medium text-gray-600"
+                            id={`input-title-${msg.id}`}
+                            className="w-full bg-transparent border-none p-0 focus:ring-0 font-semibold text-slate-600"
                             value={msg.data?.title}
                             onChange={(e) => handleUpdateSuggestion(msg.id, 'title', e.target.value)}
                           />
                         </div>
                         <div className="flex gap-2 text-[11px]">
-                          <span className="font-bold text-gray-900 flex-shrink-0">Description:</span>
-                          <textarea 
-                            className="w-full bg-transparent border-none p-0 focus:ring-0 font-medium text-gray-600 resize-none h-auto min-h-[40px]"
-                            value={msg.data?.description}
-                            onChange={(e) => handleUpdateSuggestion(msg.id, 'description', e.target.value)}
-                          />
+                          <span className="font-bold text-slate-900 flex-shrink-0">Description:</span>
+                          <div 
+                            contentEditable
+                            suppressContentEditableWarning
+                            className="w-full bg-transparent border-none p-0 focus:ring-0 font-medium text-slate-600 outline-none whitespace-pre-wrap min-h-[40px]"
+                            onBlur={(e) => handleUpdateSuggestion(msg.id, 'description', e.target.innerText)}
+                          >
+                            {msg.data?.description}
+                          </div>
                         </div>
                         <div className="flex gap-2 text-[11px]">
-                          <span className="font-bold text-gray-900 flex-shrink-0">Target Audience:</span>
+                          <span className="font-bold text-slate-900 flex-shrink-0">Target Audience:</span>
                           <input 
-                            className="w-full bg-transparent border-none p-0 focus:ring-0 font-medium text-gray-600"
+                            className="w-full bg-transparent border-none p-0 focus:ring-0 font-semibold text-slate-600"
                             value={msg.data?.target_audience}
                             onChange={(e) => handleUpdateSuggestion(msg.id, 'target_audience', e.target.value)}
                           />
                         </div>
                         <div className="flex gap-2 text-[11px]">
-                          <span className="font-bold text-gray-900 flex-shrink-0">Difficulty:</span>
+                          <span className="font-bold text-slate-900 flex-shrink-0">Difficulty:</span>
                           <input 
-                            className="w-full bg-transparent border-none p-0 focus:ring-0 font-medium text-gray-600"
+                            className="w-full bg-transparent border-none p-0 focus:ring-0 font-semibold text-slate-600"
                             value={msg.data?.difficulty}
                             onChange={(e) => handleUpdateSuggestion(msg.id, 'difficulty', e.target.value)}
                           />
                         </div>
                         <div className="flex gap-2 text-[11px]">
-                          <span className="font-bold text-gray-900 flex-shrink-0">Duration:</span>
+                          <span className="font-bold text-slate-900 flex-shrink-0">Duration:</span>
                           <input 
-                            className="w-full bg-transparent border-none p-0 focus:ring-0 font-medium text-gray-600"
+                            className="w-full bg-transparent border-none p-0 focus:ring-0 font-semibold text-slate-600"
                             value={msg.data?.duration || '6 hours'}
                             onChange={(e) => handleUpdateSuggestion(msg.id, 'duration', e.target.value)}
                           />
                         </div>
                         <div className="space-y-1 mt-2">
-                          <span className="text-[11px] font-bold text-gray-900 block">Learning Objectives:</span>
+                          <span className="text-[11px] font-bold text-slate-900 block">Learning Objectives:</span>
                           {(msg.data?.learning_objectives || []).map((obj, i) => (
                              <div key={i} className="flex gap-2 text-[11px]">
-                               <span className="text-gray-400 mt-0.5">{i+1}.</span>
+                               <span className="text-slate-400 mt-0.5">{i+1}.</span>
                                <input 
-                                 className="w-full bg-transparent border-none p-0 focus:ring-0 font-medium text-gray-600"
+                                 className="w-full bg-transparent border-none p-0 focus:ring-0 font-medium text-slate-600"
                                  value={obj}
                                  onChange={(e) => handleUpdateObjective(msg.id, i, e.target.value)}
                                />
@@ -240,16 +249,19 @@ export default function AIAssistantSidebar({ details, onApply, onClose }) {
                         </div>
                       </div>
 
-                      <p className="text-[9px] text-gray-400 italic">AI suggestions may be inaccurate.</p>
+                      <p className="text-[9px] text-slate-400 italic">AI suggestions may be inaccurate.</p>
 
                       <div className="pt-2 flex gap-2">
                          <button 
                             onClick={() => onApply(msg.data)}
-                            className="flex-1 bg-indigo-600 text-white px-4 py-2 rounded-xl text-[11px] font-bold hover:bg-indigo-700 transition"
+                            className="flex-1 bg-sky-600 text-white px-4 py-2 rounded-xl text-[11px] font-bold hover:bg-sky-700 transition"
                          >
                             Apply to Form
                          </button>
-                         <button className="flex-1 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-xl text-[11px] font-bold hover:bg-gray-50 transition">
+                         <button 
+                            onClick={() => document.getElementById(`input-title-${msg.id}`)?.focus()}
+                            className="flex-1 bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-xl text-[11px] font-bold hover:bg-slate-50 transition"
+                         >
                             Edit Suggestions
                          </button>
                       </div>
@@ -260,9 +272,9 @@ export default function AIAssistantSidebar({ details, onApply, onClose }) {
             ))}
             {loading && (
               <div className="flex justify-start animate-in fade-in duration-300">
-                <div className="flex items-center gap-3 bg-gray-50 px-4 py-2 rounded-xl border border-gray-100">
-                   <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
-                   <span className="text-[11px] text-gray-400 font-bold tracking-wide">AI is thinking...</span>
+                <div className="flex items-center gap-3 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
+                   <Loader2 className="w-4 h-4 text-sky-500 animate-spin" />
+                   <span className="text-[11px] text-slate-400 font-bold tracking-wide">AI is thinking...</span>
                 </div>
               </div>
             )}
@@ -270,10 +282,10 @@ export default function AIAssistantSidebar({ details, onApply, onClose }) {
           </div>
 
           {/* Input Area */}
-          <div className="p-4 bg-white border-t border-gray-50">
-            <div className="flex items-center gap-2 bg-gray-50 rounded-2xl p-2 pr-3 focus-within:ring-2 focus-within:ring-indigo-500 transition-all">
+          <div className="p-4 bg-white border-t border-slate-50">
+            <div className="flex items-center gap-2 bg-slate-50 rounded-2xl p-2 pr-3 focus-within:ring-2 focus-within:ring-sky-500 transition-all">
               <input 
-                className="flex-1 bg-transparent border-none px-3 py-2 text-[13px] outline-none placeholder:text-gray-400" 
+                className="flex-1 bg-transparent border-none px-3 py-2 text-[13px] outline-none placeholder:text-slate-400" 
                 placeholder="Ask anything about your course..."
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -282,20 +294,20 @@ export default function AIAssistantSidebar({ details, onApply, onClose }) {
               <button 
                 onClick={() => handleSend()}
                 disabled={!input.trim() || loading}
-                className={`p-2 rounded-xl transition ${input.trim() ? 'bg-indigo-600 text-white shadow-lg' : 'bg-gray-200 text-gray-400'}`}
+                className={`p-2 rounded-xl transition ${input.trim() ? 'bg-sky-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}
               >
                 <Send className="w-4 h-4" />
               </button>
             </div>
             
             <div className="mt-4">
-               <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Examples:</span>
+               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Examples:</span>
                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
                   {['Improve description', 'Add more objectives', 'Suggest target audience'].map(pill => (
                     <button 
                       key={pill}
                       onClick={() => handleSend(pill)}
-                      className="whitespace-nowrap px-3 py-1.5 bg-white border border-gray-200 rounded-full text-[10px] font-bold text-gray-600 hover:border-indigo-200 hover:text-indigo-600 transition"
+                      className="whitespace-nowrap px-3 py-1.5 bg-white border border-slate-200 rounded-full text-[10px] font-bold text-slate-600 hover:border-sky-200 hover:text-sky-600 transition"
                     >
                       {pill}
                     </button>

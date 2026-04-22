@@ -18,18 +18,18 @@ export default function CustomSelect({ label, value, options, onChange }) {
   }, []);
 
   return (
-    <div className="space-y-2" ref={containerRef}>
-      <label className="text-sm font-bold text-gray-700">{label}</label>
+    <div className="space-y-1.5" ref={containerRef}>
+      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">{label}</label>
       <div className="relative">
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
-          className={`w-full flex items-center justify-between px-5 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none transition text-sm text-left ${isOpen ? 'ring-2 ring-indigo-500 border-indigo-500' : ''}`}
+          className={`w-full flex items-center justify-between px-5 py-3 bg-slate-50 border-2 border-slate-50 rounded-2xl focus:bg-white focus:border-sky-500 outline-none transition text-xs text-left ${isOpen ? 'bg-white border-sky-500 ring-0' : ''}`}
         >
-          <span className={selectedOption ? 'text-gray-900 font-medium' : 'text-gray-400'}>
-            {selectedOption ? selectedOption.label : 'Select...'}
+          <span className={selectedOption ? 'text-slate-800 font-medium' : 'text-slate-300'}>
+            {selectedOption ? selectedOption.label : 'Select difficulty...'}
           </span>
-          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+          <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180 text-sky-500' : ''}`} />
         </button>
 
         {isOpen && (
@@ -43,7 +43,7 @@ export default function CustomSelect({ label, value, options, onChange }) {
                     onChange(option.value);
                     setIsOpen(false);
                   }}
-                  className={`w-full flex items-center justify-between px-5 py-3 text-sm transition-colors hover:bg-gray-50 ${value === option.value ? 'bg-indigo-50 text-indigo-700 font-bold' : 'text-gray-700'}`}
+                  className={`w-full flex items-center justify-between px-5 py-3 text-sm transition-colors hover:bg-slate-50 ${value === option.value ? 'bg-sky-50 text-sky-700 font-semibold' : 'text-slate-700'}`}
                 >
                   {option.label}
                   {value === option.value && <Check className="w-4 h-4" />}

@@ -18,7 +18,7 @@ export default function Chatbot({ messages, renderMessageContent, handleEditMess
         <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
           <div className={`flex max-w-[90%] sm:max-w-[80%] ${msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
             
-            <div className={`flex-shrink-0 flex items-center justify-center h-8 w-8 rounded-full shadow-sm ${msg.sender === 'user' ? 'bg-indigo-600 ml-3' : 'bg-primary-600 mr-3'}`}>
+            <div className={`flex-shrink-0 flex items-center justify-center h-8 w-8 rounded-full shadow-sm ${msg.sender === 'user' ? 'bg-sky-600 ml-3' : 'bg-slate-700 mr-3'}`}>
               {msg.sender === 'user' ? <User className="h-5 w-5 text-white" /> : <Bot className="h-5 w-5 text-white" />}
             </div>
 
@@ -26,8 +26,8 @@ export default function Chatbot({ messages, renderMessageContent, handleEditMess
               <div 
                 className={`relative px-4 py-3 text-sm ${
                   msg.sender === 'user'
-                    ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-none shadow-md'
-                    : 'glass text-gray-200 rounded-2xl rounded-tl-none border-gray-700/50'
+                    ? 'bg-sky-600 text-white rounded-2xl rounded-tr-none shadow-md'
+                    : 'glass text-slate-200 rounded-2xl rounded-tl-none border-slate-700/50'
                 } ${msg.type.startsWith('form') || msg.type === 'card_structure' ? 'w-full !bg-transparent !border-none !p-0 !shadow-none' : ''}`}
               >
                 {renderMessageContent(msg)}
@@ -36,7 +36,7 @@ export default function Chatbot({ messages, renderMessageContent, handleEditMess
               {msg.sender === 'user' && msg.restoresForm && (
                  <button 
                    onClick={() => handleEditMessage(msg.id, msg.restoresForm)}
-                   className="text-[10px] uppercase tracking-wider font-bold text-gray-500 mt-1.5 flex items-center hover:text-indigo-400 transition"
+                   className="text-[10px] uppercase tracking-wider font-bold text-slate-500 mt-1.5 flex items-center hover:text-sky-400 transition"
                  >
                     <Pencil className="w-3 h-3 mr-1" /> Edit
                  </button>

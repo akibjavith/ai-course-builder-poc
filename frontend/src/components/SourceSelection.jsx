@@ -45,8 +45,8 @@ export default function SourceSelection({ courseData, updateCourseData, onNext }
   return (
     <div className="space-y-8 animate-fade-in">
       <div className="text-center max-w-2xl mx-auto">
-        <h2 className="text-3xl font-black text-gray-900 mb-3">Choose Your Knowledge Source</h2>
-        <p className="text-gray-500 font-medium">Decide how you want to build your course. Use AI's vast knowledge or provide your own documents.</p>
+        <h2 className="text-3xl font-bold text-slate-900 mb-3 tracking-tight">Choose Your Knowledge Source</h2>
+        <p className="text-slate-500 font-medium leading-relaxed">Decide how you want to build your course. Use AI's vast knowledge or provide your own documents.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -55,23 +55,23 @@ export default function SourceSelection({ courseData, updateCourseData, onNext }
           onClick={() => handleSourceChange('external')}
           className={`relative group cursor-pointer p-8 rounded-3xl border-2 transition-all duration-300 ${
             sourceType === 'external' 
-            ? 'border-indigo-600 bg-indigo-50/50 ring-4 ring-indigo-50 shadow-xl' 
-            : 'border-gray-100 bg-white hover:border-indigo-200 hover:shadow-lg'
+            ? 'border-sky-600 bg-sky-50/50 ring-4 ring-sky-50 shadow-xl' 
+            : 'border-slate-100 bg-white hover:border-sky-200 hover:shadow-lg'
           }`}
         >
           <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 transition-colors ${
-            sourceType === 'external' ? 'bg-indigo-600' : 'bg-gray-100 group-hover:bg-indigo-100'
+            sourceType === 'external' ? 'bg-sky-600' : 'bg-slate-100 group-hover:bg-sky-100'
           }`}>
-            <Bot className={`w-8 h-8 ${sourceType === 'external' ? 'text-white' : 'text-gray-500 group-hover:text-indigo-600'}`} />
+            <Bot className={`w-8 h-8 ${sourceType === 'external' ? 'text-white' : 'text-slate-500 group-hover:text-sky-600'}`} />
           </div>
-          <h3 className="text-xl font-bold text-gray-900 mb-2">External Intelligence</h3>
-          <p className="text-sm text-gray-500 leading-relaxed">
+          <h3 className="text-xl font-bold text-slate-900 mb-2">External Intelligence</h3>
+          <p className="text-sm text-slate-500 leading-relaxed">
             Let our AI generate a comprehensive course based on its extensive global knowledge. Perfect for general topics and skill-building.
           </p>
-          <div className={`mt-6 flex items-center text-sm font-bold ${sourceType === 'external' ? 'text-indigo-600' : 'text-gray-400 opacity-0 group-hover:opacity-100'}`}>
+          <div className={`mt-6 flex items-center text-sm font-semibold ${sourceType === 'external' ? 'text-sky-600' : 'text-slate-400 opacity-0 group-hover:opacity-100'}`}>
             Select this option <ChevronRight className="w-4 h-4 ml-1" />
           </div>
-          {sourceType === 'external' && <CheckCircle2 className="absolute top-6 right-6 w-6 h-6 text-indigo-600 animate-scale-in" />}
+          {sourceType === 'external' && <CheckCircle2 className="absolute top-6 right-6 w-6 h-6 text-sky-600 animate-scale-in" />}
         </div>
 
         {/* Internal Source Card */}
@@ -79,23 +79,23 @@ export default function SourceSelection({ courseData, updateCourseData, onNext }
           onClick={() => handleSourceChange('internal')}
           className={`relative group cursor-pointer p-8 rounded-3xl border-2 transition-all duration-300 ${
             sourceType === 'internal' 
-            ? 'border-indigo-600 bg-indigo-50/50 ring-4 ring-indigo-50 shadow-xl' 
-            : 'border-gray-100 bg-white hover:border-indigo-200 hover:shadow-lg'
+            ? 'border-sky-600 bg-sky-50/50 ring-4 ring-sky-50 shadow-xl' 
+            : 'border-slate-100 bg-white hover:border-sky-200 hover:shadow-lg'
           }`}
         >
           <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 transition-colors ${
-            sourceType === 'internal' ? 'bg-indigo-600' : 'bg-gray-100 group-hover:bg-indigo-100'
+            sourceType === 'internal' ? 'bg-sky-600' : 'bg-slate-100 group-hover:bg-sky-100'
           }`}>
-            <FileText className={`w-8 h-8 ${sourceType === 'internal' ? 'text-white' : 'text-gray-500 group-hover:text-indigo-600'}`} />
+            <FileText className={`w-8 h-8 ${sourceType === 'internal' ? 'text-white' : 'text-slate-500 group-hover:text-sky-600'}`} />
           </div>
-          <h3 className="text-xl font-bold text-gray-900 mb-2">Knowledge Base</h3>
-          <p className="text-sm text-gray-500 leading-relaxed">
+          <h3 className="text-xl font-bold text-slate-900 mb-2">Knowledge Base</h3>
+          <p className="text-sm text-slate-500 leading-relaxed">
             Provide your own documents, URLs, or YouTube videos. AI will extract and synthesize content specifically from your materials.
           </p>
-          <div className={`mt-6 flex items-center text-sm font-bold ${sourceType === 'internal' ? 'text-indigo-600' : 'text-gray-400 opacity-0 group-hover:opacity-100'}`}>
+          <div className={`mt-6 flex items-center text-sm font-semibold ${sourceType === 'internal' ? 'text-sky-600' : 'text-slate-400 opacity-0 group-hover:opacity-100'}`}>
             Select this option <ChevronRight className="w-4 h-4 ml-1" />
           </div>
-          {sourceType === 'internal' && <CheckCircle2 className="absolute top-6 right-6 w-6 h-6 text-indigo-600 animate-scale-in" />}
+          {sourceType === 'internal' && <CheckCircle2 className="absolute top-6 right-6 w-6 h-6 text-sky-600 animate-scale-in" />}
         </div>
       </div>
 
@@ -110,10 +110,10 @@ export default function SourceSelection({ courseData, updateCourseData, onNext }
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 py-3 px-4 rounded-xl flex items-center justify-center gap-2 text-sm font-bold transition-all ${
+                className={`flex-1 py-3 px-4 rounded-xl flex items-center justify-center gap-2 text-sm font-semibold transition-all ${
                   activeTab === tab.id 
-                  ? 'bg-white text-indigo-600 shadow-sm' 
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100/50'
+                  ? 'bg-white text-sky-600 shadow-sm' 
+                  : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100/50'
                 }`}
               >
                 <tab.icon className="w-4 h-4" />
@@ -197,7 +197,7 @@ export default function SourceSelection({ courseData, updateCourseData, onNext }
         <button 
           onClick={handleProcessSource}
           disabled={loading || (sourceType === 'internal' && activeTab === 'file' && !file) || (sourceType === 'internal' && activeTab === 'web') || (sourceType === 'internal' && activeTab === 'youtube')}
-          className="group relative bg-indigo-600 text-white px-12 py-4 rounded-2xl font-bold text-lg hover:bg-indigo-700 transition shadow-xl hover:shadow-indigo-200 active:scale-95 disabled:opacity-50 disabled:active:scale-100"
+          className="group relative bg-sky-600 text-white px-12 py-4 rounded-2xl font-bold text-lg hover:bg-sky-700 transition shadow-xl hover:shadow-sky-200 active:scale-95 disabled:opacity-50 disabled:active:scale-100"
         >
           {loading ? (
             <div className="flex items-center gap-3">

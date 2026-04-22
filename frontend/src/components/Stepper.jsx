@@ -11,34 +11,34 @@ const steps = [
 
 export default function Stepper({ currentStep }) {
   return (
-    <div className="mb-8">
+    <div className="mb-12">
       <nav aria-label="Progress">
-        <ol role="list" className="flex items-center justify-between">
+        <ol role="list" className="flex items-center justify-between max-w-2xl mx-auto">
           {steps.map((step, index) => {
             const stepNumber = index + 1;
             const isCompleted = currentStep > stepNumber;
             const isCurrent = currentStep === stepNumber;
             
             return (
-              <li key={step} className="relative pr-8 sm:pr-20 last:pr-0">
-                <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                  <div className={`h-0.5 w-full ${isCompleted ? 'bg-indigo-600' : 'bg-gray-200'}`} />
+              <li key={step} className="relative flex-1 last:flex-none">
+                <div className="absolute inset-0 flex items-center pr-10" aria-hidden="true">
+                  <div className={`h-0.5 w-full ${isCompleted ? 'bg-sky-600' : 'bg-slate-200'}`} />
                 </div>
-                <div className="relative flex items-center justify-center">
+                <div className="relative flex flex-col items-center group">
                   <span
-                    className={`h-8 w-8 rounded-full flex items-center justify-center ring-4 ring-white
-                      ${isCompleted ? 'bg-indigo-600' : isCurrent ? 'bg-white border-2 border-indigo-600' : 'bg-white border-2 border-gray-300'}
+                    className={`h-10 w-10 rounded-full flex items-center justify-center ring-8 ring-white transition-all duration-300
+                      ${isCompleted ? 'bg-sky-600' : isCurrent ? 'bg-white border-2 border-sky-600 shadow-md shadow-sky-100 scale-110' : 'bg-white border-2 border-slate-200'}
                     `}
                   >
                     {isCompleted ? (
-                      <Check className="w-5 h-5 text-white" />
+                      <Check className="w-6 h-6 text-white" />
                     ) : (
-                      <span className={`text-sm font-medium ${isCurrent ? 'text-indigo-600' : 'text-gray-500'}`}>
+                      <span className={`text-sm font-bold ${isCurrent ? 'text-sky-600' : 'text-slate-400'}`}>
                         {stepNumber}
                       </span>
                     )}
                   </span>
-                  <span className={`absolute -bottom-6 text-sm font-medium ${isCurrent ? 'text-indigo-600' : 'text-gray-500'}`}>
+                  <span className={`absolute -bottom-8 text-[11px] font-bold uppercase tracking-wider transition-colors duration-300 ${isCurrent ? 'text-sky-600' : 'text-slate-400'}`}>
                     {step}
                   </span>
                 </div>

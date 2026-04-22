@@ -33,7 +33,7 @@ export default function CoursesDashboard({ onViewCourse, onEditCourse }) {
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center p-20">
-      <Loader2 className="h-12 w-12 animate-spin text-indigo-500 mb-4"/>
+      <Loader2 className="h-12 w-12 animate-spin text-sky-500 mb-4"/>
       <p className="text-gray-400 font-medium">Loading your academy...</p>
     </div>
   );
@@ -42,11 +42,11 @@ export default function CoursesDashboard({ onViewCourse, onEditCourse }) {
     <div className="space-y-8 pb-20 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-           <h2 className="text-3xl font-black text-gray-900">Your Academy</h2>
-           <p className="text-gray-500 mt-1">Manage and continue your learning journey.</p>
+           <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Your Academy</h2>
+           <p className="text-slate-500 mt-1">Manage and continue your learning journey.</p>
         </div>
         <div className="flex gap-2">
-           <span className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-full text-xs font-bold border border-indigo-100">
+           <span className="bg-sky-50 text-sky-700 px-4 py-2 rounded-full text-xs font-semibold border border-sky-100">
               {courses.length} Courses Total
            </span>
         </div>
@@ -70,7 +70,7 @@ export default function CoursesDashboard({ onViewCourse, onEditCourse }) {
              const isVideoCourse = data.course_format === 'video';
 
              return (
-               <div key={idx} className="group bg-white border border-gray-200 rounded-2xl overflow-hidden hover:border-indigo-300 transition-all duration-300 shadow-sm hover:shadow-md flex flex-col">
+               <div key={idx} className="group bg-white border border-slate-200 rounded-2xl overflow-hidden hover:border-sky-300 transition-all duration-300 shadow-sm hover:shadow-md flex flex-col">
                   {/* Thumbnail / Header */}
                   <div className="relative h-48 w-full overflow-hidden bg-gray-100 border-b border-gray-100">
                      {data.thumbnail_url ? (
@@ -80,8 +80,8 @@ export default function CoursesDashboard({ onViewCourse, onEditCourse }) {
                           className="w-full h-full object-cover group-hover:scale-105 transition duration-500" 
                         />
                      ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-indigo-50 to-gray-100 flex items-center justify-center">
-                           <PlayCircle className="w-16 h-16 text-indigo-200" />
+                        <div className="w-full h-full bg-gradient-to-br from-sky-50 to-slate-100 flex items-center justify-center">
+                           <PlayCircle className="w-16 h-16 text-sky-200" />
                         </div>
                      )}
                      <div className="absolute inset-0 bg-gradient-to-t from-gray-900/60 via-transparent to-transparent opacity-60" />
@@ -97,24 +97,24 @@ export default function CoursesDashboard({ onViewCourse, onEditCourse }) {
                   </div>
 
                   <div className="p-6 flex-1 flex flex-col">
-                     <h3 className="text-xl font-bold text-gray-900 mb-2 line-clamp-2 group-hover:text-indigo-600 transition">{data.title}</h3>
-                     <p className="text-sm text-gray-500 mb-6 line-clamp-3 leading-relaxed">
+                     <h3 className="text-xl font-bold text-slate-900 mb-2 line-clamp-2 group-hover:text-sky-600 transition">{data.title}</h3>
+                     <p className="text-sm text-slate-500 mb-6 line-clamp-3 leading-relaxed">
                         {data.description}
                      </p>
 
                      <div className="mt-auto space-y-4">
                         <div className="grid grid-cols-2 gap-4">
-                           <div className="flex items-center text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                              <BookOpen className="h-3.5 w-3.5 text-indigo-500 mr-2" />
+                           <div className="flex items-center text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                              <BookOpen className="h-3.5 w-3.5 text-sky-500 mr-2" />
                               {modCount} Modules
                            </div>
-                           <div className="flex items-center text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                              <Clock className="h-3.5 w-3.5 text-indigo-500 mr-2" />
+                           <div className="flex items-center text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                              <Clock className="h-3.5 w-3.5 text-sky-500 mr-2" />
                               {data.duration}
                            </div>
                         </div>
-                        <div className="flex items-center text-[11px] font-bold text-gray-500 uppercase tracking-wider border-t border-gray-100 pt-4">
-                           <Users className="h-3.5 w-3.5 text-indigo-500 mr-2" />
+                        <div className="flex items-center text-[11px] font-semibold text-slate-500 uppercase tracking-wider border-t border-slate-100 pt-4">
+                           <Users className="h-3.5 w-3.5 text-sky-500 mr-2" />
                            {data.target_audience}
                         </div>
                      </div>

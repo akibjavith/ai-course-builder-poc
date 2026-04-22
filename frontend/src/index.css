@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -5,26 +7,41 @@
 @layer base {
   body {
     margin: 0;
-    font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
-    background-color: #f9fafb;
-    color: #111827;
+    font-family: 'Outfit', system-ui, sans-serif;
+    background-color: #f8fafc; /* slate-50 */
+    color: #1e293b; /* slate-800 */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
+  
   input[type="file"] {
-    color: #4b5563; /* transition to gray-600 for visibility */
+    color: #64748b; /* slate-500 */
   }
 }
 
 @layer utilities {
   .glass {
-    @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-lg;
+    @apply bg-white/70 backdrop-blur-lg border border-white/30 shadow-xl;
   }
   
   .glass-dark {
-    @apply bg-gray-900/80 backdrop-blur-xl border border-gray-700 shadow-2xl;
+    @apply bg-slate-900/80 backdrop-blur-xl border border-slate-700 shadow-2xl;
   }
   
   .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-indigo-500;
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-sky-500 via-blue-600 to-cyan-500;
+  }
+  
+  .bg-ocean-gradient {
+    @apply bg-gradient-to-br from-sky-500 to-blue-700;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 }
 
@@ -37,18 +54,18 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Rich Content Styles */
+/* Rich Content Styles - Refined for Ocean Blue */
 .rich-content {
-  color: #d1d5db; /* gray-300 */
+  color: #475569; /* slate-600 */
 }
 .rich-content h1, .rich-content h2, .rich-content h3 {
-  color: #ffffff;
-  font-weight: 800;
+  color: #0f172a; /* slate-900 */
+  font-weight: 700;
   margin-top: 2rem;
   margin-bottom: 1rem;
 }
-.rich-content h1 { font-size: 2.25rem; }
-.rich-content h2 { font-size: 1.875rem; border-bottom: 1px solid #374151; padding-bottom: 0.5rem; }
+.rich-content h1 { font-size: 2.5rem; letter-spacing: -0.02em; }
+.rich-content h2 { font-size: 2rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem; }
 .rich-content h3 { font-size: 1.5rem; }
 .rich-content p {
   line-height: 1.8;
@@ -61,72 +78,74 @@
 .rich-content ul { list-style-type: disc; }
 .rich-content ol { list-style-type: decimal; }
 .rich-content li { margin-bottom: 0.5rem; }
-.rich-content strong { color: #ffffff; font-weight: 700; }
+.rich-content strong { color: #0f172a; font-weight: 700; }
 .rich-content blockquote {
-  border-left: 4px solid #4f46e5;
-  padding-left: 1rem;
+  border-left: 4px solid #0ea5e9;
+  padding-left: 1.5rem;
   font-style: italic;
-  color: #9ca3af;
-  margin: 2rem 0;
+  color: #64748b;
+  margin: 2.5rem 0;
+  @apply bg-sky-50/50 py-4 pr-4 rounded-r-xl;
 }
 
 /* Fix for Blank ReactQuill Editor */
 .quill-editor-container {
   background: white;
-  border-radius: 0.5rem;
+  border-radius: 1rem;
   overflow: hidden;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #e2e8f0;
+  @apply shadow-sm;
 }
 
 .quill-editor-container .ql-container {
-  min-height: 350px;
-  font-family: 'Inter', sans-serif;
+  min-height: 400px;
+  font-family: 'Outfit', sans-serif;
   font-size: 1rem;
 }
 
 .quill-editor-container .ql-editor {
-  min-height: 350px;
+  min-height: 400px;
+  padding: 1.5rem;
 }
 
 .quill-editor-container .ql-toolbar {
   border-top: none !important;
   border-left: none !important;
   border-right: none !important;
-  border-bottom: 1px solid #e5e7eb !important;
-  background: #f9fafb;
+  border-bottom: 1px solid #e2e8f0 !important;
+  background: #f8fafc;
+  padding: 0.75rem !important;
 }
 
 /* Premium Custom Editor Area */
 .premium-editor-area {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Outfit', sans-serif;
 }
 .premium-editor-area h2 {
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   font-weight: 700;
-  color: #111827;
+  color: #0f172a;
   margin-top: 1.5rem;
-  margin-bottom: 0.75rem;
+  margin-bottom: 1rem;
+  letter-spacing: -0.01em;
 }
 .premium-editor-area h3 {
-  font-size: 1.25rem;
+  font-size: 1.35rem;
   font-weight: 600;
-  color: #1f2937;
+  color: #1e293b;
   margin-top: 1.25rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
 }
 .premium-editor-area p {
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
+  line-height: 1.7;
+  color: #334155;
 }
-.premium-editor-area ul {
-  list-style-type: disc;
+.premium-editor-area ul, .premium-editor-area ol {
   padding-left: 1.5rem;
-  margin-bottom: 1rem;
-}
-.premium-editor-area ol {
-  list-style-type: decimal;
-  padding-left: 1.5rem;
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
 }
 .premium-editor-area li {
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.5rem;
 }
+

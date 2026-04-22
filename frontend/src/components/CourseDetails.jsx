@@ -89,30 +89,23 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
               <div className="space-y-0.5">
                 <div className="flex items-center gap-3">
-                  <h2 className="text-2xl font-black text-gray-900 tracking-tight">Course Details</h2>
-                  <span className="bg-gradient-to-r from-indigo-50 to-indigo-100/50 text-indigo-600 px-3 py-1 rounded-xl text-[10px] font-black flex items-center gap-1.5 border border-indigo-100 shadow-sm">
+                   <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Course Details</h2>
+                   <span className="bg-gradient-to-r from-sky-50 to-sky-100/50 text-sky-600 px-3 py-1 rounded-xl text-[10px] font-bold flex items-center gap-1.5 border border-sky-100 shadow-sm">
                     <Sparkles className="w-3 h-3" /> AI ENHANCED
                   </span>
                 </div>
-                <p className="text-gray-400 font-bold text-[10px] tracking-wide uppercase">Fine-tune your learning journey backbone.</p>
+                <p className="text-slate-400 font-semibold text-[10px] tracking-wide uppercase">Fine-tune your learning journey backbone.</p>
               </div>
               
               <div className="flex items-center gap-2">
                 <button 
                   onClick={() => setShowSidebar(true)}
-                  className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-xs font-black hover:bg-indigo-700 transition shadow-lg shadow-indigo-100 active:scale-95 group"
+                  className="flex items-center gap-2 bg-sky-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-sky-700 transition shadow-lg shadow-sky-100 active:scale-95 group"
                 >
                   <MessageSquareText className="w-3.5 h-3.5" /> 
                   <span>ASK AI</span>
                 </button>
-                <button 
-                  onClick={handleAutoFill}
-                  disabled={loading}
-                  className="flex items-center gap-2 bg-white border-2 border-gray-100 text-gray-700 px-4 py-2.5 rounded-xl text-xs font-black hover:border-indigo-200 hover:text-indigo-600 transition shadow-sm active:scale-95 disabled:opacity-50"
-                >
-                  {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-500" /> : <Wand2 className="w-3.5 h-3.5 text-indigo-400" />}
-                  <span>AUTO-FILL</span>
-                </button>
+
               </div>
             </div>
 
@@ -120,21 +113,21 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
               <div className="space-y-5">
                 {/* Title */}
                 <div className="space-y-1.5 group">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Course Title</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Course Title</label>
                   <input 
                     type="text" 
                     value={details.title}
                     onChange={(e) => handleChange('title', e.target.value)}
                     placeholder="e.g. Introduction to Artificial Intelligence"
-                    className="w-full px-5 py-3.5 bg-gray-50 border-2 border-gray-50 rounded-2xl focus:bg-white focus:border-indigo-500 outline-none transition font-bold text-gray-800 text-sm placeholder:text-gray-300"
+                    className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-50 rounded-2xl focus:bg-white focus:border-sky-500 outline-none transition font-medium text-slate-800 text-sm placeholder:text-slate-300"
                   />
                 </div>
 
                 {/* Description */}
                 <div className="space-y-1.5 group">
                   <div className="flex justify-between items-center ml-1">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Description</label>
-                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${details.description.length > 900 ? 'bg-red-50 text-red-400' : 'bg-gray-100 text-gray-400'}`}>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Description</label>
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${details.description.length > 900 ? 'bg-red-50 text-red-400' : 'bg-slate-100 text-slate-400'}`}>
                       {details.description.length} / 1000
                     </span>
                   </div>
@@ -143,43 +136,43 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
                     value={details.description}
                     onChange={(e) => handleChange('description', e.target.value)}
                     placeholder="Describe what this course is about..."
-                    className="w-full px-5 py-3.5 bg-gray-50 border-2 border-gray-50 rounded-2xl focus:bg-white focus:border-indigo-500 outline-none transition font-medium text-gray-700 text-sm resize-none leading-relaxed placeholder:text-gray-300"
+                    className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-50 rounded-2xl focus:bg-white focus:border-sky-500 outline-none transition font-medium text-slate-700 text-sm resize-none leading-relaxed placeholder:text-slate-300"
                     maxLength={1000}
                   />
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="space-y-1.5 group">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Audience</label>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Audience</label>
                     <input 
                       type="text" 
                       value={details.target_audience}
                       onChange={(e) => handleChange('target_audience', e.target.value)}
                       placeholder="e.g. Beginners"
-                      className="w-full px-5 py-3 bg-gray-50 border-2 border-gray-50 rounded-2xl focus:bg-white focus:border-indigo-500 outline-none transition font-bold text-gray-800 text-xs"
+                      className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-50 rounded-2xl focus:bg-white focus:border-sky-500 outline-none transition font-medium text-slate-800 text-xs"
                     />
                   </div>
                   <CustomSelect 
-                    label="DIFFICULTY"
+                    label="Difficulty"
                     value={details.difficulty}
                     options={difficultyOptions}
                     onChange={(val) => handleChange('difficulty', val)}
                   />
                   <div className="space-y-1.5 group">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Duration</label>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Duration</label>
                     <input 
                       type="text" 
                       value={details.duration}
                       onChange={(e) => handleChange('duration', e.target.value)}
                       placeholder="6 hours"
-                      className="w-full px-5 py-3 bg-gray-50 border-2 border-gray-50 rounded-2xl focus:bg-white focus:border-indigo-500 outline-none transition font-bold text-gray-800 text-xs"
+                      className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-50 rounded-2xl focus:bg-white focus:border-sky-500 outline-none transition font-medium text-slate-800 text-xs"
                     />
                   </div>
                 </div>
 
                 {/* Learning Objectives */}
                 <div className="space-y-4 pt-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Objectives</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Objectives</label>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {details.learning_objectives.map((obj, idx) => (
                       <div key={idx} className="flex gap-2 group animate-scale-in">
@@ -189,7 +182,7 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
                             type="text" 
                             value={obj}
                             onChange={(e) => handleObjectiveChange(idx, e.target.value)}
-                            className="w-full pl-10 pr-4 py-3 bg-gray-50 border-2 border-gray-50 rounded-2xl focus:bg-white focus:border-indigo-500 outline-none transition font-bold text-gray-700 text-[11px]"
+                            className="w-full pl-10 pr-4 py-3 bg-slate-50 border-2 border-slate-50 rounded-2xl focus:bg-white focus:border-sky-500 outline-none transition font-medium text-slate-700 text-[11px]"
                           />
                         </div>
                         <button 
@@ -203,7 +196,7 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
                   </div>
                   <button 
                     onClick={addObjective}
-                    className="group flex items-center gap-2 text-gray-400 px-4 py-2 text-[10px] font-black hover:text-indigo-600 transition-all active:scale-95"
+                    className="group flex items-center gap-2 text-slate-400 px-4 py-2 text-[10px] font-bold hover:text-sky-600 transition-all active:scale-95"
                   >
                     <Plus className="w-3.5 h-3.5" /> ADD OBJECTIVE
                   </button>
@@ -216,14 +209,14 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
           <div className="p-6 bg-gray-50/50 border-t border-gray-50 flex flex-col md:flex-row justify-between gap-4">
             <button 
               onClick={onBack}
-              className="px-6 py-3.5 border-2 border-gray-100 text-gray-600 rounded-2xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 hover:bg-white hover:text-indigo-600 transition-all active:scale-95"
+              className="px-6 py-3.5 border-2 border-slate-100 text-slate-600 rounded-2xl font-bold uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 hover:bg-white hover:text-sky-600 transition-all active:scale-95"
             >
               <ChevronLeft className="w-4 h-4" /> Back
             </button>
             <button 
               onClick={onNext}
               disabled={!details.title || !details.description}
-              className="flex-1 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-6 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 hover:from-indigo-700 hover:to-indigo-800 transition-all shadow-xl shadow-indigo-100 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
+              className="flex-1 bg-gradient-to-r from-sky-600 to-sky-700 text-white px-6 py-4 rounded-2xl font-bold uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 hover:from-sky-700 hover:to-sky-800 transition-all shadow-xl shadow-sky-100 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
             >
               Confirm & Generate Structure <ChevronRight className="w-4 h-4" />
             </button>
@@ -231,20 +224,21 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
         </div>
 
         {/* AI Assistant Sidebar Area - Always Reserved */}
-        <div className="col-span-12 lg:col-span-4 h-full relative">
+        <div className="col-span-12 lg:col-span-4 h-full relative lg:sticky lg:top-6">
           {!showSidebar ? (
-            <div className="h-full rounded-3xl bg-gray-50/50 border border-dashed border-gray-100 flex flex-col items-center justify-center text-center p-8 group hover:border-indigo-100 transition-colors">
-               <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <MessageSquareText className="w-8 h-8 text-indigo-400 opacity-50" />
+            <div className="h-[750px] rounded-[2rem] bg-white border border-slate-100 shadow-xl flex flex-col items-center justify-center text-center p-8 group transition-all">
+               <div className="w-16 h-16 bg-slate-50 rounded-2xl shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <MessageSquareText className="w-8 h-8 text-sky-400 opacity-50" />
                </div>
-               <h3 className="text-gray-400 font-bold text-sm mb-2">AI Assistant Workspace</h3>
-               <p className="text-[10px] text-gray-300 font-medium max-w-[160px]">Toggle the assistant to brainstorm or refine your course details.</p>
+               <h3 className="text-slate-400 font-bold text-sm mb-2">AI Assistant Workspace</h3>
+               <p className="text-[10px] text-slate-300 font-medium max-w-[160px] mb-6">Toggle the assistant to brainstorm or refine your course details.</p>
                <button 
-                onClick={() => setShowSidebar(true)}
-                className="mt-6 px-4 py-2 text-[10px] font-black text-indigo-500 hover:text-indigo-600 tracking-widest uppercase transition"
-               >
-                 Activate AI
-               </button>
+                  onClick={() => setShowSidebar(true)}
+                  className="flex items-center gap-2 bg-sky-600 text-white px-5 py-3 rounded-xl text-xs font-bold hover:bg-sky-700 transition shadow-lg shadow-sky-100 active:scale-95 group"
+                >
+                  <MessageSquareText className="w-3.5 h-3.5" />
+                  <span>ASK AI</span>
+                </button>
             </div>
           ) : (
             <AIAssistantSidebar 
