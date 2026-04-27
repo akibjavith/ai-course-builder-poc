@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Bot, User, RefreshCw, Minus, X, Send, Sparkles, Wand2, PencilLine, CheckCircle2, Loader2, MessageSquareText, ChevronDown, Maximize2 } from 'lucide-react';
 import { chatWithAI } from '../api';
 
-export default function AIAssistantSidebar({ details, onApply, onClose }) {
+export default function AIAssistantSidebar({ details, onApply, onClose, scope = 'Course Details' }) {
   const [messages, setMessages] = useState([
     {
       id: 1,
@@ -15,8 +15,6 @@ export default function AIAssistantSidebar({ details, onApply, onClose }) {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [currentScope, setCurrentScope] = useState('Step 2: Course Details');
-  const [showScopeDropdown, setShowScopeDropdown] = useState(false);
   const messagesEndRef = useRef(null);
 
   const [isMinimized, setIsMinimized] = useState(false);
@@ -50,9 +48,14 @@ export default function AIAssistantSidebar({ details, onApply, onClose }) {
       const systemMsg = { 
         role: 'system', 
         content: `You are a course creation assistant. CURRENT CONTEXT: ${JSON.stringify(details)}. 
-        Suggest Title, Description, Audience, Difficulty, and Objectives. 
+        CURRENT SCOPE: ${scope}.
+
+        If scope is "Course Details": Suggest Title, Description, Audience, Difficulty, and Objectives. 
+        If scope is "Step 3: Course Structure": Suggest a list of Modules, each containing multiple Chapters (lessons).
+
         Always wrap your final suggestion in [METADATA]{...}[/METADATA]. 
-        Ensure the suggestion is a clean JSON matching the CourseDetails schema.`
+        Ensure the suggestion is a clean JSON matching the appropriate schema.
+        For Structure, schema: { "modules": [{ "title": "...", "chapters": [{"title": "..."}] }] }`
       };
 
       const resp = await chatWithAI([systemMsg, ...chatHistory]);
@@ -69,19 +72,30 @@ export default function AIAssistantSidebar({ details, onApply, onClose }) {
              setMessages(prev => [...prev, { id: Date.now(), sender: 'ai', text: textPart, type: 'text' }]);
            }
            
-           setMessages(prev => [...prev, { 
-             id: Date.now() + 1, 
-             sender: 'ai', 
-             type: 'suggestion', 
-             data: {
-               title: metadata.title || '',
-               description: metadata.description || '',
-               target_audience: metadata.target_audience || '',
-               difficulty: metadata.difficulty || 'beginner',
-               duration: metadata.duration || '',
-               learning_objectives: Array.isArray(metadata.learning_objectives) ? metadata.learning_objectives : []
-             } 
-           }]);
+           if (scope.includes("Details")) {
+             setMessages(prev => [...prev, { 
+               id: Date.now() + 1, 
+               sender: 'ai', 
+               type: 'suggestion_details', 
+               data: {
+                 title: metadata.title || '',
+                 description: metadata.description || '',
+                 target_audience: metadata.target_audience || '',
+                 difficulty: metadata.difficulty || 'beginner',
+                 duration: metadata.duration || '',
+                 learning_objectives: Array.isArray(metadata.learning_objectives) ? metadata.learning_objectives : []
+               } 
+             }]);
+           } else {
+             setMessages(prev => [...prev, { 
+               id: Date.now() + 1, 
+               sender: 'ai', 
+               type: 'suggestion_structure', 
+               data: {
+                 modules: Array.isArray(metadata.modules) ? metadata.modules : []
+               } 
+             }]);
+           }
          } catch(e) {
            setMessages(prev => [...prev, { id: Date.now(), sender: 'ai', text: aiReply, type: 'text' }]);
          }
@@ -144,31 +158,12 @@ export default function AIAssistantSidebar({ details, onApply, onClose }) {
 
       {!isMinimized && (
         <>
-          {/* Scope Dropdown */}
+          {/* Scope Label (Static) */}
           <div className="px-4 py-3 bg-white border-b border-slate-50">
-             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Current Scope</label>
-             <div className="relative">
-                <button 
-                  onClick={() => setShowScopeDropdown(!showScopeDropdown)}
-                  className="w-full flex items-center justify-between px-3 py-2 bg-slate-50 border border-sky-200 rounded-xl text-xs font-bold text-sky-600"
-                >
-                  {currentScope}
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showScopeDropdown ? 'rotate-180' : ''}`} />
-                </button>
-                {showScopeDropdown && (
-                  <div className="absolute z-50 w-full mt-1 bg-white border border-slate-100 rounded-xl shadow-xl py-1 overflow-hidden">
-                    {['Step 2: Course Details', 'Step 3: Course Structure', 'Step 4: Course Content'].map(scope => (
-                       <button 
-                         key={scope}
-                         onClick={() => { setCurrentScope(scope); setShowScopeDropdown(false); }}
-                         className={`w-full text-left px-3 py-2 text-[11px] font-medium hover:bg-slate-50 ${currentScope === scope ? 'text-sky-600 bg-sky-50/50' : 'text-slate-600'}`}
-                       >
-                         {scope}
-                         {currentScope === scope && <CheckCircle2 className="w-3 h-3 inline float-right mt-0.5" />}
-                       </button>
-                    ))}
-                  </div>
-                )}
+             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1.5">Current Scope</label>
+             <div className="inline-flex items-center gap-1.5 bg-sky-50 text-sky-600 px-3 py-1.5 rounded-xl text-[11px] font-bold border border-sky-100 shadow-sm">
+                <Sparkles className="w-3 h-3" />
+                {scope}
              </div>
           </div>
 
@@ -181,11 +176,13 @@ export default function AIAssistantSidebar({ details, onApply, onClose }) {
                     {msg.sender === 'user' ? <User className="w-4 h-4 text-white" /> : <Bot className="w-4 h-4 text-sky-600" />}
                   </div>
                   
-                  {msg.type === 'text' ? (
+                  {msg.type === 'text' && (
                     <div className={`px-4 py-3 rounded-2xl text-[13px] leading-relaxed shadow-sm ${msg.sender === 'user' ? 'bg-sky-600 text-white rounded-tr-none' : 'bg-slate-50 text-slate-800 rounded-tl-none border border-slate-100'}`}>
                       {msg.text}
                     </div>
-                  ) : (
+                  )}
+
+                  {msg.type === 'suggestion_details' && (
                     <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm space-y-4 animate-in zoom-in-95 duration-300 w-full">
                       <p className="text-[11px] text-slate-500 font-medium mb-3">Here's a suggested course outline and details based on your request:</p>
                       
@@ -249,20 +246,58 @@ export default function AIAssistantSidebar({ details, onApply, onClose }) {
                         </div>
                       </div>
 
-                      <p className="text-[9px] text-slate-400 italic">AI suggestions may be inaccurate.</p>
-
-                      <div className="pt-2 flex gap-2">
+                      <div className="pt-2 flex gap-2 border-t border-slate-50 mt-4">
                          <button 
                             onClick={() => onApply(msg.data)}
-                            className="flex-1 bg-sky-600 text-white px-4 py-2 rounded-xl text-[11px] font-bold hover:bg-sky-700 transition"
+                            className="flex-1 bg-sky-600 text-white px-4 py-2.5 rounded-xl text-[11px] font-bold hover:bg-sky-700 transition flex items-center justify-center gap-2"
                          >
-                            Apply to Form
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Apply Details
                          </button>
                          <button 
-                            onClick={() => document.getElementById(`input-title-${msg.id}`)?.focus()}
-                            className="flex-1 bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-xl text-[11px] font-bold hover:bg-slate-50 transition"
+                            onClick={() => handleSend("Refine these details to be more specific and engaging.")}
+                            className="flex-1 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-[11px] font-bold hover:bg-slate-50 transition"
                          >
-                            Edit Suggestions
+                            Refine Details
+                         </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {msg.type === 'suggestion_structure' && (
+                    <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm space-y-4 animate-in zoom-in-95 duration-300 w-full">
+                      <p className="text-[11px] text-slate-500 font-medium mb-3">Here's a suggested course structure based on your current progress:</p>
+                      
+                      <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 no-scrollbar border-l-2 border-sky-100 pl-4 py-1">
+                        {(msg.data?.modules || []).map((mod, modIdx) => (
+                          <div key={modIdx} className="space-y-1">
+                            <h4 className="text-[11px] font-bold text-slate-900 flex items-center gap-2">
+                              {modIdx + 1}. {mod.title}
+                              <span className="text-[9px] font-medium text-slate-400">{mod.chapters?.length} lessons</span>
+                            </h4>
+                            <div className="pl-3 space-y-1">
+                              {mod.chapters?.map((chap, chapIdx) => (
+                                <div key={chapIdx} className="text-[10px] text-slate-500 flex items-center gap-2">
+                                  <div className="w-1 h-1 rounded-full bg-slate-200" />
+                                  {chap.title}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="pt-2 flex gap-2 border-t border-slate-50 mt-4">
+                         <button 
+                            onClick={() => onApply(msg.data)}
+                            className="flex-1 bg-sky-600 text-white px-4 py-2.5 rounded-xl text-[11px] font-bold hover:bg-sky-700 transition flex items-center justify-center gap-2"
+                         >
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Add to Structure
+                         </button>
+                         <button 
+                            onClick={() => handleSend("Suggest a more detailed structure with additional modules.")}
+                            className="flex-1 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-[11px] font-bold hover:bg-slate-50 transition"
+                         >
+                            Refine Structure
                          </button>
                       </div>
                     </div>
@@ -270,49 +305,40 @@ export default function AIAssistantSidebar({ details, onApply, onClose }) {
                 </div>
               </div>
             ))}
-            {loading && (
-              <div className="flex justify-start animate-in fade-in duration-300">
-                <div className="flex items-center gap-3 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
-                   <Loader2 className="w-4 h-4 text-sky-500 animate-spin" />
-                   <span className="text-[11px] text-slate-400 font-bold tracking-wide">AI is thinking...</span>
-                </div>
-              </div>
-            )}
             <div ref={messagesEndRef} />
           </div>
 
           {/* Input Area */}
-          <div className="p-4 bg-white border-t border-slate-50">
-            <div className="flex items-center gap-2 bg-slate-50 rounded-2xl p-2 pr-3 focus-within:ring-2 focus-within:ring-sky-500 transition-all">
+          <div className="p-4 bg-white border-t border-gray-50">
+            <div className="relative flex items-center">
               <input 
-                className="flex-1 bg-transparent border-none px-3 py-2 text-[13px] outline-none placeholder:text-slate-400" 
-                placeholder="Ask anything about your course..."
+                type="text" 
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                placeholder="Ask anything about your course..."
+                className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-4 pr-12 py-3.5 text-sm focus:ring-2 focus:ring-sky-100 focus:border-sky-300 transition-all outline-none"
               />
               <button 
                 onClick={() => handleSend()}
                 disabled={!input.trim() || loading}
-                className={`p-2 rounded-xl transition ${input.trim() ? 'bg-sky-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}
+                className="absolute right-2 p-2 bg-sky-600 text-white rounded-xl hover:bg-sky-700 transition disabled:opacity-50 disabled:bg-slate-300 shadow-md shadow-sky-100"
               >
-                <Send className="w-4 h-4" />
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               </button>
             </div>
-            
-            <div className="mt-4">
-               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Examples:</span>
-               <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-                  {['Improve description', 'Add more objectives', 'Suggest target audience'].map(pill => (
-                    <button 
-                      key={pill}
-                      onClick={() => handleSend(pill)}
-                      className="whitespace-nowrap px-3 py-1.5 bg-white border border-slate-200 rounded-full text-[10px] font-bold text-slate-600 hover:border-sky-200 hover:text-sky-600 transition"
-                    >
-                      {pill}
-                    </button>
-                  ))}
-               </div>
+            <div className="flex flex-wrap gap-2 mt-3">
+               {scope.includes("Details") ? (
+                 <>
+                   <button onClick={() => handleSend("Suggest a better title and description.")} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Suggest Title</button>
+                   <button onClick={() => handleSend("Refine learning objectives.")} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Refine Objectives</button>
+                 </>
+               ) : (
+                 <>
+                   <button onClick={() => handleSend("Suggest more modules.")} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Add More Modules</button>
+                   <button onClick={() => handleSend("Suggest lesson topics.")} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Suggest Topics</button>
+                 </>
+               )}
             </div>
           </div>
         </>

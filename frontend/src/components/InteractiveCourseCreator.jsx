@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, User, UploadCloud, CheckCircle, Loader2, Database, Globe, Trash2, Plus, RefreshCw, Pencil, Link, Video } from 'lucide-react';
+import { Bot, User, UploadCloud, CheckCircle, Loader2, Database, Globe, Trash2, Plus, RefreshCw, Pencil, Link, Video, Sparkles } from 'lucide-react';
 import { 
   uploadDoc, uploadChapterMedia, generateCourseOutline, generateLessonContent, 
   generateVoiceScript, generateImagePrompt, generateImage, storeCourse,
@@ -528,11 +528,20 @@ export default function InteractiveCourseCreator({ courseData, updateCourseData,
 
   return (
     <div className="flex flex-col h-[calc(100vh-200px)] min-h-[500px] border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white/90 backdrop-blur-sm">
-      <div className="bg-gradient-to-r from-indigo-600 to-indigo-800 px-6 py-4 flex items-center shadow-sm">
-        <Bot className="text-indigo-100 w-8 h-8 mr-3" />
-        <div>
-           <h2 className="text-lg font-bold text-white">Course Creation Assistant</h2>
-           <p className="text-indigo-200 text-xs font-medium">I'll help you prepare your course in seconds.</p>
+      <div className="bg-gradient-to-r from-sky-600 to-sky-800 px-6 py-4 flex items-center justify-between shadow-sm">
+        <div className="flex items-center">
+          <Bot className="text-sky-100 w-8 h-8 mr-3" />
+          <div>
+             <h2 className="text-lg font-bold text-white">Course Creation Assistant</h2>
+             <p className="text-sky-100/80 text-xs font-medium">I'll help you prepare your course in seconds.</p>
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <label className="text-[10px] font-bold text-sky-200 uppercase tracking-widest">Current Scope</label>
+          <div className="inline-flex items-center gap-1.5 bg-white/10 text-white px-3 py-1 rounded-xl text-[11px] font-bold border border-white/20 backdrop-blur-sm">
+             <Sparkles className="w-3 h-3" />
+             Course Structure
+          </div>
         </div>
       </div>
 

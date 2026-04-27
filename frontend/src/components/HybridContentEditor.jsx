@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { uploadChapterMedia, startAsyncGeneration, checkAsyncStatus } from '../api';
-import { Loader2, CheckCircle2, ChevronDown, ChevronRight, Video, FileText, Bot, Upload, PlayCircle, RefreshCw } from 'lucide-react';
+import { Loader2, CheckCircle2, ChevronDown, ChevronRight, Video, FileText, Bot, Upload, PlayCircle, RefreshCw, Sparkles } from 'lucide-react';
 import ChapterEditor from './ChapterEditor';
 import ModuleAssessmentBox from './ModuleAssessmentBox';
 import QuizViewer from './QuizViewer';
@@ -228,9 +228,23 @@ export default function HybridContentEditor({ courseData, updateCourseData, onNe
   const allGenerated = flatChapters.length > 0 && flatChapters.every(c => isCompleted(c.moduleTitle, c.chapterTitle));
 
   return (
-    <div>
-      <h2 className="text-xl font-medium text-gray-900 mb-2">Step 2: Content Processing</h2>
-      <p className="text-sm text-gray-600 mb-6">Automatically generate all course content in parallel using AI, or manually upload custom videos and documents for specific chapters.</p>
+    <div className="animate-fade-in">
+      <div className="flex justify-between items-start mb-6">
+        <div className="space-y-1">
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
+            Content Processing
+            <span className="bg-sky-50 text-sky-600 text-[10px] font-bold px-2 py-1 rounded-lg border border-sky-100 uppercase tracking-widest">Step 4</span>
+          </h2>
+          <p className="text-slate-500 font-medium text-sm">Automatically generate all course content or manually upload custom materials.</p>
+        </div>
+        <div className="flex flex-col items-end gap-1.5">
+          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Current Scope</label>
+          <div className="inline-flex items-center gap-1.5 bg-sky-50 text-sky-600 px-3 py-1.5 rounded-xl text-[11px] font-bold border border-sky-100 shadow-sm">
+             <Sparkles className="w-3 h-3" />
+             Course Content
+          </div>
+        </div>
+      </div>
 
       {/* GLOBAL PROGRESS CARD */}
       <div className="bg-indigo-50 border border-indigo-200 p-6 rounded-xl shadow-sm mb-8 relative overflow-hidden">

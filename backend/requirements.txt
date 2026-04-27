@@ -17,3 +17,4 @@ PyMuPDF
 python-docx
 python-pptx
 youtube-transcript-api
+beautifulsoup4

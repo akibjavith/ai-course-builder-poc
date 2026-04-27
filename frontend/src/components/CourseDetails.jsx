@@ -79,12 +79,12 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
         </div>
       )}
 
-      <div className="grid grid-cols-12 gap-8 min-h-[700px]">
+      <div className="grid grid-cols-12 gap-8 h-[750px]">
         {/* Main Form Section - Fixed Width */}
-        <div className="col-span-12 lg:col-span-8 bg-white rounded-[2rem] border border-gray-100 shadow-xl overflow-hidden flex flex-col">
+        <div className="col-span-12 lg:col-span-8 bg-white rounded-[2rem] border border-gray-100 shadow-xl overflow-hidden flex flex-col h-full">
 
           
-          <div className="p-6 md:p-8 flex-1 scroll-smooth">
+          <div className="p-6 md:p-8 flex-1 scroll-smooth overflow-y-auto no-scrollbar">
             {/* Header Section */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
               <div className="space-y-0.5">
@@ -245,6 +245,7 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
               details={details}
               onApply={handleApplyAISuggestion} 
               onClose={() => setShowSidebar(false)} 
+              scope="Course Details"
             />
           )}
         </div>
