@@ -224,9 +224,9 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
         </div>
 
         {/* AI Assistant Sidebar Area - Always Reserved */}
-        <div className="col-span-12 lg:col-span-4 h-full relative lg:sticky lg:top-6">
+        <div className="col-span-12 lg:col-span-4 h-full relative lg:sticky lg:top-6 flex-shrink-0 min-w-[400px]">
           {!showSidebar ? (
-            <div className="h-[750px] rounded-[2rem] bg-white border border-slate-100 shadow-xl flex flex-col items-center justify-center text-center p-8 group transition-all">
+            <div className="h-[800px] w-full rounded-[2rem] bg-white border border-slate-100 shadow-xl flex flex-col items-center justify-center text-center p-8 group transition-all">
                <div className="w-16 h-16 bg-slate-50 rounded-2xl shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                   <MessageSquareText className="w-8 h-8 text-sky-400 opacity-50" />
                </div>
@@ -243,6 +243,7 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
           ) : (
             <AIAssistantSidebar 
               details={details}
+              courseData={courseData}
               onApply={handleApplyAISuggestion} 
               onClose={() => setShowSidebar(false)} 
               scope="Course Details"

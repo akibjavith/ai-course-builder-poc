@@ -9,6 +9,7 @@ import PublishDashboard from './components/PublishDashboard';
 import CoursesDashboard from './pages/CoursesDashboard';
 import CourseViewer from './components/CourseViewer';
 import CourseStructure from './components/CourseStructure';
+import CourseContent from './components/CourseContent';
 
 function App() {
   const [view, setView] = useState('dashboard'); // 'dashboard' | 'builder' | 'viewer'
@@ -109,7 +110,7 @@ function App() {
           </div>
         </header>
 
-      <div className={`mx-auto pb-12 px-4 sm:px-6 lg:px-8 transition-all duration-500 ${[2, 3].includes(currentStep) ? 'max-w-7xl' : 'max-w-4xl'}`}>
+      <div className={`mx-auto pb-12 px-4 sm:px-6 lg:px-8 transition-all duration-500 ${[2, 3, 4].includes(currentStep) ? 'max-w-7xl' : 'max-w-4xl'}`}>
         <Stepper currentStep={currentStep} />
         
           {currentStep === 1 && (
@@ -136,7 +137,7 @@ function App() {
             />
           )}
           {currentStep === 4 && (
-            <HybridContentEditor 
+            <CourseContent 
               courseData={courseData} 
               updateCourseData={updateCourseData} 
               onNext={nextStep} 

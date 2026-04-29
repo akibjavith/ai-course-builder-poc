@@ -312,6 +312,7 @@ export default function CourseStructure({ courseData, updateCourseData, onNext, 
           ) : (
             <AIAssistantSidebar 
               details={courseData.details}
+              courseData={courseData}
               onApply={handleApplyAISuggestion} 
               onClose={() => setShowSidebar(false)} 
               scope="Step 3: Course Structure"

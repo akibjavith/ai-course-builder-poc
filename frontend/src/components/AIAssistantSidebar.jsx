@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bot, User, RefreshCw, Minus, X, Send, Sparkles, Wand2, PencilLine, CheckCircle2, Loader2, MessageSquareText, ChevronDown, Maximize2 } from 'lucide-react';
+import { Bot, User, RefreshCw, Minus, X, Send, Sparkles, Wand2, PencilLine, CheckCircle2, Loader2, MessageSquareText, ChevronDown, Maximize2, Zap } from 'lucide-react';
 import { chatWithAI } from '../api';
 
-export default function AIAssistantSidebar({ details, onApply, onClose, scope = 'Course Details' }) {
+export default function AIAssistantSidebar({ details, courseData, onApply, onClose, scope = 'Course Details', initialInput = '' }) {
   const [messages, setMessages] = useState([
     {
       id: 1,
@@ -29,78 +29,228 @@ export default function AIAssistantSidebar({ details, onApply, onClose, scope = 
     scrollToBottom();
   }, [messages, isMinimized]);
 
-  const handleSend = async (overrideInput) => {
+  useEffect(() => {
+    if (initialInput) {
+      if (typeof initialInput === 'object') {
+        if (initialInput.fillInput) setInput(initialInput.text);
+        handleSend(initialInput.text, initialInput.display);
+      } else {
+        setInput(initialInput);
+        handleSend(initialInput);
+      }
+    }
+  }, [initialInput]);
+
+  const handleSend = async (overrideInput = null, displayMessage = null) => {
     const textToSend = overrideInput || input;
     if (!textToSend.trim() || loading) return;
 
-    const userMsg = { id: Date.now(), sender: 'user', text: textToSend, type: 'text' };
+    const userMsg = { 
+      id: Date.now(), 
+      sender: 'user', 
+      text: displayMessage || textToSend, 
+      hiddenPrompt: overrideInput ? textToSend : null,
+      type: 'text' 
+    };
     setMessages(prev => [...prev, userMsg]);
-    setInput('');
+    if (!overrideInput) setInput('');
     setLoading(true);
 
     try {
       const chatHistory = messages.map(m => ({
         role: m.sender === 'ai' ? 'assistant' : 'user',
-        content: m.text || ''
+        content: m.hiddenPrompt || m.text || ''
       }));
       chatHistory.push({ role: 'user', content: textToSend });
 
       const systemMsg = { 
         role: 'system', 
-        content: `You are a course creation assistant. CURRENT CONTEXT: ${JSON.stringify(details)}. 
+        content: `You are a course creation assistant. 
+        CRITICAL: If you are providing a suggestion (details, structure, or prompts), ONLY return the [METADATA] block. DO NOT add any introductory or concluding text. Be a silent processing engine.
+        
+        CRITICAL: ALWAYS RETURN THE FULL AND COMPLETE OBJECT IN [METADATA]. 
+        IF A FIELD IS ALREADY PROVIDED IN "CURRENT CONTEXT" AND YOU ARE NOT CHANGING IT, YOU MUST STILL INCLUDE IT EXACTLY AS IS. 
+        YOU ARE STRICTLY FORBIDDEN FROM RETURNING EMPTY STRINGS ("") OR PLACEHOLDERS FOR FIELDS THAT ALREADY HAVE CONTENT.
+        
+        BAD EXAMPLE: { "title": "", "description": "", "learning_objectives": ["New objective"] } // FORBIDDEN if title/desc exist in context.
+        GOOD EXAMPLE: { "title": "Existing Title", "description": "Existing Desc", "learning_objectives": ["Existing Obj", "New objective"] } 
+        
+        CURRENT CONTEXT: ${JSON.stringify(details)}. 
+        ${(scope.includes('Structure') || scope.includes('Content')) ? `CRITICAL: USE THE FOLLOWING STRUCTURE ONLY: ${JSON.stringify(courseData?.structure || {})}` : ''}
         CURRENT SCOPE: ${scope}.
 
-        If scope is "Course Details": Suggest Title, Description, Audience, Difficulty, and Objectives. 
-        If scope is "Step 3: Course Structure": Suggest a list of Modules, each containing multiple Chapters (lessons).
+        If scope is "Course Details": Return the FULL course details. Ensure Title and Description match the CURRENT CONTEXT unless you are explicitly asked to change them. Always use the schema: { "title": "...", "description": "...", "target_audience": "...", "difficulty": "...", "duration": "...", "learning_objectives": ["..."] }
+        If scope is "Step 3: Course Structure": Return the FULL module/chapter list.
+        If scope is "Step 4: Course Content": Generate detailed AI prompts. If the user asks for a specific lesson, return ONLY that lesson's prompt in the schema: { "prompt": "..." }. Otherwise, generate for all lessons in the schema: { "prompts": [{ "module": "...", "title": "...", "prompt": "..." }] }.
 
-        Always wrap your final suggestion in [METADATA]{...}[/METADATA]. 
-        Ensure the suggestion is a clean JSON matching the appropriate schema.
-        For Structure, schema: { "modules": [{ "title": "...", "chapters": [{"title": "..."}] }] }`
+        SCHEMA DEFINITIONS:
+        For Details, schema: { "title": "...", "description": "...", "target_audience": "...", "difficulty": "...", "duration": "...", "learning_objectives": ["..."] }
+        For Structure, schema: { "modules": [{ "title": "...", "chapters": [{"title": "..."}] }] }
+        For Prompt Generation (Step 4), schema: { "prompts": [...] } OR { "prompt": "..." } for a single lesson.`
       };
 
       const resp = await chatWithAI([systemMsg, ...chatHistory]);
       const aiReply = resp.reply || '';
       
-      const metadataMatch = aiReply.match(/\[METADATA\]([\s\S]*?)\[\/METADATA\]/);
-      
+      // 1. Try to find complete tags
+      let metadataMatch = aiReply.match(/\[METADATA\]([\s\S]*?)\[\/METADATA\]/);
+      let metadataStr = metadataMatch ? metadataMatch[1] : null;
+      let textPart = '';
+
       if (metadataMatch) {
+        textPart = aiReply.replace(/\[METADATA\][\s\S]*?\[\/METADATA\]/, '').trim();
+      } else {
+        // 2. Fallback: Look for [METADATA] prefix and extract the JSON block
+        const prefixMatch = aiReply.match(/\[METADATA\]\s*(\{[\s\S]*\}|\[[\s\S]*\])/);
+        if (prefixMatch) {
+          metadataStr = prefixMatch[1];
+          const lastBrace = Math.max(metadataStr.lastIndexOf('}'), metadataStr.lastIndexOf(']'));
+          if (lastBrace !== -1) {
+            const actualJson = metadataStr.substring(0, lastBrace + 1);
+            metadataStr = actualJson;
+            textPart = aiReply.replace(/\[METADATA\][\s\S]*/, '').trim();
+          }
+        } else {
+          // 3. Last resort: Just look for any JSON block
+          const jsonMatch = aiReply.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+          if (jsonMatch) {
+            metadataStr = jsonMatch[0];
+            textPart = aiReply.replace(metadataStr, '').trim();
+          }
+        }
+      }
+      
+      if (metadataStr) {
          try {
-           const metadata = JSON.parse(metadataMatch[1]);
-           const textPart = aiReply.replace(/\[METADATA\][\s\S]*?\[\/METADATA\]/, '').trim();
+            const metadata = JSON.parse(metadataStr);
+            
+            // Safety Guard: If AI returns empty fields that are present in context, fill them back in
+            if (scope.includes("Details")) {
+              if (!metadata.title && details?.title) metadata.title = details.title;
+              if (!metadata.description && details?.description) metadata.description = details.description;
+              if (!metadata.target_audience && details?.target_audience) metadata.target_audience = details.target_audience;
+              if (!metadata.difficulty && details?.difficulty) metadata.difficulty = details.difficulty;
+              if (!metadata.duration && details?.duration) metadata.duration = details.duration;
+              
+              if ((!metadata.learning_objectives || metadata.learning_objectives.length === 0) && details?.learning_objectives?.length > 0) {
+                metadata.learning_objectives = details.learning_objectives;
+              } else if (Array.isArray(metadata.learning_objectives)) {
+                // Filter out empty strings from the AI response
+                metadata.learning_objectives = metadata.learning_objectives.filter(obj => obj && obj.trim().length > 0);
+              }
+            }
+            
+            // Aggressively clean textPart: remove code blocks and JSON-like strings
+            const cleanText = textPart
+              .replace(/```[\s\S]*?```/g, '') // Remove triple backtick blocks
+              .replace(/\[METADATA\]/g, '')
+              .replace(/\[\/METADATA\]/g, '')
+              .replace(/\{[\s\S]*\}/g, '')   // Remove raw JSON objects
+              .trim();
+            
+            if (cleanText && cleanText.length > 2) {
+              setMessages(prev => [...prev, { id: Date.now(), sender: 'ai', text: cleanText, type: 'text' }]);
+            }
+            
+            if (scope.includes("Details")) {
+              setMessages(prev => [...prev, { 
+                id: Date.now() + 1, 
+                sender: 'ai', 
+                type: 'suggestion_details', 
+                data: {
+                  title: metadata.title || '',
+                  description: metadata.description || '',
+                  target_audience: metadata.target_audience || '',
+                  difficulty: metadata.difficulty || 'beginner',
+                  duration: metadata.duration || '',
+                  learning_objectives: Array.isArray(metadata.learning_objectives) ? metadata.learning_objectives : []
+                } 
+              }]);
+            } else if (scope.includes("Structure")) {
+              const modules = Array.isArray(metadata.modules) ? metadata.modules : 
+                              Array.isArray(metadata.course_structure) ? metadata.course_structure : [];
+              
+              // Normalize chapters/lessons
+              const normalizedModules = modules.map(m => ({
+                ...m,
+                chapters: Array.isArray(m.chapters) ? m.chapters : 
+                          Array.isArray(m.lessons) ? m.lessons : 
+                          Array.isArray(m.topics) ? m.topics : []
+              }));
+
+              setMessages(prev => [...prev, { 
+                id: Date.now() + 2, 
+                sender: 'ai', 
+                type: 'suggestion_structure', 
+                data: {
+                  modules: normalizedModules
+                } 
+              }]);
+            } else {
+              const prompts = Array.isArray(metadata.prompts) ? metadata.prompts : 
+                              Array.isArray(metadata.content_strategy) ? metadata.content_strategy : [];
+
+              setMessages(prev => [...prev, { 
+                id: Date.now() + 5, 
+                sender: 'ai', 
+                type: 'suggestion_content', 
+                data: {
+                  strategy: Array.isArray(metadata.strategy) ? metadata.strategy : [],
+                  prompts: prompts,
+                  prompt: typeof metadata.prompt === 'string' ? metadata.prompt : null,
+                  isSingle: !!metadata.prompt
+                } 
+              }]);
+            }
+         } catch(e) {
+           // Fallback Parser: Try to extract title/description from plain text if JSON fails
+           const titleMatch = aiReply.match(/\*\*Title:\*\*\s*(.*?)(?:\*\*|$)/);
+           const descMatch = aiReply.match(/\*\*Description:\*\*\s*(.*?)(?:\*\*|$)/);
            
-           if (textPart) {
-             setMessages(prev => [...prev, { id: Date.now(), sender: 'ai', text: textPart, type: 'text' }]);
-           }
-           
-           if (scope.includes("Details")) {
+           if (titleMatch || descMatch) {
+             const fallbackData = {
+               title: titleMatch?.[1]?.trim() || details?.title || '',
+               description: descMatch?.[1]?.trim() || details?.description || '',
+               target_audience: details?.target_audience || '',
+               difficulty: details?.difficulty || 'beginner',
+               duration: details?.duration || '',
+               learning_objectives: details?.learning_objectives || []
+             };
+
              setMessages(prev => [...prev, { 
-               id: Date.now() + 1, 
+               id: Date.now() + 10, 
                sender: 'ai', 
                type: 'suggestion_details', 
-               data: {
-                 title: metadata.title || '',
-                 description: metadata.description || '',
-                 target_audience: metadata.target_audience || '',
-                 difficulty: metadata.difficulty || 'beginner',
-                 duration: metadata.duration || '',
-                 learning_objectives: Array.isArray(metadata.learning_objectives) ? metadata.learning_objectives : []
-               } 
+               data: fallbackData 
              }]);
            } else {
-             setMessages(prev => [...prev, { 
-               id: Date.now() + 1, 
-               sender: 'ai', 
-               type: 'suggestion_structure', 
-               data: {
-                 modules: Array.isArray(metadata.modules) ? metadata.modules : []
-               } 
-             }]);
+             setMessages(prev => [...prev, { id: Date.now(), sender: 'ai', text: aiReply.replace(/\[METADATA\]/g, '').replace(/\[\/METADATA\]/g, '').trim(), type: 'text' }]);
            }
-         } catch(e) {
-           setMessages(prev => [...prev, { id: Date.now(), sender: 'ai', text: aiReply, type: 'text' }]);
          }
       } else {
-        setMessages(prev => [...prev, { id: Date.now(), sender: 'ai', text: aiReply, type: 'text' }]);
+        // Even if no metadata block found, try the fallback parser on the whole reply
+        const titleMatch = aiReply.match(/\*\*Title:\*\*\s*(.*?)(?:\*\*|$)/);
+        const descMatch = aiReply.match(/\*\*Description:\*\*\s*(.*?)(?:\*\*|$)/);
+        
+        if (titleMatch || descMatch) {
+          const fallbackData = {
+            title: titleMatch?.[1]?.trim() || details?.title || '',
+            description: descMatch?.[1]?.trim() || details?.description || '',
+            target_audience: details?.target_audience || '',
+            difficulty: details?.difficulty || 'beginner',
+            duration: details?.duration || '',
+            learning_objectives: details?.learning_objectives || []
+          };
+
+          setMessages(prev => [...prev, { 
+            id: Date.now() + 10, 
+            sender: 'ai', 
+            type: 'suggestion_details', 
+            data: fallbackData 
+          }]);
+        } else {
+          setMessages(prev => [...prev, { id: Date.now(), sender: 'ai', text: aiReply.replace(/\[METADATA\]/g, '').replace(/\[\/METADATA\]/g, '').trim(), type: 'text' }]);
+        }
       }
     } catch (err) {
       setMessages(prev => [...prev, { id: Date.now(), sender: 'ai', text: "Sorry, I'm having trouble connecting right now.", type: 'text' }]);
@@ -130,7 +280,7 @@ export default function AIAssistantSidebar({ details, onApply, onClose, scope = 
   };
 
   return (
-    <div className={`flex flex-col bg-white rounded-3xl border border-slate-100 shadow-2xl overflow-hidden animate-in slide-in-from-right duration-500 transition-all ${isMinimized ? 'h-[72px] w-[320px]' : 'h-[750px] flex-1'}`}>
+    <div className={`flex flex-col bg-white rounded-3xl border border-slate-100 shadow-2xl overflow-hidden animate-in slide-in-from-right duration-500 transition-all flex-shrink-0 ${isMinimized ? 'h-[72px] w-[320px]' : 'h-[800px] w-[400px]'}`}>
       {/* Header */}
       <div className="bg-white border-b border-gray-50 p-4 flex items-center justify-between relative z-10">
         <div className="flex items-center gap-2">
@@ -233,7 +383,9 @@ export default function AIAssistantSidebar({ details, onApply, onClose, scope = 
                         </div>
                         <div className="space-y-1 mt-2">
                           <span className="text-[11px] font-bold text-slate-900 block">Learning Objectives:</span>
-                          {(msg.data?.learning_objectives || []).map((obj, i) => (
+                          {(msg.data?.learning_objectives || [])
+                            .filter(obj => obj && obj.trim().length > 0)
+                            .map((obj, i) => (
                              <div key={i} className="flex gap-2 text-[11px]">
                                <span className="text-slate-400 mt-0.5">{i+1}.</span>
                                <input 
@@ -254,7 +406,7 @@ export default function AIAssistantSidebar({ details, onApply, onClose, scope = 
                             <CheckCircle2 className="w-3.5 h-3.5" /> Apply Details
                          </button>
                          <button 
-                            onClick={() => handleSend("Refine these details to be more specific and engaging.")}
+                            onClick={() => handleSend("Refine these details to be more specific and engaging.", "Refine Details")}
                             className="flex-1 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-[11px] font-bold hover:bg-slate-50 transition"
                          >
                             Refine Details
@@ -271,14 +423,14 @@ export default function AIAssistantSidebar({ details, onApply, onClose, scope = 
                         {(msg.data?.modules || []).map((mod, modIdx) => (
                           <div key={modIdx} className="space-y-1">
                             <h4 className="text-[11px] font-bold text-slate-900 flex items-center gap-2">
-                              {modIdx + 1}. {mod.title}
-                              <span className="text-[9px] font-medium text-slate-400">{mod.chapters?.length} lessons</span>
+                              {modIdx + 1}. {mod.title || mod.module_title}
+                              <span className="text-[9px] font-medium text-slate-400">{(mod.chapters || mod.lessons || []).length} lessons</span>
                             </h4>
                             <div className="pl-3 space-y-1">
-                              {mod.chapters?.map((chap, chapIdx) => (
+                              {(mod.chapters || mod.lessons || []).map((chap, chapIdx) => (
                                 <div key={chapIdx} className="text-[10px] text-slate-500 flex items-center gap-2">
                                   <div className="w-1 h-1 rounded-full bg-slate-200" />
-                                  {chap.title}
+                                  {chap.title || chap.lesson_title}
                                 </div>
                               ))}
                             </div>
@@ -294,12 +446,129 @@ export default function AIAssistantSidebar({ details, onApply, onClose, scope = 
                             <CheckCircle2 className="w-3.5 h-3.5" /> Add to Structure
                          </button>
                          <button 
-                            onClick={() => handleSend("Suggest a more detailed structure with additional modules.")}
+                            onClick={() => {
+                              const currentModules = msg.data?.modules || [];
+                              const objectives = details?.learning_objectives || [];
+                              const prompt = `Review the current course structure: ${JSON.stringify(currentModules)} and the learning objectives: ${JSON.stringify(objectives)}. Optimize the logical flow, ensuring a smooth progression. You may re-order, split, or merge modules to better align with the objectives. RETURN THE FULL OPTIMIZED STRUCTURE.`;
+                              handleSend(prompt, "Refine Structure");
+                            }}
                             className="flex-1 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-[11px] font-bold hover:bg-slate-50 transition"
                          >
                             Refine Structure
                          </button>
                       </div>
+                    </div>
+                  )}
+
+                  {msg.type === 'suggestion_content' && (
+                    <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm space-y-4 animate-in zoom-in-95 duration-300 w-full">
+                      {msg.data?.strategy?.length > 0 && (
+                        <>
+                          <p className="text-[11px] text-slate-500 font-medium mb-3">Based on the lesson title and content, here are my suggestions:</p>
+                          <div className="overflow-hidden border border-slate-100 rounded-xl">
+                            <table className="w-full text-left border-collapse">
+                              <thead>
+                                <tr className="bg-slate-50 border-b border-slate-100">
+                                  <th className="p-2 text-[10px] font-bold text-slate-600 uppercase">Content Type</th>
+                                  <th className="p-2 text-[10px] font-bold text-slate-600 uppercase">Reason</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {msg.data.strategy.map((item, i) => (
+                                  <tr key={i} className="border-b border-slate-50 last:border-none">
+                                    <td className="p-2 text-[10px] font-bold text-sky-600">{item.type}</td>
+                                    <td className="p-2 text-[10px] text-slate-500 leading-tight">{item.reason}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </>
+                      )}
+
+                      {(msg.data?.prompts?.length > 0 || msg.data?.prompt) && (
+                        <>
+                          <p className="text-[11px] text-slate-500 font-medium mb-3">
+                            {msg.data?.prompt ? "I have generated a refined prompt for your lesson:" : "I have generated a detailed content strategy for all modules:"}
+                          </p>
+                          <div className="space-y-4 max-h-[350px] overflow-y-auto pr-2 no-scrollbar border-l-2 border-sky-100 pl-4 py-1">
+                            {msg.data?.prompt ? (
+                               <div className="space-y-1.5 bg-slate-50/50 p-3 rounded-xl border border-slate-100/50">
+                                 <div className="flex items-center gap-2">
+                                   <span className="text-[9px] font-black text-sky-600 uppercase tracking-tighter">Refined Prompt</span>
+                                 </div>
+                                 <p className="text-[10px] text-slate-500 italic leading-relaxed whitespace-pre-wrap">"{msg.data.prompt}"</p>
+                               </div>
+                            ) : (
+                              (() => {
+                                let currentModule = "";
+                                return (msg.data?.prompts || []).map((p, i) => {
+                                  if (!p) return null;
+                                  const showModuleHeader = p.module && p.module !== currentModule;
+                                  if (showModuleHeader) currentModule = p.module;
+
+                                  return (
+                                    <div key={i} className="space-y-2">
+                                      {showModuleHeader && (
+                                        <div className="pt-2 pb-1">
+                                          <h5 className="text-[10px] font-black text-slate-900 uppercase tracking-widest border-b border-slate-100 pb-1 flex items-center gap-2">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-sky-500" />
+                                            {p.module}
+                                          </h5>
+                                        </div>
+                                      )}
+                                      <div className="space-y-1.5 bg-slate-50/50 p-3 rounded-xl border border-slate-100/50 ml-2">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-[9px] font-black text-sky-600 uppercase tracking-tighter">Lesson</span>
+                                          <h4 className="text-[10px] font-bold text-slate-900">{p.title || p.lesson || 'Untitled Lesson'}</h4>
+                                        </div>
+                                        <p className="text-[10px] text-slate-500 italic leading-relaxed whitespace-pre-wrap">"{p.prompt || 'No prompt content generated.'}"</p>
+                                      </div>
+                                    </div>
+                                  );
+                                });
+                              })()
+                            )}
+                          </div>
+                          <div className="pt-2 grid grid-cols-2 gap-2">
+                             <button 
+                                onClick={() => onApply(msg.data?.prompt ? { prompt: msg.data.prompt } : { prompts: msg.data.prompts })}
+                                className="bg-sky-600 text-white px-4 py-3 rounded-xl text-[10px] font-bold hover:bg-sky-700 transition flex items-center justify-center gap-2 shadow-lg shadow-sky-100"
+                             >
+                                <Zap className="w-3 h-3" /> {msg.data?.prompt ? "Apply Prompt" : "Apply All"}
+                             </button>
+                             <button 
+                                onClick={() => {
+                                  if (msg.data?.prompt) {
+                                    handleSend("Regenerate this specific lesson prompt with more practical details.", "Regenerate Prompt");
+                                  } else {
+                                    handleSend("Regenerate the content strategy with a more practical/hands-on focus.", "Regenerate Strategy");
+                                  }
+                                }}
+                                className="bg-white border-2 border-slate-100 text-slate-600 px-4 py-3 rounded-xl text-[10px] font-bold hover:bg-slate-50 transition flex items-center justify-center gap-2"
+                             >
+                                <RefreshCw className="w-3 h-3" /> Regenerate
+                             </button>
+                          </div>
+                        </>
+                      )}
+
+                       {!msg.data?.prompts?.length && !msg.data?.prompt && (
+                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-50 mt-4">
+                           <button 
+                              onClick={() => handleSend("Improve the prompt for the current lesson.", "Improve Prompt")}
+                              className="flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-700 px-3 py-2 rounded-xl text-[10px] font-bold hover:bg-slate-50 transition"
+                           >
+                              <PencilLine className="w-3 h-3" /> Improve Prompt
+                           </button>
+                           <button 
+                              onClick={() => onApply({ type: msg.data?.strategy?.[0]?.type?.toLowerCase() })}
+                              className="flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-700 px-3 py-2 rounded-xl text-[10px] font-bold hover:bg-slate-50 transition"
+                           >
+                              <Zap className="w-3 h-3" /> Apply Selection
+                           </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -328,15 +597,101 @@ export default function AIAssistantSidebar({ details, onApply, onClose, scope = 
               </button>
             </div>
             <div className="flex flex-wrap gap-2 mt-3">
-               {scope.includes("Details") ? (
+               {scope.includes("Details") && (
                  <>
-                   <button onClick={() => handleSend("Suggest a better title and description.")} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Suggest Title</button>
-                   <button onClick={() => handleSend("Refine learning objectives.")} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Refine Objectives</button>
+                   {(() => {
+                     const lastSuggestion = [...messages].reverse().find(m => m.type === 'suggestion_details')?.data;
+                     const activeTitle = details?.title || lastSuggestion?.title || '';
+                     const activeDesc = details?.description || lastSuggestion?.description || '';
+                     const hasSuggestion = messages.some(m => m.type === 'suggestion_details');
+                     
+                     const handleRefineObjectives = () => {
+                       const currentObjectives = lastSuggestion?.learning_objectives || details?.learning_objectives || [];
+                       const validObjectives = currentObjectives.filter(obj => obj && obj.trim().length > 0);
+                       const prompt = `Keep the suggested Title ("${activeTitle}") and Description ("${activeDesc}") exactly as they are. The current learning objectives are: ${JSON.stringify(validObjectives)}. Please completely refine and rewrite these learning objectives to be more specific, measurable, and aligned with Bloom's Taxonomy. Return the newly refined list of objectives. DO NOT change the title or description.`;
+                       handleSend(prompt, "Refine Objectives");
+                     };
+
+                     const handleAddObjectives = () => {
+                       const currentObjectives = lastSuggestion?.learning_objectives || details?.learning_objectives || [];
+                       const validObjectives = currentObjectives.filter(obj => obj && obj.trim().length > 0);
+
+                       if (validObjectives.length >= 15) {
+                         setMessages(prev => [
+                           ...prev, 
+                           { id: Date.now(), sender: 'user', text: 'Add Objectives', type: 'text' },
+                           { id: Date.now() + 1, sender: 'ai', text: 'You have reached the maximum limit of 15 learning objectives.', type: 'text' }
+                         ]);
+                         return;
+                       }
+                       
+                       const prompt = `Keep the suggested Title ("${activeTitle}") and Description ("${activeDesc}") exactly as they are. The current learning objectives are: ${JSON.stringify(validObjectives)}. Please generate exactly 3 new, distinct advanced learning objectives. RETURN A FULL, COMBINED LIST containing all the existing objectives PLUS the 3 new ones. DO NOT modify or remove any of the existing objectives.`;
+                       handleSend(prompt, "Add Objectives");
+                     };
+                     
+                     if (!hasSuggestion) {
+                       return <button onClick={() => handleSend(`Suggest a specific course title, a detailed description, a target audience, and a set of 5-6 initial learning objectives for a course about "${activeTitle || 'a new subject'}".`, "Suggest Title")} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Suggest Title</button>;
+                     }
+                     
+                     return (
+                       <>
+                         <button onClick={handleRefineObjectives} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Refine Objectives</button>
+                         <button onClick={handleAddObjectives} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Add Objectives</button>
+                       </>
+                     );
+                   })()}
                  </>
-               ) : (
+               )}
+               
+               {scope.includes("Structure") && (
                  <>
-                   <button onClick={() => handleSend("Suggest more modules.")} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Add More Modules</button>
-                   <button onClick={() => handleSend("Suggest lesson topics.")} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Suggest Topics</button>
+                   {(() => {
+                     const lastSuggestion = [...messages].reverse().find(m => m.type === 'suggestion_structure')?.data;
+                     const currentModules = lastSuggestion?.modules || courseData?.structure?.modules || [];
+                     const hasSuggestion = messages.some(m => m.type === 'suggestion_structure');
+
+                     const handleAddModules = () => {
+                       if (currentModules.length >= 10) {
+                         setMessages(prev => [
+                           ...prev,
+                           { id: Date.now(), sender: 'user', text: 'Add Modules', type: 'text' },
+                           { id: Date.now() + 1, sender: 'ai', text: 'The course has reached the recommended limit of 10 modules. Try refining the existing topics instead.', type: 'text' }
+                         ]);
+                         return;
+                       }
+                       const prompt = `Keep the existing modules exactly as they are: ${JSON.stringify(currentModules)}. Suggest exactly 2 new, distinct modules to follow these that add more value to the course based on the course objectives. RETURN A FULL, COMBINED LIST containing all the existing modules PLUS the 2 new ones.`;
+                       handleSend(prompt, "Add Modules");
+                     };
+
+                     const handleRefineTopics = () => {
+                       const prompt = `Keep the Module titles exactly as they are: ${JSON.stringify(currentModules.map(m => m.title || m.module_title))}. For each module, refine the chapter/lesson titles to be more practical, hands-on, and engaging. Return the FULL structure with updated lesson titles. DO NOT add or remove modules.`;
+                       handleSend(prompt, "Refine Topics");
+                     };
+
+                     if (!hasSuggestion) {
+                       return <button onClick={() => handleSend("Generate a complete course structure.", "Suggest Structure")} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Suggest Structure</button>;
+                     }
+
+                     return (
+                       <>
+                         <button onClick={handleAddModules} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Add Modules</button>
+                         <button onClick={handleRefineTopics} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Refine Topics</button>
+                       </>
+                     );
+                   })()}
+                 </>
+               )}
+
+               {scope.includes("Content") && (
+                 <>
+                   {!messages.some(m => m.type === 'suggestion_content') ? (
+                     <button onClick={() => handleSend("Generate high-quality prompts for all modules and lessons.", "Generate All Prompts")} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Generate All Prompts</button>
+                   ) : (
+                     <>
+                       <button onClick={() => handleSend("Make prompts more practical.", "Practical Focus")} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Practical Focus</button>
+                       <button onClick={() => handleSend("Make prompts more academic.", "Academic Focus")} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Academic Focus</button>
+                     </>
+                   )}
                  </>
                )}
             </div>
