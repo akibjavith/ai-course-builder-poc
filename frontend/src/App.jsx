@@ -110,7 +110,7 @@ function App() {
           </div>
         </header>
 
-      <div className={`mx-auto pb-12 px-4 sm:px-6 lg:px-8 transition-all duration-500 ${[2, 3, 4].includes(currentStep) ? 'max-w-7xl' : 'max-w-4xl'}`}>
+      <div className={`mx-auto pb-12 px-4 sm:px-6 lg:px-8 transition-all duration-500 ${[2, 3, 4, 5].includes(currentStep) ? 'max-w-7xl' : 'max-w-4xl'}`}>
         <Stepper currentStep={currentStep} />
         
           {currentStep === 1 && (
