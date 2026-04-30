@@ -65,28 +65,37 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
 
       const systemMsg = { 
         role: 'system', 
-        content: `You are a course creation assistant. 
-        CRITICAL: If you are providing a suggestion (details, structure, or prompts), ONLY return the [METADATA] block. DO NOT add any introductory or concluding text. Be a silent processing engine.
+        content: `You are a friendly and expert instructional design assistant. Your goal is to help the user build high-quality courses step-by-step.
+
+        PERSONALITY:
+        - Be encouraging, professional, and helpful.
+        - If the user greets you (e.g., "Hi", "Hello"), respond warmly and acknowledge their current progress in the course (look at CURRENT CONTEXT and CURRENT SCOPE).
+        - You are a partner in the creative process, not just a tool.
+
+        HOW TO RESPOND:
+        1. FOR COURSE ACTIONS (Refine, Add, Generate): Provide ONLY the [METADATA] block. Do NOT add any conversational text. Be a silent processing engine for these specific actions.
+        2. FOR GENERAL CHAT/GREETINGS: Provide ONLY conversational text. Do NOT add a [METADATA] block unless specifically asked for a course update.
+        3. STRUCTURED DATA: Wrap JSON in [METADATA] blocks: [METADATA]{...}[/METADATA].
         
-        CRITICAL: ALWAYS RETURN THE FULL AND COMPLETE OBJECT IN [METADATA]. 
-        IF A FIELD IS ALREADY PROVIDED IN "CURRENT CONTEXT" AND YOU ARE NOT CHANGING IT, YOU MUST STILL INCLUDE IT EXACTLY AS IS. 
-        YOU ARE STRICTLY FORBIDDEN FROM RETURNING EMPTY STRINGS ("") OR PLACEHOLDERS FOR FIELDS THAT ALREADY HAVE CONTENT.
-        
-        BAD EXAMPLE: { "title": "", "description": "", "learning_objectives": ["New objective"] } // FORBIDDEN if title/desc exist in context.
-        GOOD EXAMPLE: { "title": "Existing Title", "description": "Existing Desc", "learning_objectives": ["Existing Obj", "New objective"] } 
+        CRITICAL RULES FOR METADATA:
+        - ALWAYS RETURN THE FULL AND COMPLETE OBJECT IN [METADATA]. 
+        - IF A FIELD IS ALREADY PROVIDED IN "CURRENT CONTEXT" AND YOU ARE NOT CHANGING IT, YOU MUST STILL INCLUDE IT EXACTLY AS IS. 
+        - YOU ARE STRICTLY FORBIDDEN FROM RETURNING EMPTY STRINGS ("") OR PLACEHOLDERS FOR FIELDS THAT ALREADY HAVE CONTENT.
         
         CURRENT CONTEXT: ${JSON.stringify(details)}. 
         ${(scope.includes('Structure') || scope.includes('Content')) ? `CRITICAL: USE THE FOLLOWING STRUCTURE ONLY: ${JSON.stringify(courseData?.structure || {})}` : ''}
         CURRENT SCOPE: ${scope}.
 
-        If scope is "Course Details": Return the FULL course details. Ensure Title and Description match the CURRENT CONTEXT unless you are explicitly asked to change them. Always use the schema: { "title": "...", "description": "...", "target_audience": "...", "difficulty": "...", "duration": "...", "learning_objectives": ["..."] }
-        If scope is "Step 3: Course Structure": Return the FULL module/chapter list.
-        If scope is "Step 4: Course Content": Generate detailed AI prompts. If the user asks for a specific lesson, return ONLY that lesson's prompt in the schema: { "prompt": "..." }. Otherwise, generate for all lessons in the schema: { "prompts": [{ "module": "...", "title": "...", "prompt": "..." }] }.
+        FORMATTING RULES:
+        - Use PLAIN TEXT only. DO NOT use markdown symbols like ** or # for bolding or headers.
+        - Use DOUBLE LINE BREAKS (\n\n) between different sections and points for clear spacing.
+        - Use bullet points (-) for lists.
+        - CONCISENESS: If the user triggered an action via a button (e.g., 'Add Objective', 'Refine Details'), keep your conversational text to ONE short sentence. Only provide long explanations for general chat or open-ended questions.
 
-        SCHEMA DEFINITIONS:
-        For Details, schema: { "title": "...", "description": "...", "target_audience": "...", "difficulty": "...", "duration": "...", "learning_objectives": ["..."] }
-        For Structure, schema: { "modules": [{ "title": "...", "chapters": [{"title": "..."}] }] }
-        For Prompt Generation (Step 4), schema: { "prompts": [...] } OR { "prompt": "..." } for a single lesson.`
+        SCHEMAS:
+        - Course Details (Step 2): { "title": "...", "description": "...", "target_audience": "...", "difficulty": "...", "duration": "...", "learning_objectives": ["..."] }
+        - Course Structure (Step 3): { "modules": [{ "title": "...", "chapters": [{"title": "..."}] }] }
+        - Course Content (Step 4): { "prompts": [{ "module": "...", "title": "...", "prompt": "..." }] } OR { "prompt": "..." } for a single lesson.`
       };
 
       const resp = await chatWithAI([systemMsg, ...chatHistory]);
@@ -126,26 +135,33 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
             
             // Safety Guard: If AI returns empty fields that are present in context, fill them back in
             if (scope.includes("Details")) {
-              if (!metadata.title && details?.title) metadata.title = details.title;
-              if (!metadata.description && details?.description) metadata.description = details.description;
-              if (!metadata.target_audience && details?.target_audience) metadata.target_audience = details.target_audience;
-              if (!metadata.difficulty && details?.difficulty) metadata.difficulty = details.difficulty;
-              if (!metadata.duration && details?.duration) metadata.duration = details.duration;
+              const lastDetails = [...messages].reverse().find(m => m.type === 'suggestion_details')?.data;
               
-              if ((!metadata.learning_objectives || metadata.learning_objectives.length === 0) && details?.learning_objectives?.length > 0) {
-                metadata.learning_objectives = details.learning_objectives;
+              if ((!metadata.title || metadata.title.length < 2)) {
+                metadata.title = details?.title || lastDetails?.title || '';
+              }
+              if ((!metadata.description || metadata.description.length < 5)) {
+                metadata.description = details?.description || lastDetails?.description || '';
+              }
+              if ((!metadata.target_audience || metadata.target_audience.length < 2)) {
+                metadata.target_audience = details?.target_audience || lastDetails?.target_audience || '';
+              }
+              if (!metadata.difficulty) metadata.difficulty = details?.difficulty || lastDetails?.difficulty || 'beginner';
+              if (!metadata.duration) metadata.duration = details?.duration || lastDetails?.duration || '';
+              
+              if ((!metadata.learning_objectives || metadata.learning_objectives.length === 0)) {
+                metadata.learning_objectives = details?.learning_objectives || lastDetails?.learning_objectives || [];
               } else if (Array.isArray(metadata.learning_objectives)) {
-                // Filter out empty strings from the AI response
                 metadata.learning_objectives = metadata.learning_objectives.filter(obj => obj && obj.trim().length > 0);
               }
             }
             
             // Aggressively clean textPart: remove code blocks and JSON-like strings
+            // Clean textPart: remove metadata tags but keep normal text
             const cleanText = textPart
-              .replace(/```[\s\S]*?```/g, '') // Remove triple backtick blocks
+              .replace(/\[METADATA\][\s\S]*?\[\/METADATA\]/g, '') 
               .replace(/\[METADATA\]/g, '')
               .replace(/\[\/METADATA\]/g, '')
-              .replace(/\{[\s\S]*\}/g, '')   // Remove raw JSON objects
               .trim();
             
             if (cleanText && cleanText.length > 2) {
@@ -170,7 +186,6 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
               const modules = Array.isArray(metadata.modules) ? metadata.modules : 
                               Array.isArray(metadata.course_structure) ? metadata.course_structure : [];
               
-              // Normalize chapters/lessons
               const normalizedModules = modules.map(m => ({
                 ...m,
                 chapters: Array.isArray(m.chapters) ? m.chapters : 
@@ -327,7 +342,7 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
                   </div>
                   
                   {msg.type === 'text' && (
-                    <div className={`px-4 py-3 rounded-2xl text-[13px] leading-relaxed shadow-sm ${msg.sender === 'user' ? 'bg-sky-600 text-white rounded-tr-none' : 'bg-slate-50 text-slate-800 rounded-tl-none border border-slate-100'}`}>
+                    <div className={`px-4 py-3 rounded-2xl text-[13px] leading-relaxed shadow-sm whitespace-pre-wrap ${msg.sender === 'user' ? 'bg-sky-600 text-white rounded-tr-none' : 'bg-slate-50 text-slate-800 rounded-tl-none border border-slate-100'}`}>
                       {msg.text}
                     </div>
                   )}
@@ -608,7 +623,7 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
                      const handleRefineObjectives = () => {
                        const currentObjectives = lastSuggestion?.learning_objectives || details?.learning_objectives || [];
                        const validObjectives = currentObjectives.filter(obj => obj && obj.trim().length > 0);
-                       const prompt = `Keep the suggested Title ("${activeTitle}") and Description ("${activeDesc}") exactly as they are. The current learning objectives are: ${JSON.stringify(validObjectives)}. Please completely refine and rewrite these learning objectives to be more specific, measurable, and aligned with Bloom's Taxonomy. Return the newly refined list of objectives. DO NOT change the title or description.`;
+                       const prompt = `Refine objectives: ${JSON.stringify(validObjectives)}. Title: "${activeTitle}", Desc: "${activeDesc}". YOU MUST RETURN THE [METADATA] BLOCK with Target Audience.`;
                        handleSend(prompt, "Refine Objectives");
                      };
 
@@ -625,12 +640,12 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
                          return;
                        }
                        
-                       const prompt = `Keep the suggested Title ("${activeTitle}") and Description ("${activeDesc}") exactly as they are. The current learning objectives are: ${JSON.stringify(validObjectives)}. Please generate exactly 3 new, distinct advanced learning objectives. RETURN A FULL, COMBINED LIST containing all the existing objectives PLUS the 3 new ones. DO NOT modify or remove any of the existing objectives.`;
+                       const prompt = `Add 3 objectives to: ${JSON.stringify(validObjectives)}. Title: "${activeTitle}", Desc: "${activeDesc}". YOU MUST RETURN THE [METADATA] BLOCK with Target Audience.`;
                        handleSend(prompt, "Add Objectives");
                      };
                      
                      if (!hasSuggestion) {
-                       return <button onClick={() => handleSend(`Suggest a specific course title, a detailed description, a target audience, and a set of 5-6 initial learning objectives for a course about "${activeTitle || 'a new subject'}".`, "Suggest Title")} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Suggest Title</button>;
+                       return <button onClick={() => handleSend(`Suggest a course title, description, target audience, and 5-6 objectives for "${activeTitle || 'a new subject'}". YOU MUST RETURN THE [METADATA] BLOCK.`, "Suggest Title")} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Suggest Title</button>;
                      }
                      
                      return (
