@@ -2,14 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, Trash2, ChevronDown, ChevronRight, Edit3, GripVertical, 
   Sparkles, MessageSquareText, FileJson, ChevronLeft, Loader2, AlertCircle, 
-  X, CheckCircle2, MoreVertical, Bot, Upload, Code, FileText, Presentation, 
+  X, CheckCircle2, MoreVertical, Bot, Upload, Code, FileCode, FileText, Presentation, 
   Video, Volume2, HelpCircle, CheckSquare, RefreshCw, Zap, Settings2, Eye
 } from 'lucide-react';
 import AIAssistantSidebar from './AIAssistantSidebar';
 import { generateLessonContent, uploadChapterMedia } from '../api';
 
 const CONTENT_TYPES = [
-  { id: 'html', label: 'HTML', icon: Code, color: 'text-sky-500', bg: 'bg-sky-50', disabled: false },
+  { id: 'html', label: 'HTML', icon: FileCode, color: 'text-sky-500', bg: 'bg-sky-50', disabled: false },
   { id: 'pdf', label: 'PDF', icon: FileText, color: 'text-slate-300', bg: 'bg-slate-50', disabled: true },
   { id: 'ppt', label: 'PPT', icon: Presentation, color: 'text-slate-300', bg: 'bg-slate-50', disabled: true },
   { id: 'video', label: 'Video', icon: Video, color: 'text-slate-300', bg: 'bg-slate-50', disabled: true },
@@ -183,7 +183,7 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
       // Add as a NEW block instead of overwriting
       const newModules = [...(courseData.structure?.modules || [])];
       const chapter = newModules[mIdx].chapters[cIdx];
-      if (!chapter.contents) chapter.contents = chapter.content ? [chapter.content] : [];
+      if (!chapter.contents) chapter.contents = (chapter.content && chapter.content.completed) ? [chapter.content] : [];
       
       chapter.contents.push({ 
         ...res, 
@@ -212,7 +212,7 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
       
       const newModules = [...(courseData.structure?.modules || [])];
       const chapter = newModules[mIdx].chapters[cIdx];
-      if (!chapter.contents) chapter.contents = chapter.content ? [chapter.content] : [];
+      if (!chapter.contents) chapter.contents = (chapter.content && chapter.content.completed) ? [chapter.content] : [];
       
       chapter.contents.push({ 
         completed: true, 
@@ -558,6 +558,7 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
 
 function ContentBlock({ block, onDelete, onUpdate, onMoveUp, onMoveDown, isFirst, isLast }) {
   const [isEditing, setIsEditing] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
   const [editValue, setEditValue] = useState(block.content || '');
   const TypeIcon = CONTENT_TYPES.find(t => t.id === (block.type || 'html'))?.icon || FileJson;
 
@@ -583,6 +584,14 @@ function ContentBlock({ block, onDelete, onUpdate, onMoveUp, onMoveDown, isFirst
         </div>
         
         <div className="flex items-center gap-1 opacity-0 group-hover/block:opacity-100 transition-opacity">
+          <button 
+            onClick={() => setIsMinimized(!isMinimized)}
+            className="p-1.5 text-slate-400 hover:bg-white hover:text-sky-600 rounded-lg transition"
+            title={isMinimized ? "Expand" : "Minimize"}
+          >
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isMinimized ? '-rotate-90' : ''}`} />
+          </button>
+          <div className="w-px h-4 bg-slate-200 mx-1" />
           <button 
             disabled={isFirst}
             onClick={onMoveUp}
@@ -616,50 +625,52 @@ function ContentBlock({ block, onDelete, onUpdate, onMoveUp, onMoveDown, isFirst
       </div>
 
       {/* Block Content */}
-      <div className="p-5">
-        {isEditing ? (
-          <div className="space-y-3">
-             <textarea 
-               value={editValue}
-               onChange={(e) => setEditValue(e.target.value)}
-               className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-[11px] font-medium min-h-[200px] focus:border-sky-200 outline-none transition-all leading-relaxed"
-             />
-             <div className="flex justify-end gap-2">
-                <button onClick={() => setIsEditing(false)} className="px-3 py-1.5 text-[10px] font-bold text-slate-400 hover:text-slate-600">Cancel</button>
-                <button onClick={handleSave} className="bg-sky-600 text-white px-4 py-1.5 rounded-xl text-[10px] font-bold shadow-lg shadow-sky-100">Save Changes</button>
-             </div>
-          </div>
-        ) : (
-          <div className="prose prose-slate prose-sm max-w-none">
-            {block.type === 'html' ? (
-              <div 
-                className="text-[12px] text-slate-600 leading-relaxed space-y-4"
-                dangerouslySetInnerHTML={{ __html: block.content }} 
-              />
-            ) : block.file_name ? (
-              <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100/50">
-                <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-sky-500 shadow-sm">
-                  <FileJson className="w-6 h-6" />
+      {!isMinimized && (
+        <div className="p-5">
+          {isEditing ? (
+            <div className="space-y-3">
+               <textarea 
+                 value={editValue}
+                 onChange={(e) => setEditValue(e.target.value)}
+                 className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-[11px] font-medium min-h-[200px] focus:border-sky-200 outline-none transition-all leading-relaxed"
+               />
+               <div className="flex justify-end gap-2">
+                  <button onClick={() => setIsEditing(false)} className="px-3 py-1.5 text-[10px] font-bold text-slate-400 hover:text-slate-600">Cancel</button>
+                  <button onClick={handleSave} className="bg-sky-600 text-white px-4 py-1.5 rounded-xl text-[10px] font-bold shadow-lg shadow-sky-100">Save Changes</button>
+               </div>
+            </div>
+          ) : (
+            <div className="prose prose-slate prose-sm max-w-none">
+              {block.type === 'html' ? (
+                <div 
+                  className="text-[12px] text-slate-600 leading-relaxed space-y-4"
+                  dangerouslySetInnerHTML={{ __html: block.content }} 
+                />
+              ) : block.file_name ? (
+                <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100/50">
+                  <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-sky-500 shadow-sm">
+                    <FileJson className="w-6 h-6" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-[11px] font-bold text-slate-900">{block.file_name}</p>
+                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{block.type || 'FILE'}</p>
+                  </div>
+                  <a 
+                    href={block.file_url} 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="p-2 bg-white border border-slate-100 rounded-xl text-sky-600 hover:bg-sky-50 transition shadow-sm"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </a>
                 </div>
-                <div className="flex-1">
-                  <p className="text-[11px] font-bold text-slate-900">{block.file_name}</p>
-                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{block.type || 'FILE'}</p>
-                </div>
-                <a 
-                  href={block.file_url} 
-                  target="_blank" 
-                  rel="noreferrer"
-                  className="p-2 bg-white border border-slate-100 rounded-xl text-sky-600 hover:bg-sky-50 transition shadow-sm"
-                >
-                  <Eye className="w-4 h-4" />
-                </a>
-              </div>
-            ) : (
-              <p className="text-[11px] text-slate-400 italic">No content available for this block.</p>
-            )}
-          </div>
-        )}
-      </div>
+              ) : (
+                <p className="text-[11px] text-slate-400 italic">No content available for this block.</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

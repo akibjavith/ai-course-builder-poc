@@ -30,10 +30,19 @@ class LessonContent(BaseModel):
     examples: List[str]
     key_points: List[str]
 
+class CourseDetailsDict(BaseModel):
+    title: Optional[str] = ""
+    description: Optional[str] = ""
+    target_audience: Optional[str] = ""
+    difficulty: Optional[str] = "beginner"
+    learning_objectives: Optional[List[str]] = []
+
 class LessonRequest(BaseModel):
-    module_index: int
-    lesson_index: int
-    context: Optional[Dict[str, Any]] = None
+    title: str
+    module_title: str
+    prompt: str
+    type: str
+    course_details: Optional[CourseDetailsDict] = None
 
 class VoiceScriptResponse(BaseModel):
     voice_script: str
@@ -89,25 +98,119 @@ async def generate_outline(req: OutlineRequest):
 @router.post("/lesson")
 async def generate_lesson(req: LessonRequest):
     try:
-        ctx = req.context or {}
-        course_title = ctx.get("course_title", "Course")
-        module_title = ctx.get("module_title", "Module")
-        chapter_title = ctx.get("chapter_title", "Topic")
-        source_type = ctx.get("sourceType", "external")
-        audience = ctx.get("audience", "Everyone")
-        difficulty = ctx.get("difficulty", "beginner")
-        objectives = ctx.get("objectives", [])
+        from content_generator import generate_chapter_content
         
-        content = generate_chapter_content(
-            course_title=course_title,
-            module_title=module_title,
-            chapter_title=chapter_title,
-            source_type=source_type,
-            audience=audience,
-            difficulty=difficulty,
-            objectives=objectives
+        course_title = req.course_details.title if req.course_details else "the course"
+        course_desc = req.course_details.description if req.course_details else ""
+        audience = req.course_details.target_audience if req.course_details else "Everyone"
+        difficulty = req.course_details.difficulty if req.course_details else "beginner"
+        objectives = req.course_details.learning_objectives if req.course_details else []
+        
+        # We pass the prompt via the context or just update generate_chapter_content to handle it directly.
+        # But we can just format our new dynamic prompt here!
+        prompt_str = f"""
+        Generate a COMPLETE, deep-dive lesson for '{req.title}' in the module '{req.module_title}' for the course '{course_title}'.
+        Course Description: {course_desc}
+        Target Audience: {audience}
+        
+        CRITICAL INSTRUCTION:
+        {req.prompt}
+        
+        REQUIREMENTS:
+        - No shallow content. Deep explanation (WHY + HOW).
+        - Include a real-world example.
+        - Include a 'practical_implementation' block. If the course is about programming (like Python, Java, HTML), provide code. If it's about Math, provide a formula/equation. If it's about Poetry, provide a poem stanza. If it's business, provide a framework or case study snippet.
+        - Explain the practical implementation.
+        - Use HTML Tables, Unordered Lists (ul), and Ordered Lists (ol) where appropriate.
+        - Include at least one informative Link (a tag) to external documentation or further reading.
+        - List common mistakes.
+        - List best practices.
+        - Provide 2-3 exercises.
+        
+        Return ONLY a JSON object:
+        {{
+            "title": "{req.title}",
+            "concept": "...",
+            "example": "...",
+            "code": "...", 
+            "code_explanation": "...",
+            "common_mistakes": "...",
+            "best_practices": "...",
+            "exercises": "..."
+        }}
+        """
+        
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a senior AI architect and instructional designer."},
+                {"role": "user", "content": prompt_str}
+            ],
+            temperature=0.7,
+            response_format={"type": "json_object"}
         )
-        return content
+        lesson_data = json.loads(response.choices[0].message.content)
+        
+        # Quick inline assembler
+        def md_html(t):
+            if isinstance(t, list):
+                if len(t) > 0 and isinstance(t[0], dict):
+                    res = "<ul style='padding-left: 20px;'>"
+                    for item in t:
+                        res += "<li style='margin-bottom: 12px;'>"
+                        for k, v in item.items():
+                            res += f"<strong>{k.replace('_', ' ').title()}:</strong> {str(v).replace(chr(10), '<br/>')}<br/>"
+                        res += "</li>"
+                    res += "</ul>"
+                    return res
+                else:
+                    res = "<ul style='list-style-type: disc; padding-left: 20px;'>"
+                    for item in t:
+                        res += f"<li style='margin-bottom: 8px;'>{str(item).replace(chr(10), '<br/>')}</li>"
+                    res += "</ul>"
+                    return res
+            elif isinstance(t, dict):
+                res = "<ul style='padding-left: 20px;'>"
+                for k, v in t.items():
+                    res += f"<li style='margin-bottom: 8px;'><strong>{k.replace('_', ' ').title()}:</strong> {str(v).replace(chr(10), '<br/>')}</li>"
+                res += "</ul>"
+                return res
+            return str(t).replace('\n', '<br/>')
+
+        html_snippet = f"""
+        <div class="lesson-snippet" style="font-family: 'Inter', sans-serif; line-height: 1.6; color: inherit;">
+            <div style="margin-bottom: 35px; border-left: 4px solid #3b82f6; padding-left: 20px;">
+                <h4 style="color: #3b82f6; text-transform: uppercase; font-size: 0.85rem; margin-bottom: 10px; font-weight: bold;">The Core Concept</h4>
+                <div style="font-size: 1.05rem;">{md_html(lesson_data.get('concept', ''))}</div>
+            </div>
+            <div class="example" style="background: rgba(34, 197, 94, 0.1); border-left: 6px solid #22c55e; padding: 25px; border-radius: 12px; margin-bottom: 30px;">
+                <h4 style="margin-top: 0; color: #22c55e; text-transform: uppercase; font-size: 0.85rem; font-weight: bold;">Professional Example</h4>
+                <div style="color: inherit;">{md_html(lesson_data.get('example', ''))}</div>
+            </div>
+            <div style="margin: 30px 0;">
+                <h4 style="color: #6366f1; text-transform: uppercase; font-size: 0.85rem; margin-bottom: 10px; font-weight: bold;">Practical Implementation</h4>
+                <pre style="background: rgba(15, 23, 42, 0.8); color: #38bdf8; padding: 20px; border-radius: 12px; overflow-x: auto;"><code>{lesson_data.get('code', '')}</code></pre>
+                <div style="margin-top: 15px; font-size: 0.95rem; opacity: 0.9; padding: 15px; background: rgba(128,128,128,0.1); border-radius: 8px;">{md_html(lesson_data.get('code_explanation', ''))}</div>
+            </div>
+            <div class="note" style="border-left: 6px solid #f97316; background: rgba(249, 115, 22, 0.1); padding: 25px; border-radius: 12px; margin-bottom: 30px;">
+                <h4 style="margin-top: 0; color: #f97316; text-transform: uppercase; font-size: 0.85rem; font-weight: bold;">Critical Pitfalls</h4>
+                <div style="color: inherit;">{md_html(lesson_data.get('common_mistakes', ''))}</div>
+            </div>
+            <div style="margin: 30px 0; background: rgba(128,128,128,0.05); padding: 25px; border-radius: 12px; border: 1px solid rgba(128,128,128,0.2);">
+                <h4 style="color: #8b5cf6; text-transform: uppercase; font-size: 0.85rem; margin-bottom: 10px; font-weight: bold;">Best Practices</h4>
+                <div style="color: inherit;">{md_html(lesson_data.get('best_practices', ''))}</div>
+            </div>
+            <div style="margin: 30px 0; background: rgba(45, 212, 191, 0.05); padding: 25px; border-radius: 12px; border: 1px dashed rgba(45, 212, 191, 0.5);">
+                <h4 style="color: #2dd4bf; text-transform: uppercase; font-size: 0.85rem; margin-bottom: 10px; font-weight: bold;">Practice Exercises</h4>
+                <div style="color: inherit;">{md_html(lesson_data.get('exercises', ''))}</div>
+            </div>
+        </div>
+        """
+        
+        return {
+            "content": html_snippet,
+            "type": "html"
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

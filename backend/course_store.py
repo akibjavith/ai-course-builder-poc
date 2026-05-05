@@ -18,15 +18,22 @@ def _save_store(data: Dict[str, Any]):
         json.dump(data, f, indent=2)
 
 def save_course(course_id: str, course_data: dict):
-    # Server-side Validation: Ensure each chapter has at least one file
+    # Server-side Validation: Ensure each chapter has at least one file or block
     structure = course_data.get("structure")
     if structure and "modules" in structure:
         for m in structure["modules"]:
             for c in m.get("chapters", []):
+                # New schema checks
+                contents = c.get("contents", [])
+                has_blocks = isinstance(contents, list) and len(contents) > 0 and any(b.get("content") or b.get("file_url") for b in contents)
+                
+                # Old schema checks
                 content = c.get("content", {})
                 files = content.get("files", [])
                 explanation = content.get("explanation", "")
-                if not files and (not explanation or len(explanation) < 200):
+                has_legacy = bool(files or (explanation and len(explanation) > 10))
+                
+                if not has_blocks and not has_legacy:
                     raise ValueError(f"Validation Error: Chapter '{c.get('title')}' in module '{m.get('title')}' must contain at least one file or AI content.")
                     
     store = _load_store()
@@ -50,15 +57,22 @@ def get_course(course_id: str):
     return cdata
 
 def update_course(course_id: str, course_data: dict):
-    # Server-side Validation: Ensure each chapter has at least one file
+    # Server-side Validation: Ensure each chapter has at least one file or block
     structure = course_data.get("structure")
     if structure and "modules" in structure:
         for m in structure["modules"]:
             for c in m.get("chapters", []):
+                # New schema checks
+                contents = c.get("contents", [])
+                has_blocks = isinstance(contents, list) and len(contents) > 0 and any(b.get("content") or b.get("file_url") for b in contents)
+                
+                # Old schema checks
                 content = c.get("content", {})
                 files = content.get("files", [])
                 explanation = content.get("explanation", "")
-                if not files and (not explanation or len(explanation) < 200):
+                has_legacy = bool(files or (explanation and len(explanation) > 10))
+                
+                if not has_blocks and not has_legacy:
                     raise ValueError(f"Validation Error: Chapter '{c.get('title')}' in module '{m.get('title')}' must contain at least one file or AI content.")
 
     store = _load_store()

@@ -98,7 +98,20 @@ export default function PublishDashboard({ courseData, onBack, onComplete }) {
                          </div>
                          <div className="space-y-2">
                            {(mod.chapters || []).map((chap, j) => {
-                              const cData = (content || []).find(c => c.module_title === mod.title && c.title === chap.title);
+                              // Filter out draft/empty content blocks.
+                              const validContents = (chap.contents || []).filter(c => c.completed && c.content);
+                              if (validContents.length === 0 && chap.content?.completed && chap.content?.content) {
+                                  validContents.push(chap.content);
+                              }
+                              
+                              const isReady = validContents.length > 0;
+                              
+                              // Create a mock cData object for the LessonPreviewModal
+                              const cData = isReady ? {
+                                  html_content: validContents.map(c => c.content).join('<hr class="my-8 border-slate-100" />'),
+                                  files: validContents.filter(c => c.file_url).map(c => ({ url: c.file_url, name: c.file_name }))
+                              } : null;
+                              
                               return (
                                 <button 
                                   key={j} 
