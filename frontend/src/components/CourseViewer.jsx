@@ -351,10 +351,15 @@ export default function CourseViewer({ course, onBack }) {
 
   const activeModule = structure?.modules?.[activeChap.modIdx];
   const activeChapData = activeModule?.chapters?.[activeChap.chapIdx];
-  const activeChapContent = content?.find(c =>
+  
+  // New Block System: Prioritize contents array in the chapter object
+  // Fallback to legacy content array for backward compatibility
+  const activeChapBlocks = activeChapData?.contents || (activeChapData?.content?.completed ? [activeChapData.content] : null) || content?.filter(c =>
     (c.module_title || "").trim().toLowerCase() === (activeModule?.title || "").trim().toLowerCase() && 
     (c.title || "").trim().toLowerCase() === (activeChapData?.title || "").trim().toLowerCase()
   );
+
+  const hasContent = Array.isArray(activeChapBlocks) ? activeChapBlocks.length > 0 : !!activeChapBlocks;
 
   const markComplete = () => {
     const key = `${activeChap.modIdx}-${activeChap.chapIdx}`;
@@ -578,7 +583,7 @@ export default function CourseViewer({ course, onBack }) {
         {/* ── Content Area ── */}
         <section className="flex-1 overflow-y-auto bg-gray-950">
 
-          {!activeChapContent ? (
+          {!hasContent ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center max-w-md px-6">
                 <div className="text-6xl mb-4">📭</div>
@@ -590,134 +595,107 @@ export default function CourseViewer({ course, onBack }) {
               </div>
             </div>
           ) : (
-            <div>
-
-              {/* Video / Image Hero Block */}
-              {(activeChapContent.video_url || activeChapContent.content_type === 'video') ? (
-                <div className="bg-black flex items-center justify-center">
-                  {renderMediaComponent(activeChapContent.video_url)}
-                </div>
-              ) : activeChapContent.image_url ? (
-                <div className="relative bg-black h-72 sm:h-96 overflow-hidden flex items-center justify-center">
-                  <img
-                    src={activeChapContent.image_url.startsWith('/uploads') ? `http://localhost:8000${activeChapContent.image_url}` : activeChapContent.image_url}
-                    alt="Lesson Visual"
-                    className="absolute inset-0 w-full h-full object-cover opacity-30 blur-lg"
-                  />
-                  <img
-                    src={activeChapContent.image_url.startsWith('/uploads') ? `http://localhost:8000${activeChapContent.image_url}` : activeChapContent.image_url}
-                    alt="Lesson Visual"
-                    className="relative z-10 h-full max-w-full object-contain"
-                  />
-                </div>
-              ) : null}
-
-              {/* Lesson Content */}
-              <div className="max-w-4xl mx-auto px-6 sm:px-10 lg:px-16 py-10">
-
-                {/* Breadcrumb */}
+            <div className="max-w-5xl mx-auto py-10 px-6 sm:px-10">
+              {/* Header Info */}
+              <div className="mb-12">
                 <p className="text-red-400 text-xs font-bold uppercase tracking-widest mb-3">
                   Module {activeChap.modIdx + 1} — {activeModule?.title}
                 </p>
-                <h1 className="text-3xl md:text-4xl font-extrabold text-white mb-8 leading-tight">
+                <h1 className="text-3xl md:text-5xl font-black text-white mb-4 leading-tight">
                   {activeChapData?.title}
                 </h1>
+                <div className="h-1.5 w-20 bg-red-600 rounded-full" />
+              </div>
 
-                {/* Lesson Files / Links Gallery */}
-                {activeChapContent.files?.length > 0 && (
-                  <div className="mb-10 flex flex-wrap gap-4">
-                     {activeChapContent.files.filter(f => f.type !== 'video' && !f.url.endsWith('.mp3')).map((file, fIdx) => (
-                        <div key={fIdx} className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col items-center justify-center w-full sm:w-auto min-w-[150px] hover:border-red-500/50 transition">
-                           <div className="w-10 h-10 rounded-lg bg-gray-800 flex items-center justify-center mb-2">
-                              {file.type === 'link' ? <Link className="w-5 h-5 text-indigo-400" /> : <PlayCircle className="w-5 h-5 text-red-500" />}
+              {/* Material Stack Rendering */}
+              <div className="space-y-12">
+                {(Array.isArray(activeChapBlocks) ? activeChapBlocks : [activeChapBlocks]).map((block, bIdx) => (
+                  <div key={bIdx} className="animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: `${bIdx * 100}ms` }}>
+                    {/* HTML / AI Text Block */}
+                    {(block.content_type === 'html' || block.html_content || block.type === 'html' || block.content) && (
+                      <div className="rich-content prose prose-invert prose-red max-w-none">
+                        {block.html_content || block.content ? (
+                           <div dangerouslySetInnerHTML={{ __html: block.html_content || block.content }} />
+                        ) : block.explanation ? (
+                           <div className="space-y-6">
+                              <p className="text-gray-300 text-lg leading-relaxed whitespace-pre-wrap">{block.explanation}</p>
+                              {block.key_points?.length > 0 && (
+                                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 my-8">
+                                  <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                    <span className="text-red-400">📌</span> Key Takeaways
+                                  </h3>
+                                  <ul className="space-y-3 m-0 list-none">
+                                    {block.key_points.map((kp, i) => (
+                                      <li key={i} className="flex items-start gap-3 text-gray-300">
+                                        <span className="text-red-400 font-bold mt-0.5 flex-shrink-0">→</span>
+                                        <span>{kp}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
                            </div>
-                           <a href={file.url.startsWith('/uploads/') ? `http://localhost:8000${file.url}` : file.url} target="_blank" rel="noreferrer" className="text-xs font-bold text-white hover:text-red-400 transition truncate max-w-[120px]">
-                              {file.name || 'View Resource'}
-                           </a>
-                        </div>
-                     ))}
-                  </div>
-                )}
-
-                {/* AI Generated Text or HTML Content */}
-                {(activeChapContent.content_type === 'html' || activeChapContent.html_content) ? (
-                   <div className="rich-content animate-fade-in">
-                      <div dangerouslySetInnerHTML={{ __html: activeChapContent.html_content }} />
-                   </div>
-                ) : (!activeChapContent.content_type || activeChapContent.content_type === 'ai_generated') && (
-                  <div className="space-y-8 animate-fade-in">
-                    <div className="text-gray-300 text-lg leading-8 font-serif whitespace-pre-wrap">
-                      {activeChapContent.explanation}
-                    </div>
-
-                    {/* Key Points */}
-                    {activeChapContent.key_points?.length > 0 && (
-                      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
-                        <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                          <span className="text-red-400">📌</span> Key Takeaways
-                        </h3>
-                        <ul className="space-y-3">
-                          {activeChapContent.key_points.map((kp, i) => (
-                            <li key={i} className="flex items-start gap-3 text-gray-300">
-                              <span className="text-red-400 font-bold mt-0.5 flex-shrink-0">→</span>
-                              <span>{kp}</span>
-                            </li>
-                          ))}
-                        </ul>
+                        ) : null}
                       </div>
                     )}
 
-                    {/* Examples */}
-                    {activeChapContent.examples?.length > 0 && (
-                      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6">
-                        <h3 className="text-lg font-bold text-white mb-4">💡 Examples</h3>
-                        <ul className="space-y-3">
-                          {activeChapContent.examples.map((ex, i) => (
-                            <li key={i} className="text-gray-300 italic border-l-2 border-gray-600 pl-4">{ex}</li>
-                          ))}
-                        </ul>
+                    {/* Media Block (Video, Image, Audio, PDF) */}
+                    {(block.video_url || block.file_url || block.image_url) && (
+                      <div className="my-8 rounded-3xl overflow-hidden border border-gray-800 shadow-2xl bg-black">
+                        {block.image_url && !block.video_url && (
+                           <img 
+                            src={block.image_url.startsWith('/uploads') ? `http://localhost:8000${block.image_url}` : block.image_url} 
+                            alt="Lesson Media" 
+                            className="w-full object-cover"
+                           />
+                        )}
+                        {(block.video_url || block.file_url) && renderMediaComponent(block.video_url || block.file_url)}
+                      </div>
+                    )}
+
+                    {/* Quiz / Assessment Block */}
+                    {(block.mcqs || (bIdx === (activeChapBlocks.length - 1) && mcqs)) && (
+                      <div className="mt-12 bg-gray-900 border border-gray-800 rounded-3xl p-6 sm:p-10 shadow-inner border-t-4 border-t-green-500/50">
+                         <QuizViewer 
+                           questions={block.mcqs || mcqs} 
+                           title={block.mcqs ? "Concept Check" : `${activeChapData?.title} Quiz`} 
+                           lightMode={false} 
+                         />
+                      </div>
+                    )}
+
+                    {/* Flashcards Block */}
+                    {block.flashcards?.length > 0 && (
+                      <div className="mt-12 bg-gray-900 border border-gray-800 rounded-3xl p-8 shadow-inner border-t-4 border-t-indigo-500/50">
+                         <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
+                            <Bot className="text-indigo-400 w-6 h-6" /> Lesson Mastery Cards
+                         </h3>
+                         <FlashcardViewer flashcards={block.flashcards} />
                       </div>
                     )}
                   </div>
-                )}
+                ))}
+              </div>
 
-                {/* Lesson Flashcards Section */}
-                {activeChapContent.flashcards?.length > 0 && (
-                  <div className="mt-12 bg-gray-900 border border-gray-800 rounded-3xl p-8 shadow-inner border-t-4 border-t-indigo-500/50">
-                     <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
-                        <Bot className="text-indigo-400 w-6 h-6" /> Lesson Mastery Cards
-                     </h3>
-                     <FlashcardViewer flashcards={activeChapContent.flashcards} />
-                  </div>
-                )}
-
-                {/* Mark Complete CTA */}
-                <div className="mt-12 bg-gray-900 border border-gray-800 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-                  <div>
-                    <p className="text-white font-semibold">Done with this lesson?</p>
-                    <p className="text-gray-500 text-sm mt-0.5">Mark it complete to track your progress.</p>
-                  </div>
-                  <button
-                    onClick={markComplete}
-                    className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition transform hover:scale-105 flex-shrink-0 ${
-                      completedItems.includes(`${activeChap.modIdx}-${activeChap.chapIdx}`)
-                        ? 'bg-green-900/50 text-green-400 border border-green-800'
-                        : 'bg-red-600 hover:bg-red-500 text-white'
-                    }`}
-                  >
-                    {completedItems.includes(`${activeChap.modIdx}-${activeChap.chapIdx}`)
-                      ? <><CheckCircle className="w-4 h-4" /> Completed</>
-                      : <><PlayCircle className="w-4 h-4" /> Mark as Complete</>
-                    }
-                  </button>
+              {/* Mark Complete Footer */}
+              <div className="mt-20 pt-10 border-t border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-6">
+                <div>
+                  <p className="text-xl font-bold text-white">Finished this lesson?</p>
+                  <p className="text-gray-400 mt-1">Great job! Mark it as complete to track your progress.</p>
                 </div>
-
-                {/* Chapter MCQs Assessment */}
-                {(activeChapContent.mcqs || mcqs) && (
-                  <div className="mt-12 bg-gray-900 border border-gray-800 rounded-2xl p-4 sm:p-8 overflow-hidden shadow-inner font-sans border-t-4 border-t-green-500/50">
-                     <QuizViewer questions={activeChapContent.mcqs || mcqs} title={`${activeChapData?.title} Chapter Quiz`} lightMode={false} />
-                  </div>
-                )}
+                <button
+                  onClick={markComplete}
+                  className={`flex items-center gap-3 px-8 py-4 rounded-2xl font-bold text-lg transition transform hover:scale-105 flex-shrink-0 shadow-xl ${
+                    completedItems.includes(`${activeChap.modIdx}-${activeChap.chapIdx}`)
+                      ? 'bg-green-900/50 text-green-400 border border-green-800'
+                      : 'bg-red-600 hover:bg-red-500 text-white shadow-red-900/20'
+                  }`}
+                >
+                  {completedItems.includes(`${activeChap.modIdx}-${activeChap.chapIdx}`)
+                    ? <><CheckCircle className="w-5 h-5" /> Lesson Completed</>
+                    : <><PlayCircle className="w-5 h-5" /> Mark as Complete</>
+                  }
+                </button>
               </div>
             </div>
           )}

@@ -19,7 +19,6 @@ const CONTENT_TYPES = [
 ];
 
 export default function CourseContent({ courseData, updateCourseData, onNext, onBack }) {
-  const [aiMode, setAiMode] = useState(true);
   const [expandedLesson, setExpandedLesson] = useState(null); // { mIdx, cIdx }
   const [showSidebar, setShowSidebar] = useState(false);
   const [loadingMap, setLoadingMap] = useState({});
@@ -28,22 +27,88 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
   const fileInputRef = useRef(null);
 
   // Sync state helper
-  const updateLessonContent = (mIdx, cIdx, updates) => {
-    const newModules = [...(courseData.structure?.modules || [])];
-    if (newModules[mIdx] && newModules[mIdx].chapters[cIdx]) {
-      const currentContent = newModules[mIdx].chapters[cIdx].content || {};
-      newModules[mIdx].chapters[cIdx].content = { ...currentContent, ...updates };
-      updateCourseData('structure', { ...courseData.structure, modules: newModules });
-    }
+  const updateLessonContent = (mIdx, cIdx, updates, blockIdx = null) => {
+    const newModules = (courseData.structure?.modules || []).map((mod, m) => {
+      if (m !== mIdx) return mod;
+      return {
+        ...mod,
+        chapters: (mod.chapters || []).map((chap, c) => {
+          if (c !== cIdx) return chap;
+          const newChap = { ...chap };
+          
+          if (!newChap.contents) {
+            newChap.contents = (newChap.content && newChap.content.completed) ? [newChap.content] : [];
+          } else {
+            newChap.contents = [...newChap.contents];
+          }
+
+          if (blockIdx !== null) {
+            newChap.contents[blockIdx] = { ...newChap.contents[blockIdx], ...updates };
+          } else {
+            newChap.content = { ...(newChap.content || {}), ...updates };
+          }
+          return newChap;
+        })
+      };
+    });
+    updateCourseData('structure', { ...courseData.structure, modules: newModules });
+  };
+
+  const deleteContentBlock = (mIdx, cIdx, blockIdx) => {
+    const newModules = (courseData.structure?.modules || []).map((mod, m) => {
+      if (m !== mIdx) return mod;
+      return {
+        ...mod,
+        chapters: (mod.chapters || []).map((chap, c) => {
+          if (c !== cIdx) return chap;
+          if (chap.contents) {
+            const newContents = [...chap.contents];
+            newContents.splice(blockIdx, 1);
+            return { ...chap, contents: newContents };
+          }
+          return chap;
+        })
+      };
+    });
+    updateCourseData('structure', { ...courseData.structure, modules: newModules });
+  };
+
+  const moveContentBlock = (mIdx, cIdx, blockIdx, direction) => {
+    const newModules = (courseData.structure?.modules || []).map((mod, m) => {
+      if (m !== mIdx) return mod;
+      return {
+        ...mod,
+        chapters: (mod.chapters || []).map((chap, c) => {
+          if (c !== cIdx) return chap;
+          if (chap.contents) {
+            const newIdx = blockIdx + direction;
+            if (newIdx >= 0 && newIdx < chap.contents.length) {
+              const newContents = [...chap.contents];
+              const temp = newContents[blockIdx];
+              newContents[blockIdx] = newContents[newIdx];
+              newContents[newIdx] = temp;
+              return { ...chap, contents: newContents };
+            }
+          }
+          return chap;
+        })
+      };
+    });
+    updateCourseData('structure', { ...courseData.structure, modules: newModules });
   };
 
   const handleApplyAISuggestion = (suggestion) => {
-    if (suggestion.prompts && Array.isArray(suggestion.prompts)) {
-      // Create a deep copy to avoid mutations
+    if (suggestion.prompts && Array.isArray(suggestion.prompts) && suggestion.prompts.length > 0) {
       const newModules = (courseData.structure?.modules || []).map(mod => ({
         ...mod,
         chapters: (mod.chapters || []).map(chap => {
-          const matchingPrompt = suggestion.prompts.find(p => p && (p.title === chap.title || p.lesson === chap.title))?.prompt;
+          const cTitle = (chap.title || "").trim().toLowerCase();
+          const matchingPrompt = suggestion.prompts.find(p => {
+            if (!p) return false;
+            const pTitle = (p.title || p.lesson || "").trim().toLowerCase();
+            return pTitle === cTitle;
+          })?.prompt;
+
           if (matchingPrompt) {
             return {
               ...chap,
@@ -53,10 +118,49 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
           return chap;
         })
       }));
-      
       updateCourseData('structure', { ...courseData.structure, modules: newModules });
-    } else if (suggestion.prompt && expandedLesson) {
-      updateLessonContent(expandedLesson.mIdx, expandedLesson.cIdx, { prompt: suggestion.prompt, source: 'ai' });
+    } else if (suggestion.prompt) {
+      // Robust Targeted Application: Use title and module from metadata if available
+      // Otherwise fallback to expandedLesson
+      let targetM = -1, targetC = -1;
+      
+      if (suggestion.title || suggestion.lesson) {
+        const sTitle = (suggestion.title || suggestion.lesson || "").trim().toLowerCase();
+        const sMod = (suggestion.module || "").trim().toLowerCase();
+
+        // Pass 1: Try exact match
+        modules.forEach((mod, mIdx) => {
+          const mTitle = (mod.title || "").trim().toLowerCase();
+          mod.chapters.forEach((chap, cIdx) => {
+            const cTitle = (chap.title || "").trim().toLowerCase();
+            if (cTitle === sTitle && (!sMod || mTitle === sMod)) {
+              targetM = mIdx; targetC = cIdx;
+            }
+          });
+        });
+
+        // Pass 2: Try partial match if no exact match found
+        if (targetM === -1) {
+          modules.forEach((mod, mIdx) => {
+            const mTitle = (mod.title || "").trim().toLowerCase();
+            mod.chapters.forEach((chap, cIdx) => {
+              const cTitle = (chap.title || "").trim().toLowerCase();
+              const matchTitle = cTitle.includes(sTitle) || sTitle.includes(cTitle);
+              const matchMod = sMod ? (mTitle.includes(sMod) || sMod.includes(mTitle)) : true;
+              
+              if (matchMod && matchTitle && targetM === -1) {
+                targetM = mIdx; targetC = cIdx;
+              }
+            });
+          });
+        }
+      }
+
+      if (targetM !== -1 && targetC !== -1) {
+        updateLessonContent(targetM, targetC, { prompt: suggestion.prompt, source: 'ai' });
+      } else if (expandedLesson) {
+        updateLessonContent(expandedLesson.mIdx, expandedLesson.cIdx, { prompt: suggestion.prompt, source: 'ai' });
+      }
     }
   };
 
@@ -75,7 +179,21 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
         course_details: courseData.details
       };
       const res = await generateLessonContent(payload);
-      updateLessonContent(mIdx, cIdx, { completed: true, ...res });
+      
+      // Add as a NEW block instead of overwriting
+      const newModules = [...(courseData.structure?.modules || [])];
+      const chapter = newModules[mIdx].chapters[cIdx];
+      if (!chapter.contents) chapter.contents = chapter.content ? [chapter.content] : [];
+      
+      chapter.contents.push({ 
+        ...res, 
+        source: 'ai', 
+        type: lesson.content?.type || 'html',
+        completed: true,
+        timestamp: new Date().toISOString()
+      });
+
+      updateCourseData('structure', { ...courseData.structure, modules: newModules });
     } catch (err) {
       setError(`Failed to generate content for ${lesson.title}`);
     } finally {
@@ -91,12 +209,21 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
     setLoadingMap(prev => ({ ...prev, [key]: true }));
     try {
       const res = await uploadChapterMedia(file);
-      updateLessonContent(mIdx, cIdx, { 
+      
+      const newModules = [...(courseData.structure?.modules || [])];
+      const chapter = newModules[mIdx].chapters[cIdx];
+      if (!chapter.contents) chapter.contents = chapter.content ? [chapter.content] : [];
+      
+      chapter.contents.push({ 
         completed: true, 
         source: 'manual',
+        type: file.type.includes('pdf') ? 'pdf' : 'file',
         file_url: res.url,
-        file_name: file.name
+        file_name: file.name,
+        timestamp: new Date().toISOString()
       });
+
+      updateCourseData('structure', { ...courseData.structure, modules: newModules });
     } catch (err) {
       setError("Failed to upload file.");
     } finally {
@@ -105,15 +232,20 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
   };
 
   const handleRegeneratePrompt = (lesson) => {
-    const prompt = `Please generate a high-quality AI content generation prompt ONLY for the lesson: "${lesson.title}" in the module: "${modules[expandedLesson.mIdx].title}". 
+    const moduleTitle = modules[expandedLesson.mIdx]?.title || `Module ${expandedLesson.mIdx + 1}`;
+    const prompt = `Please generate a high-quality, practical, and highly detailed AI content generation prompt ONLY for the lesson: "${lesson.title}" in the module: "${moduleTitle}". 
     The course is about: "${courseData.details?.title}". 
     Target Audience: "${courseData.details?.target_audience}".
-    Desired Focus: Practical, engaging, and highly detailed.
-    Return ONLY the metadata for this single lesson. Schema: { "prompt": "..." }`;
+
+    CRITICAL REQUIREMENT: 
+    The prompt you generate MUST be at least 200 words long, covering specific learning objectives, detailed content outlines, examples, and analogies. 
+
+    YOU MUST RETURN A [METADATA] BLOCK with the following JSON:
+    { "module": "${moduleTitle}", "title": "${lesson.title}", "prompt": "..." }`;
     
     setSidebarRequest({ 
       text: prompt, 
-      display: "Regenerate Lesson Prompt", 
+      display: `Regenerate Prompt for ${moduleTitle}: ${lesson.title}`, 
       fillInput: false 
     });
     setShowSidebar(true);
@@ -157,34 +289,10 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
                   <MessageSquareText className="w-3.5 h-3.5" /> 
                   <span>ASK AI</span>
                 </button>
-                <button className="flex items-center gap-2 bg-white border-2 border-slate-100 text-slate-600 px-5 py-3 rounded-xl text-xs font-bold hover:bg-slate-50 transition active:scale-95">
-                  <Settings2 className="w-3.5 h-3.5 text-slate-400" /> 
-                  <span>Bulk Actions</span>
-                </button>
               </div>
             </div>
 
-            {/* AI Mode Toggle */}
-            <div className="flex items-center justify-between bg-slate-50/50 p-5 rounded-2xl border border-slate-100 mb-8">
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">AI Mode</span>
-                   <div className="flex bg-slate-200 p-1 rounded-xl gap-1">
-                      <button 
-                        onClick={() => setAiMode(true)}
-                        className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${aiMode ? 'bg-sky-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
-                      >ON</button>
-                      <button 
-                        onClick={() => setAiMode(false)}
-                        className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${!aiMode ? 'bg-slate-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
-                      >OFF</button>
-                   </div>
-                </div>
-                <p className="text-[10px] text-slate-400 font-medium">
-                  {aiMode ? 'AI will generate content and prompts for all lessons.' : 'AI features are disabled. Please upload content manually.'}
-                </p>
-              </div>
-            </div>
+
 
             {/* Modules and Lessons List */}
             <div className="space-y-10">
@@ -216,9 +324,18 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
                             </button>
                             
                             <div className="flex items-center gap-3">
-                              <div className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[9px] font-bold border transition-colors ${chap.content?.source === 'ai' ? 'bg-sky-50 text-sky-600 border-sky-100' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-                                  {chap.content?.source === 'ai' ? 'AI: ' : 'UPLOAD: '}{(chap.content?.type || 'html').toUpperCase()}
-                                  {chap.content?.completed && <CheckCircle2 className="w-3 h-3 text-green-500 ml-1" />}
+                              <div className="flex -space-x-1 items-center">
+                                {((chap.contents || (chap.content?.completed ? [chap.content] : []))).map((c, i) => {
+                                  const TypeIcon = CONTENT_TYPES.find(t => t.id === (c.type || 'html'))?.icon || FileJson;
+                                  return (
+                                    <div key={i} className="w-5 h-5 rounded-full bg-white border border-slate-100 flex items-center justify-center shadow-sm" title={c.type}>
+                                      <TypeIcon className="w-2.5 h-2.5 text-sky-600" />
+                                    </div>
+                                  );
+                                })}
+                                {(chap.contents || []).length === 0 && !chap.content?.completed && (
+                                  <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest px-2">No Content</span>
+                                )}
                               </div>
                               <button 
                                 onClick={() => setExpandedLesson(expandedLesson?.mIdx === mIdx && expandedLesson?.cIdx === cIdx ? null : { mIdx, cIdx })}
@@ -232,139 +349,153 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
 
                         {/* Lesson Detail (Expanded) */}
                         {expandedLesson?.mIdx === mIdx && expandedLesson?.cIdx === cIdx && (
-                          <div className="mt-4 p-6 bg-white border border-sky-50 rounded-[2rem] space-y-8 animate-in slide-in-from-top-2 duration-300 shadow-sm">
-                            {/* Source & Type Section */}
-                            <div className={`grid grid-cols-1 ${aiMode ? 'lg:grid-cols-2' : ''} gap-8`}>
-                              {/* Content Source */}
-                              <div className="space-y-3">
-                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Content Source</label>
-                                  <div className={`grid ${aiMode ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
-                                    {aiMode && (
-                                      <button 
-                                        onClick={() => updateLessonContent(mIdx, cIdx, { source: 'ai' })}
-                                        className={`p-4 rounded-2xl border-2 transition-all text-left flex items-start gap-3 ${chap.content?.source === 'ai' ? 'border-sky-500 bg-sky-50/30' : 'border-slate-100 hover:border-slate-200 bg-white'}`}
-                                      >
-                                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${chap.content?.source === 'ai' ? 'bg-sky-500 text-white' : 'bg-slate-50 text-slate-400'}`}>
-                                            <Sparkles className="w-4 h-4" />
-                                        </div>
-                                        <div className="space-y-0.5">
-                                            <p className={`text-[11px] font-bold ${chap.content?.source === 'ai' ? 'text-sky-700' : 'text-slate-700'}`}>AI Generated (Default)</p>
-                                            <p className="text-[9px] text-slate-400 font-medium leading-tight">Let AI generate content.</p>
-                                        </div>
-                                      </button>
-                                    )}
-                                    <button 
-                                      onClick={() => updateLessonContent(mIdx, cIdx, { source: 'manual' })}
-                                      className={`p-4 rounded-2xl border-2 transition-all text-left flex items-start gap-3 ${chap.content?.source === 'manual' ? 'border-sky-500 bg-sky-50/30' : 'border-slate-100 hover:border-slate-200 bg-white'}`}
-                                    >
-                                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${chap.content?.source === 'manual' ? 'bg-sky-500 text-white' : 'bg-slate-50 text-slate-400'}`}>
-                                          <Upload className="w-4 h-4" />
-                                      </div>
-                                      <div className="space-y-0.5">
-                                          <p className={`text-[11px] font-bold ${chap.content?.source === 'manual' ? 'text-sky-700' : 'text-slate-700'}`}>Upload Manually</p>
-                                          <p className="text-[9px] text-slate-400 font-medium leading-tight">Upload your own file.</p>
-                                      </div>
-                                    </button>
-                                  </div>
+                          <div className="mt-4 space-y-8 animate-in slide-in-from-top-2 duration-300">
+                            
+                            {/* Existing Content Blocks */}
+                            {(chap.contents || (chap.content?.completed ? [chap.content] : [])).length > 0 && (
+                              <div className="space-y-4">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2">Lesson Material Stack</label>
+                                {(chap.contents || (chap.content?.completed ? [chap.content] : [])).map((block, bIdx) => (
+                                  <ContentBlock 
+                                    key={bIdx}
+                                    block={block}
+                                    onDelete={() => deleteContentBlock(mIdx, cIdx, bIdx)}
+                                    onUpdate={(updates) => updateLessonContent(mIdx, cIdx, updates, bIdx)}
+                                    onMoveUp={() => moveContentBlock(mIdx, cIdx, bIdx, -1)}
+                                    onMoveDown={() => moveContentBlock(mIdx, cIdx, bIdx, 1)}
+                                    isFirst={bIdx === 0}
+                                    isLast={bIdx === (chap.contents?.length || 1) - 1}
+                                  />
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Add New Content Section */}
+                            <div className="p-6 bg-white border border-sky-50 rounded-[2rem] space-y-8 shadow-sm">
+                              <div className="flex items-center gap-2 mb-2">
+                                <div className="w-2 h-6 bg-sky-500 rounded-full" />
+                                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-tight">Add Content Block</h4>
                               </div>
 
-                              {/* Content Type - Only visible in AI Mode and if source is AI */}
-                              {aiMode && chap.content?.source === 'ai' && (
+                              {/* Source & Type Section */}
+                              <div className={`grid grid-cols-1 lg:grid-cols-2 gap-8`}>
+                                {/* Content Source */}
                                 <div className="space-y-3">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Content Type</label>
-                                    <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
-                                      {CONTENT_TYPES.map((type) => (
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Select Source</label>
+                                    <div className={`grid grid-cols-2 gap-3`}>
                                         <button 
-                                          key={type.id}
-                                          disabled={type.disabled}
-                                          onClick={() => updateLessonContent(mIdx, cIdx, { type: type.id })}
-                                          className={`flex flex-col items-center gap-2 p-2 rounded-xl border transition-all ${chap.content?.type === type.id || (!chap.content?.type && type.id === 'html') ? 'border-sky-500 bg-sky-50 ring-2 ring-sky-100/50' : 'border-slate-100 hover:border-slate-200'} ${type.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                          onClick={() => updateLessonContent(mIdx, cIdx, { source: 'ai' })}
+                                          className={`p-4 rounded-2xl border-2 transition-all text-left flex items-start gap-3 ${(!chap.content?.source || chap.content?.source === 'ai') ? 'border-sky-500 bg-sky-50/30' : 'border-slate-100 hover:border-slate-200 bg-white'}`}
                                         >
-                                            <div className={`w-8 h-8 rounded-lg ${type.bg} ${type.color} flex items-center justify-center shadow-sm`}>
-                                              <type.icon className="w-4 h-4" />
-                                            </div>
-                                            <span className="text-[9px] font-bold text-slate-600 uppercase tracking-wider">{type.label}</span>
+                                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${(!chap.content?.source || chap.content?.source === 'ai') ? 'bg-sky-500 text-white' : 'bg-slate-50 text-slate-400'}`}>
+                                              <Sparkles className="w-4 h-4" />
+                                          </div>
+                                          <div className="space-y-0.5">
+                                              <p className={`text-[11px] font-bold ${(!chap.content?.source || chap.content?.source === 'ai') ? 'text-sky-700' : 'text-slate-700'}`}>AI Generated</p>
+                                              <p className="text-[9px] text-slate-400 font-medium leading-tight">Prompt the AI.</p>
+                                          </div>
                                         </button>
-                                      ))}
+                                      <button 
+                                        onClick={() => updateLessonContent(mIdx, cIdx, { source: 'manual' })}
+                                        className={`p-4 rounded-2xl border-2 transition-all text-left flex items-start gap-3 ${chap.content?.source === 'manual' ? 'border-sky-500 bg-sky-50/30' : 'border-slate-100 hover:border-slate-200 bg-white'}`}
+                                      >
+                                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${chap.content?.source === 'manual' ? 'bg-sky-500 text-white' : 'bg-slate-50 text-slate-400'}`}>
+                                            <Upload className="w-4 h-4" />
+                                        </div>
+                                        <div className="space-y-0.5">
+                                            <p className={`text-[11px] font-bold ${chap.content?.source === 'manual' ? 'text-sky-700' : 'text-slate-700'}`}>Upload File</p>
+                                            <p className="text-[9px] text-slate-400 font-medium leading-tight">Use your media.</p>
+                                        </div>
+                                      </button>
                                     </div>
+                                </div>
+
+                                {/* Content Type - Only visible if source is AI */}
+                                {(!chap.content?.source || chap.content?.source === 'ai') && (
+                                  <div className="space-y-3">
+                                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Select Type</label>
+                                      <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
+                                        {CONTENT_TYPES.map((type) => (
+                                          <button 
+                                            key={type.id}
+                                            disabled={type.disabled}
+                                            onClick={() => updateLessonContent(mIdx, cIdx, { type: type.id })}
+                                            className={`flex flex-col items-center gap-2 p-2 rounded-xl border transition-all ${chap.content?.type === type.id || (!chap.content?.type && type.id === 'html') ? 'border-sky-500 bg-sky-50 ring-2 ring-sky-100/50' : 'border-slate-100 hover:border-slate-200'} ${type.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                          >
+                                              <div className={`w-8 h-8 rounded-lg ${type.bg} ${type.color} flex items-center justify-center shadow-sm`}>
+                                                <type.icon className="w-4 h-4" />
+                                              </div>
+                                              <span className="text-[9px] font-bold text-slate-600 uppercase tracking-wider">{type.label}</span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* AI Prompt Section - Only visible if source is AI */}
+                              {(!chap.content?.source || chap.content?.source === 'ai') && (
+                                <div className="space-y-3">
+                                  <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">AI Content Prompt</label>
+                                        <HelpCircle className="w-3 h-3 text-slate-300" />
+                                      </div>
+                                  </div>
+                                  <div className="relative group">
+                                      <textarea 
+                                        value={chap.content?.prompt || ''}
+                                        onChange={(e) => updateLessonContent(mIdx, cIdx, { prompt: e.target.value })}
+                                        className="w-full bg-slate-50/50 border-2 border-slate-50 rounded-2xl p-5 text-[11px] text-slate-700 font-medium min-h-[140px] focus:ring-0 focus:border-sky-100 transition-all outline-none resize-none leading-relaxed"
+                                        placeholder="Describe what content AI should generate for this block..."
+                                      />
+                                      <div className="absolute bottom-4 right-4 flex items-center gap-2">
+                                        <button 
+                                          onClick={() => handleRegeneratePrompt(chap)}
+                                          className="flex items-center gap-1.5 bg-white border border-slate-200 text-slate-500 px-3.5 py-2 rounded-xl text-[10px] font-bold hover:bg-slate-50 transition shadow-sm active:scale-95"
+                                        >
+                                            <RefreshCw className="w-3 h-3" /> Regenerate Prompt
+                                        </button>
+                                        <button 
+                                          onClick={() => handleGenerateContent(mIdx, cIdx, chap)}
+                                          disabled={loadingMap[`${mIdx}-${cIdx}`] || !(chap.content?.prompt || '').trim()}
+                                          className="flex items-center gap-1.5 bg-sky-600 text-white px-4 py-2 rounded-xl text-[10px] font-bold hover:bg-sky-700 transition shadow-lg shadow-sky-100 disabled:opacity-50 active:scale-95"
+                                        >
+                                            {loadingMap[`${mIdx}-${cIdx}`] ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                                            Generate Content
+                                        </button>
+                                      </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Manual Upload State */}
+                              {chap.content?.source === 'manual' && (
+                                <div className="py-12 flex flex-col items-center justify-center border-2 border-dashed border-slate-100 rounded-[2rem] bg-slate-50/30">
+                                    <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-4">
+                                      <Upload className="w-8 h-8 text-slate-300" />
+                                    </div>
+                                    <div className="text-center space-y-1 mb-6">
+                                      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Ready to upload</p>
+                                      <p className="text-[10px] text-slate-300 font-medium leading-relaxed">Your file will be added as a new content block below.</p>
+                                    </div>
+                                    
+                                    <input 
+                                      type="file" 
+                                      id={`file-upload-${mIdx}-${cIdx}`}
+                                      className="hidden" 
+                                      onChange={(e) => handleFileUpload(e, mIdx, cIdx)} 
+                                    />
+                                    <button 
+                                      onClick={() => document.getElementById(`file-upload-${mIdx}-${cIdx}`).click()}
+                                      disabled={loadingMap[`${mIdx}-${cIdx}`]}
+                                      className="bg-white border-2 border-slate-100 text-slate-600 px-8 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-slate-50 transition shadow-sm active:scale-95"
+                                    >
+                                        {loadingMap[`${mIdx}-${cIdx}`] ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Select File'}
+                                    </button>
                                 </div>
                               )}
                             </div>
-
-                            {/* AI Prompt Section - Only visible in AI Mode and if source is AI */}
-                            {aiMode && chap.content?.source === 'ai' && (
-                              <div className="space-y-3">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">AI Prompt</label>
-                                      <HelpCircle className="w-3 h-3 text-slate-300" />
-                                    </div>
-                                    <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">{(chap.content?.prompt || '').length}/2000 characters</span>
-                                </div>
-                                <div className="relative group">
-                                    <textarea 
-                                      value={chap.content?.prompt || ''}
-                                      onChange={(e) => updateLessonContent(mIdx, cIdx, { prompt: e.target.value })}
-                                      className="w-full bg-slate-50/50 border-2 border-slate-50 rounded-2xl p-5 text-[11px] text-slate-700 font-medium min-h-[140px] focus:ring-0 focus:border-sky-100 transition-all outline-none resize-none leading-relaxed"
-                                      placeholder="Describe what content AI should generate for this specific lesson..."
-                                    />
-                                    <div className="absolute bottom-4 right-4 flex items-center gap-2">
-                                      <button 
-                                        onClick={() => handleRegeneratePrompt(chap)}
-                                        className="flex items-center gap-1.5 bg-white border border-slate-200 text-slate-500 px-3.5 py-2 rounded-xl text-[10px] font-bold hover:bg-slate-50 transition shadow-sm active:scale-95"
-                                      >
-                                          <RefreshCw className="w-3 h-3" /> Regenerate Prompt
-                                      </button>
-                                      <button 
-                                        onClick={() => handleGenerateContent(mIdx, cIdx, chap)}
-                                        disabled={loadingMap[`${mIdx}-${cIdx}`] || !(chap.content?.prompt || '').trim()}
-                                        className="flex items-center gap-1.5 bg-sky-600 text-white px-4 py-2 rounded-xl text-[10px] font-bold hover:bg-sky-700 transition shadow-lg shadow-sky-100 disabled:opacity-50 active:scale-95"
-                                      >
-                                          {loadingMap[`${mIdx}-${cIdx}`] ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
-                                          {chap.content?.completed ? 'Regenerate Content' : 'Generate Content'}
-                                      </button>
-                                    </div>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Manual Upload State */}
-                            {(!aiMode || chap.content?.source === 'manual') && (
-                              <div className="py-12 flex flex-col items-center justify-center border-2 border-dashed border-slate-100 rounded-[2rem] bg-slate-50/30">
-                                  <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-4">
-                                    <Upload className="w-8 h-8 text-slate-300" />
-                                  </div>
-                                  <div className="text-center space-y-1 mb-6">
-                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-                                        Manual upload is enabled
-                                    </p>
-                                    <p className="text-[10px] text-slate-300 font-medium">Attach your source file for this lesson.</p>
-                                  </div>
-                                  
-                                  {chap.content?.file_name ? (
-                                    <div className="flex items-center gap-3 bg-white border border-slate-100 px-4 py-2 rounded-xl shadow-sm">
-                                      <FileJson className="w-4 h-4 text-sky-400" />
-                                      <span className="text-xs font-bold text-slate-600">{chap.content.file_name}</span>
-                                      <button onClick={() => updateLessonContent(mIdx, cIdx, { file_name: null, file_url: null, completed: false })} className="p-1 hover:bg-slate-50 rounded-lg transition text-slate-400"><X className="w-3 h-3" /></button>
-                                    </div>
-                                  ) : (
-                                    <>
-                                      <input 
-                                        type="file" 
-                                        id={`file-upload-${mIdx}-${cIdx}`}
-                                        className="hidden" 
-                                        onChange={(e) => handleFileUpload(e, mIdx, cIdx)} 
-                                      />
-                                      <button 
-                                        onClick={() => document.getElementById(`file-upload-${mIdx}-${cIdx}`).click()}
-                                        className="bg-white border-2 border-slate-100 text-slate-600 px-8 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-slate-50 transition shadow-sm active:scale-95"
-                                      >
-                                          Select File
-                                      </button>
-                                    </>
-                                  )}
-                              </div>
-                            )}
                           </div>
                         )}
                       </div>
@@ -420,6 +551,114 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
             />
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ContentBlock({ block, onDelete, onUpdate, onMoveUp, onMoveDown, isFirst, isLast }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(block.content || '');
+  const TypeIcon = CONTENT_TYPES.find(t => t.id === (block.type || 'html'))?.icon || FileJson;
+
+  const handleSave = () => {
+    onUpdate({ content: editValue });
+    setIsEditing(false);
+  };
+
+  return (
+    <div className="bg-white border border-slate-100 rounded-3xl overflow-hidden shadow-sm group/block animate-in fade-in slide-in-from-bottom-2">
+      {/* Block Header */}
+      <div className="bg-slate-50/50 px-4 py-3 border-b border-slate-50 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-sky-600 shadow-sm">
+            <TypeIcon className="w-4 h-4" />
+          </div>
+          <div>
+             <p className="text-[10px] font-black text-slate-900 uppercase tracking-tight">
+               {block.type?.toUpperCase()} {block.source === 'ai' ? '• AI Generated' : '• Manual Upload'}
+             </p>
+             {block.timestamp && <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">{new Date(block.timestamp).toLocaleTimeString()}</p>}
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-1 opacity-0 group-hover/block:opacity-100 transition-opacity">
+          <button 
+            disabled={isFirst}
+            onClick={onMoveUp}
+            className="p-1.5 text-slate-400 hover:bg-white hover:text-sky-600 rounded-lg transition disabled:opacity-30"
+          >
+            <ChevronDown className="w-3.5 h-3.5 rotate-180" />
+          </button>
+          <button 
+            disabled={isLast}
+            onClick={onMoveDown}
+            className="p-1.5 text-slate-400 hover:bg-white hover:text-sky-600 rounded-lg transition disabled:opacity-30"
+          >
+            <ChevronDown className="w-3.5 h-3.5" />
+          </button>
+          <div className="w-px h-4 bg-slate-200 mx-1" />
+          {block.type === 'html' && (
+            <button 
+              onClick={() => setIsEditing(!isEditing)}
+              className={`p-1.5 rounded-lg transition ${isEditing ? 'bg-sky-100 text-sky-600' : 'text-slate-400 hover:bg-white hover:text-sky-600'}`}
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <button 
+            onClick={onDelete}
+            className="p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 rounded-lg transition"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Block Content */}
+      <div className="p-5">
+        {isEditing ? (
+          <div className="space-y-3">
+             <textarea 
+               value={editValue}
+               onChange={(e) => setEditValue(e.target.value)}
+               className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-[11px] font-medium min-h-[200px] focus:border-sky-200 outline-none transition-all leading-relaxed"
+             />
+             <div className="flex justify-end gap-2">
+                <button onClick={() => setIsEditing(false)} className="px-3 py-1.5 text-[10px] font-bold text-slate-400 hover:text-slate-600">Cancel</button>
+                <button onClick={handleSave} className="bg-sky-600 text-white px-4 py-1.5 rounded-xl text-[10px] font-bold shadow-lg shadow-sky-100">Save Changes</button>
+             </div>
+          </div>
+        ) : (
+          <div className="prose prose-slate prose-sm max-w-none">
+            {block.type === 'html' ? (
+              <div 
+                className="text-[12px] text-slate-600 leading-relaxed space-y-4"
+                dangerouslySetInnerHTML={{ __html: block.content }} 
+              />
+            ) : block.file_name ? (
+              <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100/50">
+                <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-sky-500 shadow-sm">
+                  <FileJson className="w-6 h-6" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-[11px] font-bold text-slate-900">{block.file_name}</p>
+                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{block.type || 'FILE'}</p>
+                </div>
+                <a 
+                  href={block.file_url} 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="p-2 bg-white border border-slate-100 rounded-xl text-sky-600 hover:bg-sky-50 transition shadow-sm"
+                >
+                  <Eye className="w-4 h-4" />
+                </a>
+              </div>
+            ) : (
+              <p className="text-[11px] text-slate-400 italic">No content available for this block.</p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
