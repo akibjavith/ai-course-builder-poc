@@ -406,6 +406,19 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
                 </div>
               </div>
             ))}
+            {loading && (
+              <div className="flex justify-start animate-in fade-in duration-300">
+                <div className="flex max-w-[95%] gap-3 flex-row">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm border bg-sky-50 border-sky-100">
+                    <Bot className="w-4 h-4 text-sky-600" />
+                  </div>
+                  <div className="px-4 py-3 rounded-2xl text-[13px] leading-relaxed shadow-sm bg-slate-50 text-slate-800 rounded-tl-none border border-slate-100 flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-sky-600" />
+                    <span className="text-slate-500 font-medium">Thinking...</span>
+                  </div>
+                </div>
+              </div>
+            )}
             <div ref={messagesEndRef} />
           </div>
 

@@ -1,9 +1,9 @@
 import React from 'react';
-import { X, Volume2, BookOpen, Video, PlayCircle, Link, CheckCircle2, Bot } from 'lucide-react';
+import { X, Volume2, BookOpen, Video, PlayCircle, Link, CheckCircle2, Bot, ChevronLeft, ChevronRight } from 'lucide-react';
 import FlashcardViewer from './FlashcardViewer';
 import QuizViewer from './QuizViewer';
 
-export default function LessonPreviewModal({ chapter, chapterContent, onClose }) {
+export default function LessonPreviewModal({ chapter, chapterContent, onClose, onNext, onPrev, hasNext, hasPrev }) {
   if (!chapter) return null;
 
   const renderMediaComponent = (url) => {
@@ -82,12 +82,32 @@ export default function LessonPreviewModal({ chapter, chapterContent, onClose })
             </div>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Reviewing how students will see this lesson</p>
           </div>
-          <button 
-            onClick={onClose}
-            className="p-3 bg-slate-50 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-2xl transition-all active:scale-95"
-          >
-            <X className="w-6 h-6" />
-          </button>
+          <div className="flex items-center gap-2">
+            {(onPrev || onNext) && (
+              <div className="flex items-center gap-1 mr-2 border-r border-slate-100 pr-3">
+                <button 
+                  onClick={onPrev}
+                  disabled={!hasPrev}
+                  className="p-2.5 bg-slate-50 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-xl transition-all disabled:opacity-30 active:scale-95"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <button 
+                  onClick={onNext}
+                  disabled={!hasNext}
+                  className="p-2.5 bg-slate-50 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-xl transition-all disabled:opacity-30 active:scale-95"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+            )}
+            <button 
+              onClick={onClose}
+              className="p-3 bg-slate-50 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-2xl transition-all active:scale-95"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
         </div>
 
         {/* Content Area */}

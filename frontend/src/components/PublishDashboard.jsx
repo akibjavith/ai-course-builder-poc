@@ -2,16 +2,89 @@ import React, { useState } from 'react';
 import { storeCourse } from '../api';
 import { Loader2, CheckCircle2, Database, ChevronLeft, Sparkles, AlertCircle, Rocket, Eye } from 'lucide-react';
 import LessonPreviewModal from './LessonPreviewModal';
+import ActionModal from './ActionModal';
+import CourseViewer from './CourseViewer';
 
 export default function PublishDashboard({ courseData, onBack, onComplete }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [previewData, setPreviewData] = useState(null);
+  const [modalConfig, setModalConfig] = useState(null);
+  const [showFullPreview, setShowFullPreview] = useState(false);
 
   const { details, structure, content } = courseData;
 
+  const allLessons = [];
+  (structure?.modules || []).forEach((mod, mIdx) => {
+    (mod?.chapters || []).forEach((chap, cIdx) => {
+      allLessons.push({ mIdx, cIdx, modTitle: mod?.title, chapter: chap });
+    });
+  });
+
+  const getLessonPreviewData = (mIdx, cIdx) => {
+    const chap = structure?.modules?.[mIdx]?.chapters?.[cIdx];
+    if (!chap) return null;
+    const validContents = (chap?.contents || []).filter(c => c?.completed && c?.content);
+    if (validContents.length === 0 && chap?.content?.completed && chap?.content?.content) {
+        validContents.push(chap.content);
+    }
+    const isReady = validContents.length > 0;
+    const cData = isReady ? {
+        html_content: validContents.map(c => c?.content).join('<hr class="my-8 border-slate-100" />'),
+        files: validContents.filter(c => c?.file_url).map(c => ({ url: c.file_url, name: c.file_name }))
+    } : null;
+    return { chapter: chap, content: cData, mIdx, cIdx };
+  };
+
+  const handleNextPreview = () => {
+    if (!previewData) return;
+    const idx = allLessons.findIndex(l => l.mIdx === previewData.mIdx && l.cIdx === previewData.cIdx);
+    if (idx < allLessons.length - 1) {
+      const next = allLessons[idx + 1];
+      setPreviewData(getLessonPreviewData(next.mIdx, next.cIdx));
+    }
+  };
+
+  const handlePrevPreview = () => {
+    if (!previewData) return;
+    const idx = allLessons.findIndex(l => l.mIdx === previewData.mIdx && l.cIdx === previewData.cIdx);
+    if (idx > 0) {
+      const prev = allLessons[idx - 1];
+      setPreviewData(getLessonPreviewData(prev.mIdx, prev.cIdx));
+    }
+  };
+
   const handleSave = async () => {
+    // Check if any lessons are pending
+    const missingLessons = [];
+    (structure?.modules || []).forEach((mod, mIdx) => {
+      (mod?.chapters || []).forEach((chap, cIdx) => {
+        if (!chap) return;
+        const validContents = (chap?.contents || []).filter(c => c?.completed && c?.content);
+        if (validContents.length === 0 && chap?.content?.completed && chap?.content?.content) {
+            validContents.push(chap.content);
+        }
+        if (validContents.length === 0 && !chap?.content?.file_url && !(chap?.contents || []).some(c => c?.file_url)) {
+          missingLessons.push(`${mod?.title || 'Unknown Module'} - ${chap?.title || 'Unknown Chapter'}`);
+        }
+      });
+    });
+
+    if (missingLessons.length > 0) {
+      setModalConfig({
+        title: 'Missing Content Detected',
+        message: `You cannot publish the course yet because the following lessons are empty:\n\n${missingLessons.slice(0, 3).map(m => `• ${m}`).join('\n')}${missingLessons.length > 3 ? `\n• ...and ${missingLessons.length - 3} more.` : ''}\n\nPlease go to Step 4 to generate or upload content.`,
+        type: 'warning',
+        confirmText: 'Go to Content Section',
+        onConfirm: () => {
+          setModalConfig(null);
+          onBack();
+        }
+      });
+      return;
+    }
+
     setSaving(true);
     setErrorMsg(null);
     try {
@@ -26,8 +99,17 @@ export default function PublishDashboard({ courseData, onBack, onComplete }) {
     }
   };
 
+  if (showFullPreview) {
+    return <CourseViewer course={courseData} onBack={() => setShowFullPreview(false)} />;
+  }
+
   return (
     <div className="animate-fade-in space-y-6">
+      <ActionModal 
+        isOpen={!!modalConfig}
+        onClose={() => setModalConfig(null)}
+        {...modalConfig}
+      />
       {/* Step Heading */}
       <div className="flex items-center justify-between">
         <div className="space-y-1">
@@ -74,15 +156,15 @@ export default function PublishDashboard({ courseData, onBack, onComplete }) {
                 <div className="space-y-6">
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Course Identity</label>
-                    <h3 className="text-2xl font-bold text-slate-900 leading-tight">{details.title || "Untitled Course"}</h3>
-                    <p className="text-slate-500 text-sm leading-relaxed">{details.description}</p>
+                    <h3 className="text-2xl font-bold text-slate-900 leading-tight">{details?.title || "Untitled Course"}</h3>
+                    <p className="text-slate-500 text-sm leading-relaxed">{details?.description}</p>
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    <span className="bg-sky-50 text-sky-600 px-4 py-1.5 rounded-xl text-[10px] font-bold border border-sky-100 uppercase tracking-tight">{courseData.sourceType} Source</span>
-                    <span className="bg-slate-50 text-slate-500 px-4 py-1.5 rounded-xl text-[10px] font-bold border border-slate-100 uppercase tracking-tight">{details.difficulty}</span>
-                    <span className="bg-slate-50 text-slate-500 px-4 py-1.5 rounded-xl text-[10px] font-bold border border-slate-100 uppercase tracking-tight">{details.duration || 'Flexible Duration'}</span>
-                    <span className="bg-slate-50 text-slate-500 px-4 py-1.5 rounded-xl text-[10px] font-bold border border-slate-100 uppercase tracking-tight">For: {details.target_audience}</span>
+                    <span className="bg-sky-50 text-sky-600 px-4 py-1.5 rounded-xl text-[10px] font-bold border border-sky-100 uppercase tracking-tight">{courseData?.sourceType || 'Custom'} Source</span>
+                    <span className="bg-slate-50 text-slate-500 px-4 py-1.5 rounded-xl text-[10px] font-bold border border-slate-100 uppercase tracking-tight">{details?.difficulty || 'All Levels'}</span>
+                    <span className="bg-slate-50 text-slate-500 px-4 py-1.5 rounded-xl text-[10px] font-bold border border-slate-100 uppercase tracking-tight">{details?.duration || 'Flexible Duration'}</span>
+                    <span className="bg-slate-50 text-slate-500 px-4 py-1.5 rounded-xl text-[10px] font-bold border border-slate-100 uppercase tracking-tight">For: {details?.target_audience || 'Everyone'}</span>
                   </div>
                 </div>
 
@@ -90,39 +172,34 @@ export default function PublishDashboard({ courseData, onBack, onComplete }) {
                 <div className="space-y-4 pt-6 border-t border-slate-50">
                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Curriculum Breakdown</label>
                    <div className="grid gap-4">
-                     {(structure.modules || []).map((mod, i) => (
+                     {(structure?.modules || []).map((mod, i) => (
                        <div key={i} className="group p-5 bg-slate-50/50 hover:bg-white border border-transparent hover:border-sky-100 rounded-3xl transition-all shadow-sm hover:shadow-md">
                          <div className="flex justify-between items-center mb-4">
-                           <h5 className="font-bold text-slate-800 text-sm">{mod.title}</h5>
+                           <h5 className="font-bold text-slate-800 text-sm">{mod?.title || 'Untitled Module'}</h5>
                            <span className="text-[9px] font-bold text-slate-400 bg-white px-2.5 py-1 rounded-xl border border-slate-100 uppercase tracking-wider">Module {i+1}</span>
                          </div>
                          <div className="space-y-2">
-                           {(mod.chapters || []).map((chap, j) => {
+                           {(mod?.chapters || []).map((chap, j) => {
                               // Filter out draft/empty content blocks.
-                              const validContents = (chap.contents || []).filter(c => c.completed && c.content);
-                              if (validContents.length === 0 && chap.content?.completed && chap.content?.content) {
+                              if (!chap) return null;
+                              const validContents = (chap?.contents || []).filter(c => c?.completed && c?.content);
+                              if (validContents.length === 0 && chap?.content?.completed && chap?.content?.content) {
                                   validContents.push(chap.content);
                               }
                               
                               const isReady = validContents.length > 0;
                               
-                              // Create a mock cData object for the LessonPreviewModal
-                              const cData = isReady ? {
-                                  html_content: validContents.map(c => c.content).join('<hr class="my-8 border-slate-100" />'),
-                                  files: validContents.filter(c => c.file_url).map(c => ({ url: c.file_url, name: c.file_name }))
-                              } : null;
-                              
-                              return (
-                                <button 
-                                  key={j} 
-                                  onClick={() => setPreviewData({ chapter: chap, content: cData })}
-                                  className="w-full flex justify-between items-center text-[11px] py-2.5 px-4 rounded-2xl bg-white border border-slate-100/50 shadow-sm hover:border-sky-200 hover:bg-sky-50/30 transition-all group/chap"
-                                >
+                                return (
+                                  <button 
+                                    key={j} 
+                                    onClick={() => setPreviewData(getLessonPreviewData(i, j))}
+                                    className="w-full flex justify-between items-center text-[11px] py-2.5 px-4 rounded-2xl bg-white border border-slate-100/50 shadow-sm hover:border-sky-200 hover:bg-sky-50/30 transition-all group/chap"
+                                  >
                                   <span className="font-semibold text-slate-600 flex items-center gap-2">
                                     <Eye className="w-3 h-3 opacity-0 group-hover/chap:opacity-100 transition-opacity text-sky-500" />
-                                    {chap.title}
+                                    {chap?.title || 'Untitled Lesson'}
                                   </span>
-                                  {cData ? (
+                                  {isReady ? (
                                     <span className="flex items-center gap-1.5 text-green-500 font-bold uppercase text-[9px] tracking-wide">
                                       <CheckCircle2 className="w-3.5 h-3.5" /> Ready
                                     </span>
@@ -142,13 +219,21 @@ export default function PublishDashboard({ courseData, onBack, onComplete }) {
               </div>
 
               {/* Navigation Footer */}
-              <div className="p-6 bg-slate-50/50 border-t border-slate-50 flex justify-start">
+              <div className="p-6 bg-slate-50/50 border-t border-slate-50 flex justify-between items-center">
                 <button 
                   onClick={onBack} 
                   disabled={saving}
                   className="px-6 py-3.5 border-2 border-slate-100 text-slate-500 rounded-2xl font-bold uppercase text-[10px] tracking-widest flex items-center gap-2 hover:bg-white hover:text-sky-600 transition-all active:scale-95 disabled:opacity-50"
                 >
                   <ChevronLeft className="w-4 h-4" /> Edit Content
+                </button>
+                
+                <button 
+                  onClick={() => setShowFullPreview(true)} 
+                  disabled={saving}
+                  className="px-6 py-3.5 bg-sky-50 text-sky-600 rounded-2xl font-bold uppercase text-[10px] tracking-widest flex items-center gap-2 hover:bg-sky-100 transition-all active:scale-95 disabled:opacity-50 border border-sky-100 shadow-sm"
+                >
+                  <Eye className="w-4 h-4" /> Full Course Preview
                 </button>
               </div>
             </div>
@@ -211,6 +296,10 @@ export default function PublishDashboard({ courseData, onBack, onComplete }) {
           chapter={previewData.chapter}
           chapterContent={previewData.content}
           onClose={() => setPreviewData(null)}
+          onNext={handleNextPreview}
+          onPrev={handlePrevPreview}
+          hasNext={allLessons.findIndex(l => l.mIdx === previewData.mIdx && l.cIdx === previewData.cIdx) < allLessons.length - 1}
+          hasPrev={allLessons.findIndex(l => l.mIdx === previewData.mIdx && l.cIdx === previewData.cIdx) > 0}
         />
       )}
     </div>

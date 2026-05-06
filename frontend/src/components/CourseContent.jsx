@@ -6,6 +6,7 @@ import {
   Video, Volume2, HelpCircle, CheckSquare, RefreshCw, Zap, Settings2, Eye
 } from 'lucide-react';
 import AIAssistantSidebar from './AIAssistantSidebar';
+import ActionModal from './ActionModal';
 import { generateLessonContent, uploadChapterMedia } from '../api';
 
 const CONTENT_TYPES = [
@@ -254,9 +255,152 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
   };
 
   const modules = courseData.structure?.modules || [];
+  
+  let totalLessons = 0;
+  let lessonsWithContent = 0;
+  let lessonsWithPromptOnly = 0;
+  let lessonsMissingPrompt = 0;
+
+  modules.forEach(mod => {
+    (mod.chapters || []).forEach(chap => {
+      totalLessons++;
+      const hasContents = (chap.contents && chap.contents.length > 0) || chap.content?.completed;
+      const hasPrompt = chap.content?.prompt && chap.content.prompt.trim() !== '';
+
+      if (hasContents) {
+        lessonsWithContent++;
+      } else if (hasPrompt) {
+        lessonsWithPromptOnly++;
+      } else {
+        lessonsMissingPrompt++;
+      }
+    });
+  });
+
+  const [isGeneratingAll, setIsGeneratingAll] = useState(false);
+  const [modalConfig, setModalConfig] = useState(null);
+
+  const triggerGenerateAll = async () => {
+    setIsGeneratingAll(true);
+    setError('');
+    const newModules = JSON.parse(JSON.stringify(courseData.structure.modules || []));
+    const promises = [];
+    const newLoadingMap = { ...loadingMap };
+    
+    for (let mIdx = 0; mIdx < newModules.length; mIdx++) {
+      const mod = newModules[mIdx];
+      for (let cIdx = 0; cIdx < (mod.chapters || []).length; cIdx++) {
+        const chap = mod.chapters[cIdx];
+        const hasContents = (chap.contents && chap.contents.length > 0) || chap.content?.completed;
+        
+        if (!hasContents && chap.content?.prompt?.trim()) {
+          const key = `${mIdx}-${cIdx}`;
+          newLoadingMap[key] = true;
+          
+          const payload = {
+            title: chap.title,
+            module_title: mod.title,
+            prompt: chap.content.prompt,
+            type: chap.content.type || 'html',
+            course_details: courseData.details
+          };
+          
+          promises.push(
+            generateLessonContent(payload).then(res => {
+              return { mIdx, cIdx, res, type: chap.content.type || 'html' };
+            }).catch(err => {
+              return { mIdx, cIdx, error: true };
+            })
+          );
+        }
+      }
+    }
+    
+    setLoadingMap(newLoadingMap);
+    
+    const results = await Promise.all(promises);
+    
+    results.forEach(result => {
+      const { mIdx, cIdx, res, type, error } = result;
+      setLoadingMap(prev => ({ ...prev, [`${mIdx}-${cIdx}`]: false }));
+      
+      if (!error) {
+        const chapter = newModules[mIdx].chapters[cIdx];
+        if (!chapter.contents) chapter.contents = [];
+        chapter.contents.push({
+          ...res,
+          source: 'ai',
+          type: type,
+          completed: true,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        setError(`Failed to generate content for some lessons.`);
+      }
+    });
+    
+    updateCourseData('structure', { ...courseData.structure, modules: newModules });
+    setIsGeneratingAll(false);
+  };
+
+  const handleGenerateAllContent = async () => {
+    if (lessonsWithPromptOnly === 0 && lessonsMissingPrompt > 0) {
+      setModalConfig({
+        title: 'Missing Prompts',
+        message: 'First generate prompts for the lessons to generate content.',
+        type: 'warning',
+        confirmText: 'Got It'
+      });
+      return;
+    }
+    
+    if (lessonsWithPromptOnly === 0 && lessonsMissingPrompt === 0) {
+      setModalConfig({
+        title: 'All Done!',
+        message: 'All lessons already have content generated!',
+        type: 'success',
+        confirmText: 'Awesome'
+      });
+      return;
+    }
+
+    if (lessonsMissingPrompt > 0) {
+      setModalConfig({
+        title: 'Generate Content',
+        message: `You have prompts for ${lessonsWithContent + lessonsWithPromptOnly} out of ${totalLessons} lessons.\n\nWould you like to generate content for these ready lessons only?\n\n(Click Cancel if you want to add prompts for the remaining ${lessonsMissingPrompt} lessons first.)`,
+        type: 'confirm',
+        confirmText: 'Generate Content',
+        onConfirm: () => {
+          setModalConfig(null);
+          triggerGenerateAll();
+        }
+      });
+      return;
+    } else if (lessonsWithContent > 0) {
+      setModalConfig({
+        title: 'Generate Content',
+        message: `You have already created content for ${lessonsWithContent} lesson(s).\n\nWould you like to generate content for the remaining ${lessonsWithPromptOnly} lesson(s)?`,
+        type: 'confirm',
+        confirmText: 'Generate Remaining',
+        onConfirm: () => {
+          setModalConfig(null);
+          triggerGenerateAll();
+        }
+      });
+      return;
+    }
+
+    triggerGenerateAll();
+  };
 
   return (
     <div className="animate-fade-in space-y-6">
+      <ActionModal 
+        isOpen={!!modalConfig}
+        onClose={() => setModalConfig(null)}
+        {...modalConfig}
+      />
+
       {error && (
         <div className="bg-red-50 border border-red-100 p-4 rounded-2xl flex items-center gap-3 text-red-600 text-sm font-bold animate-bounce shadow-sm">
            <AlertCircle className="w-5 h-5 flex-shrink-0" />
@@ -283,6 +427,15 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
 
               <div className="flex items-center gap-2">
                 <button 
+                  onClick={handleGenerateAllContent}
+                  disabled={isGeneratingAll}
+                  title="Generate content for all missing lessons"
+                  className="flex items-center gap-2 bg-sky-600 text-white px-5 py-3 rounded-xl text-xs font-bold hover:bg-sky-700 transition shadow-lg shadow-sky-100 active:scale-95 disabled:opacity-50"
+                >
+                  {isGeneratingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                  <span>{isGeneratingAll ? 'GENERATING...' : 'GENERATE ALL'}</span>
+                </button>
+                <button 
                   onClick={() => setShowSidebar(true)}
                   className="flex items-center gap-2 bg-sky-600 text-white px-5 py-3 rounded-xl text-xs font-bold hover:bg-sky-700 transition shadow-lg shadow-sky-100 active:scale-95 group"
                 >
@@ -291,8 +444,6 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
                 </button>
               </div>
             </div>
-
-
 
             {/* Modules and Lessons List */}
             <div className="space-y-10">
@@ -325,6 +476,14 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
                             
                             <div className="flex items-center gap-3">
                               <div className="flex -space-x-1 items-center">
+                                {/* Prompt Status Icon */}
+                                <div 
+                                  className={`w-5 h-5 rounded-full bg-white border border-slate-100 flex items-center justify-center shadow-sm z-10 transition-opacity duration-300 ${chap.content?.prompt?.trim() ? 'opacity-100' : 'opacity-30 grayscale'}`} 
+                                  title={chap.content?.prompt?.trim() ? 'Prompt Added' : 'No Prompt'}
+                                >
+                                  <MessageSquareText className={`w-2.5 h-2.5 ${chap.content?.prompt?.trim() ? 'text-sky-600' : 'text-slate-400'}`} />
+                                </div>
+                                {/* Content Type Icons */}
                                 {((chap.contents || (chap.content?.completed ? [chap.content] : []))).map((c, i) => {
                                   const TypeIcon = CONTENT_TYPES.find(t => t.id === (c.type || 'html'))?.icon || FileJson;
                                   return (
