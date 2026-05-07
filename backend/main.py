@@ -80,12 +80,10 @@ async def upload_media(file: UploadFile = File(...)):
 @app.post("/course/structure")
 async def create_structure(req: CourseStructureRequest):
     structure = generate_course_structure(
-        req.details.title,
+        req.details.courseName,
         req.details.description,
-        req.details.target_audience,
-        req.details.difficulty,
-        req.details.duration,
-        req.details.learning_objectives
+        req.details.subject,
+        req.details.level
     )
     return {"status": "success", "data": structure}
 

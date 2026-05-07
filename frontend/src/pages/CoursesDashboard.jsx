@@ -87,21 +87,21 @@ export default function CoursesDashboard({ onViewCourse, onEditCourse }) {
                      <div className="absolute inset-0 bg-gradient-to-t from-gray-900/60 via-transparent to-transparent opacity-60" />
                      <div className="absolute top-4 right-4">
                         <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest backdrop-blur-md border ${
-                          data.difficulty === 'beginner' ? 'bg-green-500/20 text-green-400 border-green-500/30' :
-                          data.difficulty === 'intermediate' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' :
+                          (data.level || data.difficulty) === 'beginner' ? 'bg-green-500/20 text-green-400 border-green-500/30' :
+                          (data.level || data.difficulty) === 'intermediate' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' :
                           'bg-red-500/20 text-red-400 border-red-500/30'
                         }`}>
-                          {data.difficulty}
+                          {data.level || data.difficulty}
                         </span>
                      </div>
                   </div>
 
                   <div className="p-6 flex-1 flex flex-col">
-                     <h3 className="text-xl font-bold text-slate-900 mb-2 line-clamp-2 group-hover:text-sky-600 transition">{data.title}</h3>
+                     <h3 className="text-xl font-bold text-slate-900 mb-2 line-clamp-2 group-hover:text-sky-600 transition">{data.courseName || data.title}</h3>
                      <p className="text-sm text-slate-500 mb-6 line-clamp-3 leading-relaxed">
                         {data.description}
                      </p>
-
+ 
                      <div className="mt-auto space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                            <div className="flex items-center text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
@@ -110,12 +110,12 @@ export default function CoursesDashboard({ onViewCourse, onEditCourse }) {
                            </div>
                            <div className="flex items-center text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                               <Clock className="h-3.5 w-3.5 text-sky-500 mr-2" />
-                              {data.duration}
+                              {data.duration} days
                            </div>
                         </div>
                         <div className="flex items-center text-[11px] font-semibold text-slate-500 uppercase tracking-wider border-t border-slate-100 pt-4">
                            <Users className="h-3.5 w-3.5 text-sky-500 mr-2" />
-                           {data.target_audience}
+                           {data.requirements || data.target_audience}
                         </div>
                      </div>
                   </div>

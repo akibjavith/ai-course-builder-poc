@@ -153,12 +153,16 @@ def generate_course_details_from_context() -> dict:
     {context}
     
     Provide:
-    1. A concise course title (max 50 chars)
+    1. A concise courseName (max 50 chars)
     2. A detailed description (max 1000 chars)
-    3. Target audience
-    4. Difficulty level (beginner, intermediate, or advanced)
-    5. Estimated duration (e.g., '10 hours')
-    6. At least 3 specific learning objectives
+    3. A relevant subject for this content
+    4. Difficulty level as 'level' (beginner, intermediate, or advanced)
+    5. Estimated duration (in Days, numeric string)
+    6. Specific requirements (what to know before starting)
+    7. courseType as 'Custom Course'
+    8. language as 'English'
+    9. scriptingLanguage as 'NA' or relevant language if content is technical
+    10. price (suggest a fair price in USD as a numeric string)
     
     Output MUST be a JSON matching the CourseDetails schema.
     """

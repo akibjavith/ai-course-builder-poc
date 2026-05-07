@@ -2,12 +2,18 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 
 class CourseDetails(BaseModel):
-    title: str
+    courseType: Optional[str] = "Custom Course"
+    subject: str
+    courseName: str
     description: str
-    target_audience: str
-    difficulty: str
+    price: Optional[str] = ""
     duration: str
-    learning_objectives: List[str]
+    requirements: Optional[str] = ""
+    level: Optional[str] = "beginner"
+    language: Optional[str] = "English"
+    scriptingLanguage: Optional[str] = "NA"
+    bannerImage: Optional[str] = None
+    evaluator: Optional[str] = ""
 
 class ChapterStructure(BaseModel):
     title: str
@@ -95,10 +101,10 @@ class RegenerateRequest(BaseModel):
 # --- Online Course Generator schemas ---
 
 class OutlineRequest(BaseModel):
-    course_title: str = Field(..., description="Title of the course")
+    courseName: str = Field(..., description="Title of the course")
     description: str = Field(..., description="Brief description of the course")
-    difficulty_level: str = Field(..., description="Difficulty (beginner|intermediate|advanced)")
-    target_audience: str = Field(..., description="Intended audience")
+    level: str = Field(..., description="Difficulty (beginner|intermediate|advanced)")
+    subject: str = Field(..., description="Subject of the course")
 
 class LessonContent(BaseModel):
     explanation: str
@@ -106,9 +112,11 @@ class LessonContent(BaseModel):
     key_points: List[str]
 
 class LessonRequest(BaseModel):
-    module_index: int
-    lesson_index: int
-    context: Optional[dict] = None
+    title: str
+    module_title: str
+    prompt: str
+    type: str = "html"
+    course_details: Optional[CourseDetails] = None
 
 class VoiceScriptResponse(BaseModel):
     voice_script: str
@@ -121,6 +129,25 @@ class ImageResponse(BaseModel):
 
 class StoreCourseRequest(BaseModel):
     course_json: dict
+
+class QuizRequest(BaseModel):
+    course_title: str
+    modules: List[dict]
+    sourceType: Optional[str] = "external"
+    course_details: Optional[CourseDetails] = None
+
+class PendingJob(BaseModel):
+    moduleIdx: int
+    lessonIdx: int
+    moduleTitle: str
+    chapterTitle: str
+
+class GenerateAsyncRequest(BaseModel):
+    jobs: List[PendingJob]
+    course_details: CourseDetails
+    course_format: str = "html"
+    source_type: str = "external"
+    modules: List[dict]
 
 class GenerateTitleRequest(BaseModel):
     description: str

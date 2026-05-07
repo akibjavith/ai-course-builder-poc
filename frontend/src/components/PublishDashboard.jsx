@@ -156,15 +156,15 @@ export default function PublishDashboard({ courseData, onBack, onComplete }) {
                 <div className="space-y-6">
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Course Identity</label>
-                    <h3 className="text-2xl font-bold text-slate-900 leading-tight">{details?.title || "Untitled Course"}</h3>
+                    <h3 className="text-2xl font-bold text-slate-900 leading-tight">{details?.courseName || "Untitled Course"}</h3>
                     <p className="text-slate-500 text-sm leading-relaxed">{details?.description}</p>
                   </div>
-
+ 
                   <div className="flex flex-wrap gap-2">
                     <span className="bg-sky-50 text-sky-600 px-4 py-1.5 rounded-xl text-[10px] font-bold border border-sky-100 uppercase tracking-tight">{courseData?.sourceType || 'Custom'} Source</span>
-                    <span className="bg-slate-50 text-slate-500 px-4 py-1.5 rounded-xl text-[10px] font-bold border border-slate-100 uppercase tracking-tight">{details?.difficulty || 'All Levels'}</span>
-                    <span className="bg-slate-50 text-slate-500 px-4 py-1.5 rounded-xl text-[10px] font-bold border border-slate-100 uppercase tracking-tight">{details?.duration || 'Flexible Duration'}</span>
-                    <span className="bg-slate-50 text-slate-500 px-4 py-1.5 rounded-xl text-[10px] font-bold border border-slate-100 uppercase tracking-tight">For: {details?.target_audience || 'Everyone'}</span>
+                    <span className="bg-slate-50 text-slate-500 px-4 py-1.5 rounded-xl text-[10px] font-bold border border-slate-100 uppercase tracking-tight">{details?.level || 'All Levels'}</span>
+                    <span className="bg-slate-50 text-slate-500 px-4 py-1.5 rounded-xl text-[10px] font-bold border border-slate-100 uppercase tracking-tight">{details?.duration || 'Flexible Duration'} days</span>
+                    <span className="bg-slate-50 text-slate-500 px-4 py-1.5 rounded-xl text-[10px] font-bold border border-slate-100 uppercase tracking-tight">For: {details?.requirements || 'Everyone'}</span>
                   </div>
                 </div>
 

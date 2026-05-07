@@ -486,7 +486,7 @@ export default function CourseViewer({ course, onBack }) {
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
-            <h1 className="text-sm font-bold text-white truncate max-w-sm">{details?.title}</h1>
+            <h1 className="text-sm font-bold text-white truncate max-w-sm">{details?.courseName || details?.title}</h1>
           </div>
 
           {/* Progress bar */}

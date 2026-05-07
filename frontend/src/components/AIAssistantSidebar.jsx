@@ -7,9 +7,9 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
     {
       id: 1,
       sender: 'ai',
-      text: details?.title 
-        ? `I see you've already started: "${details.title}". How can I help you refine these details?`
-        : "Hi! I'm your AI Course Assistant. I can help you brainstorm your course title, description, and objectives. What subject are we working on today?",
+      text: details?.courseName 
+        ? `I see you've already started: "${details.courseName}". How can I help you refine these details?`
+        : "Hi! I'm your AI Course Assistant. I can help you brainstorm your course name, description, and requirements. What subject are we working on today?",
       type: 'text'
     }
   ]);
@@ -94,14 +94,22 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
         CURRENT CONTEXT: ${JSON.stringify(details)}. 
         ${(scope.includes('Structure') || scope.includes('Content')) ? `CRITICAL: USE THE FOLLOWING STRUCTURE ONLY: ${JSON.stringify(courseData?.structure || {})}` : ''}
         SCHEMAS:
-        - Course Details (Step 2): { "title": "...", "description": "...", "target_audience": "...", "difficulty": "...", "duration": "...", "learning_objectives": ["..."] }
+        - Course Details (Step 2): { "courseType": "...", "subject": "...", "courseName": "...", "description": "...", "price": "...", "duration": "...", "requirements": "...", "level": "...", "language": "...", "scriptingLanguage": "...", "evaluator": "..." }
         - Course Structure (Step 3): { "modules": [{ "title": "...", "chapters": [{"title": "..."}] }] }
         - Course Content (Step 4): { "prompts": [{ "module": "...", "title": "...", "prompt": "..." }] } OR { "module": "...", "title": "...", "prompt": "..." } for a single lesson.
         
         CRITICAL FOR SINGLE LESSONS & ALL LESSONS PROMPTS: 
         1. When generating a prompt for a single lesson, you MUST include the "module" and "title" (lesson title) in the JSON so the application knows exactly where to apply it.
         2. EVERY SINGLE PROMPT YOU GENERATE (whether for one lesson or bulk generation) MUST BE EXTREMELY LONG AND DETAILED.
-        3. Each individual prompt MUST be between 100 and 150 words in length. NEVER generate a single-line summary.`
+        3. Each individual prompt MUST be between 100 and 150 words in length. NEVER generate a single-line summary.
+
+        VALID DROPDOWN OPTIONS (YOU MUST USE ONLY THESE):
+        - courseType: Must be "Custom Course" or "SCORM Course"
+        - subject: Must be EXACTLY one of: "English", "Maths", "Science", "Social", "Physics", "Chemistry", "Biology", "History", "Geography", "Economics", "Computer Science", "Data Science", "Machine Learning", "AI", "Python Programming", "Digital Marketing", "Business Management".
+        - duration: Must be a NUMERIC string (e.g., "14" for 14 days). Do NOT include "days" or "weeks".
+        - level: Must be "beginner", "intermediate", or "advanced".
+        - scriptingLanguage: Must be EXACTLY one of: "NA", "Python", "SQL", "C++", "C", "MySQL", "PostgreSQL", "Java", "JavaScript".
+        - evaluator: Choose one from: "Sarah Johnson", "Michael Chen", "Dr. Emily Smith", "Alex Rivera".`
       };
 
       const resp = await chatWithAI([systemMsg, ...chatHistory]);
@@ -137,17 +145,17 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
             
             if (scope.includes("Details")) {
               const lastDetails = [...messages].reverse().find(m => m.type === 'suggestion_details')?.data;
-              if ((!metadata.title || metadata.title.length < 2)) metadata.title = details?.title || lastDetails?.title || '';
-              if ((!metadata.description || metadata.description.length < 5)) metadata.description = details?.description || lastDetails?.description || '';
-              if ((!metadata.target_audience || metadata.target_audience.length < 2)) metadata.target_audience = details?.target_audience || lastDetails?.target_audience || '';
-              if (!metadata.difficulty) metadata.difficulty = details?.difficulty || lastDetails?.difficulty || 'beginner';
+              if (!metadata.courseName) metadata.courseName = details?.courseName || lastDetails?.courseName || '';
+              if (!metadata.description) metadata.description = details?.description || lastDetails?.description || '';
+              if (!metadata.subject) metadata.subject = details?.subject || lastDetails?.subject || '';
+              if (!metadata.level) metadata.level = details?.level || lastDetails?.level || 'beginner';
+              if (!metadata.price) metadata.price = details?.price || lastDetails?.price || '';
               if (!metadata.duration) metadata.duration = details?.duration || lastDetails?.duration || '';
-              
-              if ((!metadata.learning_objectives || metadata.learning_objectives.length === 0)) {
-                metadata.learning_objectives = details?.learning_objectives || lastDetails?.learning_objectives || [];
-              } else if (Array.isArray(metadata.learning_objectives)) {
-                metadata.learning_objectives = metadata.learning_objectives.filter(obj => obj && obj.trim().length > 0);
-              }
+              if (!metadata.requirements) metadata.requirements = details?.requirements || lastDetails?.requirements || '';
+              if (!metadata.language) metadata.language = details?.language || lastDetails?.language || 'English';
+              if (!metadata.scriptingLanguage) metadata.scriptingLanguage = details?.scriptingLanguage || lastDetails?.scriptingLanguage || 'NA';
+              if (!metadata.evaluator) metadata.evaluator = details?.evaluator || lastDetails?.evaluator || '';
+              if (!metadata.courseType) metadata.courseType = details?.courseType || lastDetails?.courseType || 'Custom Course';
             }
             
             const cleanText = textPart.replace(/\[METADATA\]/g, '').replace(/\[\/METADATA\]/g, '').trim();
@@ -161,12 +169,17 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
                 sender: 'ai', 
                 type: 'suggestion_details', 
                 data: {
-                  title: metadata.title || '',
+                  courseType: metadata.courseType || details?.courseType || 'Custom Course',
+                  subject: metadata.subject || '',
+                  courseName: metadata.courseName || '',
                   description: metadata.description || '',
-                  target_audience: metadata.target_audience || '',
-                  difficulty: metadata.difficulty || 'beginner',
+                  price: metadata.price || '',
                   duration: metadata.duration || '',
-                  learning_objectives: Array.isArray(metadata.learning_objectives) ? metadata.learning_objectives : []
+                  requirements: metadata.requirements || '',
+                  level: metadata.level || 'beginner',
+                  language: metadata.language || 'English',
+                  scriptingLanguage: metadata.scriptingLanguage || 'NA',
+                  evaluator: metadata.evaluator || ''
                 } 
               }]);
             } else if (scope.includes("Structure")) {
@@ -231,16 +244,7 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
   };
 
   const handleApplyAISuggestion = (suggestion) => {
-    const normalizedDetails = {
-      title: suggestion.title || details.title,
-      description: suggestion.description || details.description,
-      target_audience: suggestion.target_audience || suggestion.audience || details.target_audience,
-      difficulty: (suggestion.difficulty || details.difficulty || 'beginner').toLowerCase(),
-      duration: suggestion.duration || details.duration,
-      learning_objectives: Array.isArray(suggestion.learning_objectives) ? suggestion.learning_objectives : 
-                           Array.isArray(suggestion.objectives) ? suggestion.objectives : details.learning_objectives
-    };
-    onApply(normalizedDetails);
+    onApply(suggestion);
   };
 
   return (
@@ -295,41 +299,56 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
 
                   {msg.type === 'suggestion_details' && (
                     <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm space-y-4 animate-in zoom-in-95 duration-300 w-full">
-                      <p className="text-[11px] text-slate-500 font-medium mb-3">Here's a suggested course outline and details based on your request:</p>
-                      <div className="space-y-2 border-l-2 border-sky-100 pl-4 py-1">
-                        <div className="flex gap-2 text-[11px]">
-                          <span className="font-bold text-slate-900 flex-shrink-0">Course Title:</span>
-                          <input className="w-full bg-transparent border-none p-0 focus:ring-0 font-semibold text-slate-600" value={msg.data?.title} onChange={(e) => handleUpdateSuggestion(msg.id, 'title', e.target.value)} />
+                      <p className="text-[11px] text-slate-500 font-medium mb-3">Draft Course Details:</p>
+                      <div className="grid grid-cols-2 gap-4 border-l-2 border-sky-100 pl-4 py-1">
+                        <div className="flex flex-col gap-1 text-[11px]">
+                          <span className="font-bold text-slate-900">Course Type:</span>
+                          <input className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 font-semibold text-slate-600 outline-none" value={msg.data?.courseType} onChange={(e) => handleUpdateSuggestion(msg.id, 'courseType', e.target.value)} />
                         </div>
-                        <div className="flex gap-2 text-[11px]">
-                          <span className="font-bold text-slate-900 flex-shrink-0">Description:</span>
-                          <div contentEditable suppressContentEditableWarning className="w-full bg-transparent border-none p-0 focus:ring-0 font-medium text-slate-600 outline-none whitespace-pre-wrap min-h-[40px]" onBlur={(e) => handleUpdateSuggestion(msg.id, 'description', e.target.innerText)}>{msg.data?.description}</div>
+                        <div className="flex flex-col gap-1 text-[11px]">
+                          <span className="font-bold text-slate-900">Subject Name:</span>
+                          <input className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 font-semibold text-slate-600 outline-none" value={msg.data?.subject} onChange={(e) => handleUpdateSuggestion(msg.id, 'subject', e.target.value)} />
                         </div>
-                        <div className="flex gap-2 text-[11px]">
-                          <span className="font-bold text-slate-900 flex-shrink-0">Target Audience:</span>
-                          <input className="w-full bg-transparent border-none p-0 focus:ring-0 font-semibold text-slate-600" value={msg.data?.target_audience} onChange={(e) => handleUpdateSuggestion(msg.id, 'target_audience', e.target.value)} />
+                        <div className="flex flex-col gap-1 text-[11px] col-span-2">
+                          <span className="font-bold text-slate-900">Course Name:</span>
+                          <input className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 font-semibold text-slate-600 outline-none" value={msg.data?.courseName} onChange={(e) => handleUpdateSuggestion(msg.id, 'courseName', e.target.value)} />
                         </div>
-                        <div className="flex gap-2 text-[11px]">
-                          <span className="font-bold text-slate-900 flex-shrink-0">Difficulty:</span>
-                          <input className="w-full bg-transparent border-none p-0 focus:ring-0 font-semibold text-slate-600" value={msg.data?.difficulty} onChange={(e) => handleUpdateSuggestion(msg.id, 'difficulty', e.target.value)} />
+                        <div className="flex flex-col gap-1 text-[11px] col-span-2">
+                          <span className="font-bold text-slate-900">Course Description:</span>
+                          <textarea className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 font-medium text-slate-600 outline-none resize-none" rows={3} value={msg.data?.description} onChange={(e) => handleUpdateSuggestion(msg.id, 'description', e.target.value)} />
                         </div>
-                        <div className="flex gap-2 text-[11px]">
-                          <span className="font-bold text-slate-900 flex-shrink-0">Duration:</span>
-                          <input className="w-full bg-transparent border-none p-0 focus:ring-0 font-semibold text-slate-600" value={msg.data?.duration || '6 hours'} onChange={(e) => handleUpdateSuggestion(msg.id, 'duration', e.target.value)} />
+                        <div className="flex flex-col gap-1 text-[11px]">
+                          <span className="font-bold text-slate-900">Course Price:</span>
+                          <input className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 font-semibold text-slate-600 outline-none" value={msg.data?.price} onChange={(e) => handleUpdateSuggestion(msg.id, 'price', e.target.value)} />
                         </div>
-                        <div className="space-y-1 mt-2">
-                          <span className="text-[11px] font-bold text-slate-900 block">Learning Objectives:</span>
-                          {(msg.data?.learning_objectives || []).filter(obj => obj && obj.trim().length > 0).map((obj, i) => (
-                             <div key={i} className="flex gap-2 text-[11px]">
-                               <span className="text-slate-400 mt-0.5">{i+1}.</span>
-                               <input className="w-full bg-transparent border-none p-0 focus:ring-0 font-medium text-slate-600" value={obj} onChange={(e) => handleUpdateObjective(msg.id, i, e.target.value)} />
-                             </div>
-                          ))}
+                        <div className="flex flex-col gap-1 text-[11px]">
+                          <span className="font-bold text-slate-900">Course Duration (Days):</span>
+                          <input className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 font-semibold text-slate-600 outline-none" value={msg.data?.duration} onChange={(e) => handleUpdateSuggestion(msg.id, 'duration', e.target.value)} />
+                        </div>
+                        <div className="flex flex-col gap-1 text-[11px] col-span-2">
+                          <span className="font-bold text-slate-900">Requirements:</span>
+                          <input className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 font-semibold text-slate-600 outline-none" value={msg.data?.requirements} onChange={(e) => handleUpdateSuggestion(msg.id, 'requirements', e.target.value)} />
+                        </div>
+                        <div className="flex flex-col gap-1 text-[11px]">
+                          <span className="font-bold text-slate-900">Course Level:</span>
+                          <input className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 font-semibold text-slate-600 outline-none" value={msg.data?.level} onChange={(e) => handleUpdateSuggestion(msg.id, 'level', e.target.value)} />
+                        </div>
+                        <div className="flex flex-col gap-1 text-[11px]">
+                          <span className="font-bold text-slate-900">Course Language:</span>
+                          <input className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 font-semibold text-slate-600 outline-none" value={msg.data?.language} onChange={(e) => handleUpdateSuggestion(msg.id, 'language', e.target.value)} />
+                        </div>
+                        <div className="flex flex-col gap-1 text-[11px]">
+                          <span className="font-bold text-slate-900">Scripting Language:</span>
+                          <input className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 font-semibold text-slate-600 outline-none" value={msg.data?.scriptingLanguage} onChange={(e) => handleUpdateSuggestion(msg.id, 'scriptingLanguage', e.target.value)} />
+                        </div>
+                        <div className="flex flex-col gap-1 text-[11px]">
+                          <span className="font-bold text-slate-900">Evaluator:</span>
+                          <input className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 font-semibold text-slate-600 outline-none" value={msg.data?.evaluator} onChange={(e) => handleUpdateSuggestion(msg.id, 'evaluator', e.target.value)} />
                         </div>
                       </div>
                       <div className="pt-2 flex gap-2 border-t border-slate-50 mt-4">
                          <button onClick={() => handleApplyAISuggestion(msg.data)} className="flex-1 bg-sky-600 text-white px-4 py-2.5 rounded-xl text-[11px] font-bold hover:bg-sky-700 transition flex items-center justify-center gap-2"><CheckCircle2 className="w-3.5 h-3.5" /> Apply Details</button>
-                         <button onClick={() => handleSend("Refine these details to be more specific and engaging.", "Refine Details")} className="flex-1 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-[11px] font-bold hover:bg-slate-50 transition">Refine Details</button>
+                         <button onClick={() => handleSend("Refine these details to be more professional.", "Refine Details")} className="flex-1 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-[11px] font-bold hover:bg-slate-50 transition">Refine Details</button>
                       </div>
                     </div>
                   )}
@@ -446,42 +465,16 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
                  <>
                    {(() => {
                      const lastSuggestion = [...messages].reverse().find(m => m.type === 'suggestion_details')?.data;
-                     const activeTitle = details?.title || lastSuggestion?.title || '';
-                     const activeDesc = details?.description || lastSuggestion?.description || '';
+                     const activeName = details?.courseName || lastSuggestion?.courseName || '';
                      const hasSuggestion = messages.some(m => m.type === 'suggestion_details');
                      
-                     const handleRefineObjectives = () => {
-                       const currentObjectives = lastSuggestion?.learning_objectives || details?.learning_objectives || [];
-                       const validObjectives = currentObjectives.filter(obj => obj && obj.trim().length > 0);
-                       const prompt = `Refine objectives: ${JSON.stringify(validObjectives)}. Title: "${activeTitle}", Desc: "${activeDesc}". YOU MUST RETURN THE [METADATA] BLOCK with Target Audience.`;
-                       handleSend(prompt, "Refine Objectives");
-                     };
- 
-                     const handleAddObjectives = () => {
-                       const currentObjectives = lastSuggestion?.learning_objectives || details?.learning_objectives || [];
-                       const validObjectives = currentObjectives.filter(obj => obj && obj.trim().length > 0);
- 
-                       if (validObjectives.length >= 15) {
-                         setMessages(prev => [
-                           ...prev, 
-                           { id: Date.now(), sender: 'user', text: 'Add Objectives', type: 'text' },
-                           { id: Date.now() + 1, sender: 'ai', text: 'You have reached the maximum limit of 15 learning objectives.', type: 'text' }
-                         ]);
-                         return;
-                       }
-                       
-                       const prompt = `Add 3 objectives to: ${JSON.stringify(validObjectives)}. Title: "${activeTitle}", Desc: "${activeDesc}". YOU MUST RETURN THE [METADATA] BLOCK with Target Audience.`;
-                       handleSend(prompt, "Add Objectives");
-                     };
-                     
                      if (!hasSuggestion) {
-                       return <button onClick={() => handleSend(`Suggest a course title, description, target audience, and 5-6 objectives for "${activeTitle || 'a new subject'}". YOU MUST RETURN THE [METADATA] BLOCK.`, "Suggest Title")} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Suggest Title</button>;
+                       return <button onClick={() => handleSend(`Suggest a course name, description, subject, requirements, level, and duration for "${activeName || 'a new subject'}". YOU MUST RETURN THE [METADATA] BLOCK.`, "Suggest Details")} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Suggest Details</button>;
                      }
                      
                      return (
                        <>
-                         <button onClick={handleRefineObjectives} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Refine Objectives</button>
-                         <button onClick={handleAddObjectives} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Add Objectives</button>
+                         <button onClick={() => handleSend("Refine the requirements and description.", "Refine Details")} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Refine Details</button>
                        </>
                      );
                    })()}

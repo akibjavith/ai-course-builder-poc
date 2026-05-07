@@ -34,7 +34,7 @@ export default function CustomSelect({ label, value, options, onChange }) {
 
         {isOpen && (
           <div className="absolute z-50 w-full mt-2 bg-white border border-gray-100 rounded-2xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-            <div className="py-2">
+            <div className="py-2 max-h-60 overflow-y-auto custom-scrollbar">
               {options.map((option) => (
                 <button
                   key={option.value}

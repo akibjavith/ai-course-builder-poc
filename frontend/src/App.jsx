@@ -17,17 +17,23 @@ function App() {
   
   const [currentStep, setCurrentStep] = useState(1);
   const [courseData, setCourseData] = useState({
-    sourceType: 'external', // or 'internal'
+    sourceType: 'external',
     details: {
-      title: '',
+      courseType: 'Custom Course',
+      subject: '',
+      courseName: '',
       description: '',
-      target_audience: '',
-      difficulty: 'beginner',
+      price: '',
       duration: '',
-      learning_objectives: ['']
+      requirements: '',
+      level: 'beginner',
+      language: 'English',
+      scriptingLanguage: 'NA',
+      bannerImage: null,
+      evaluator: ''
     },
-    structure: { modules: [] }, // from Step 3
-    content: [] // from Step 4
+    structure: { modules: [] },
+    content: []
   });
 
   const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, 5));
@@ -36,7 +42,20 @@ function App() {
     setCurrentStep(1);
     setCourseData({
       sourceType: 'external',
-      details: { title: '', description: '', target_audience: '', difficulty: 'beginner', duration: '', learning_objectives: [''] },
+      details: {
+        courseType: 'Custom Course',
+        subject: '',
+        courseName: '',
+        description: '',
+        price: '',
+        duration: '',
+        requirements: '',
+        level: 'beginner',
+        language: 'English',
+        scriptingLanguage: 'NA',
+        bannerImage: null,
+        evaluator: ''
+      },
       structure: { modules: [] },
       content: []
     });
@@ -52,7 +71,20 @@ function App() {
     setCourseData({
       id: course.id,
       sourceType: course.sourceType || course.details?.source_type || 'external',
-      details: course.details || { title: '', description: '', target_audience: '', difficulty: 'beginner', duration: '', learning_objectives: [''] },
+      details: course.details || {
+        courseType: 'Custom Course',
+        subject: '',
+        courseName: '',
+        description: '',
+        price: '',
+        duration: '',
+        requirements: '',
+        level: 'beginner',
+        language: 'English',
+        scriptingLanguage: 'NA',
+        bannerImage: null,
+        evaluator: ''
+      },
       structure: course.structure || { modules: [] },
       content: course.content || [],
       quiz: course.quiz || []

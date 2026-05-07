@@ -11,6 +11,10 @@ from course_planner import generate_course_structure
 from content_generator import generate_chapter_content, generate_course_quiz
 from app.services.video_compiler import compile_video
 from openai import OpenAI
+from schemas import (
+    OutlineRequest, ChapterContent, CourseQuiz, CourseDetails,
+    LessonRequest, QuizRequest, GenerateAsyncRequest, StoreCourseRequest
+)
 
 client = OpenAI()
 
@@ -19,77 +23,16 @@ router = APIRouter(prefix="/course", tags=["online_course_generator"])
 # In-memory store for async tasks: { task_id: { "status": str, "progress": int, "message": str, "result": any } }
 TASK_STORE: Dict[str, Dict[str, Any]] = {}
 
-class OutlineRequest(BaseModel):
-    course_title: str = Field(..., description="Title of the course")
-    description: str = Field(..., description="Brief description of the course")
-    difficulty_level: str = Field(..., description="Difficulty (beginner|intermediate|advanced)")
-    target_audience: str = Field(..., description="Intended audience")
-
-class LessonContent(BaseModel):
-    explanation: str
-    examples: List[str]
-    key_points: List[str]
-
-class CourseDetailsDict(BaseModel):
-    title: Optional[str] = ""
-    description: Optional[str] = ""
-    target_audience: Optional[str] = ""
-    difficulty: Optional[str] = "beginner"
-    learning_objectives: Optional[List[str]] = []
-
-class LessonRequest(BaseModel):
-    title: str
-    module_title: str
-    prompt: str
-    type: str
-    course_details: Optional[CourseDetailsDict] = None
-
-class VoiceScriptResponse(BaseModel):
-    voice_script: str
-
-class ImagePromptResponse(BaseModel):
-    prompt: str
-
-class ImageResponse(BaseModel):
-    image_url: str
-
-class StoreCourseRequest(BaseModel):
-    course_json: Dict[str, Any]
-
-class QuizRequest(BaseModel):
-    course_title: str
-    modules: List[Dict[str, Any]]
-    sourceType: Optional[str] = "external"
-    audience: Optional[str] = "Everyone"
-    difficulty: Optional[str] = "beginner"
-    objectives: Optional[List[str]] = []
-
-class PendingJob(BaseModel):
-    moduleIdx: int
-    lessonIdx: int
-    moduleTitle: str
-    chapterTitle: str
-
-class GenerateAsyncRequest(BaseModel):
-    jobs: List[PendingJob]
-    course_title: str
-    course_format: str
-    source_type: str
-    audience: str
-    difficulty: str
-    objectives: List[str]
-    modules: List[Dict[str, Any]]
+# Using schemas from schemas.py instead of local definitions
 
 @router.post("/outline")
 async def generate_outline(req: OutlineRequest):
     try:
         structure = generate_course_structure(
-            title=req.course_title,
+            courseName=req.courseName,
             description=req.description,
-            audience=req.target_audience,
-            difficulty=req.difficulty_level,
-            duration=req.duration if hasattr(req, 'duration') else "Flexible",
-            objectives=["Understand the fundamentals", "Apply concepts contextually"]
+            subject=req.subject,
+            level=req.level
         )
         return structure
     except Exception as e:
@@ -100,18 +43,19 @@ async def generate_lesson(req: LessonRequest):
     try:
         from content_generator import generate_chapter_content
         
-        course_title = req.course_details.title if req.course_details else "the course"
+        course_title = req.course_details.courseName if req.course_details else "the course"
         course_desc = req.course_details.description if req.course_details else ""
-        audience = req.course_details.target_audience if req.course_details else "Everyone"
-        difficulty = req.course_details.difficulty if req.course_details else "beginner"
-        objectives = req.course_details.learning_objectives if req.course_details else []
+        subject = req.course_details.subject if req.course_details else "General"
+        difficulty = req.course_details.level if req.course_details else "beginner"
+        objectives = req.course_details.requirements if req.course_details else ""
         
         # We pass the prompt via the context or just update generate_chapter_content to handle it directly.
         # But we can just format our new dynamic prompt here!
         prompt_str = f"""
         Generate a COMPLETE, deep-dive lesson for '{req.title}' in the module '{req.module_title}' for the course '{course_title}'.
         Course Description: {course_desc}
-        Target Audience: {audience}
+        Subject: {subject}
+        Difficulty: {difficulty}
         
         CRITICAL INSTRUCTION:
         {req.prompt}
@@ -327,14 +271,24 @@ async def async_course_worker(task_id: str, req: GenerateAsyncRequest):
             TASK_STORE[task_id]["progress"] = int((i / total_jobs) * 90)
             TASK_STORE[task_id]["message"] = f"Generating content for {job.chapterTitle}..."
             
+            # Try to find the prompt for this chapter in the modules
+            chap_prompt = f"Explain {job.chapterTitle} deeply."
+            for mod in req.modules:
+                if mod.get("title") == job.moduleTitle:
+                    for chap in mod.get("chapters", []):
+                        if chap.get("title") == job.chapterTitle:
+                            if chap.get("content") and chap["content"].get("prompt"):
+                                chap_prompt = chap["content"]["prompt"]
+                            break
+            
             content = generate_chapter_content(
-                course_title=req.course_title,
+                course_title=req.course_details.courseName,
                 module_title=job.moduleTitle,
                 chapter_title=job.chapterTitle,
                 source_type=req.source_type,
-                audience=req.audience,
-                difficulty=req.difficulty,
-                objectives=req.objectives,
+                audience=req.course_details.requirements,
+                difficulty=req.course_details.level,
+                objectives=[req.course_details.requirements],
                 output_format=req.course_format
             )
             
@@ -385,15 +339,14 @@ async def async_course_worker(task_id: str, req: GenerateAsyncRequest):
         
         quiz = None
         try:
-            qreq = QuizRequest(
-                course_title=req.course_title,
+            quiz = generate_course_quiz(
+                course_title=req.course_details.courseName,
                 modules=req.modules,
-                sourceType=req.source_type,
-                audience=req.audience,
-                difficulty=req.difficulty,
-                objectives=req.objectives
+                source_type=req.source_type,
+                audience=req.course_details.requirements, # Use requirements as audience context
+                difficulty=req.course_details.level,
+                objectives=req.course_details.requirements
             )
-            quiz = await create_course_quiz(qreq)
         except Exception:
             pass
 
