@@ -283,64 +283,75 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
   const triggerGenerateAll = async () => {
     setIsGeneratingAll(true);
     setError('');
-    const newModules = JSON.parse(JSON.stringify(courseData.structure.modules || []));
-    const promises = [];
-    const newLoadingMap = { ...loadingMap };
     
-    for (let mIdx = 0; mIdx < newModules.length; mIdx++) {
-      const mod = newModules[mIdx];
+    // We maintain a local master copy of modules to avoid closure staleness issues
+    // during the loop updates.
+    let currentModules = JSON.parse(JSON.stringify(courseData.structure.modules || []));
+    let completedCount = 0;
+    let failCount = 0;
+
+    for (let mIdx = 0; mIdx < currentModules.length; mIdx++) {
+      const mod = currentModules[mIdx];
       for (let cIdx = 0; cIdx < (mod.chapters || []).length; cIdx++) {
         const chap = mod.chapters[cIdx];
         const hasContents = (chap.contents && chap.contents.length > 0) || chap.content?.completed;
         
         if (!hasContents && chap.content?.prompt?.trim()) {
           const key = `${mIdx}-${cIdx}`;
-          newLoadingMap[key] = true;
+          setLoadingMap(prev => ({ ...prev, [key]: true }));
           
-          const payload = {
-            title: chap.title,
-            module_title: mod.title,
-            prompt: chap.content.prompt,
-            type: chap.content.type || 'html',
-            course_details: courseData.details
-          };
-          
-          promises.push(
-            generateLessonContent(payload).then(res => {
-              return { mIdx, cIdx, res, type: chap.content.type || 'html' };
-            }).catch(err => {
-              return { mIdx, cIdx, error: true };
-            })
-          );
+          try {
+            const payload = {
+              title: chap.title,
+              module_title: mod.title,
+              prompt: chap.content.prompt,
+              type: chap.content.type || 'html',
+              course_details: courseData.details
+            };
+            
+            const res = await generateLessonContent(payload);
+            
+            // Update our local master copy
+            if (!currentModules[mIdx].chapters[cIdx].contents) {
+              currentModules[mIdx].chapters[cIdx].contents = [];
+            }
+            
+            currentModules[mIdx].chapters[cIdx].contents.push({
+              ...res,
+              source: 'ai',
+              type: chap.content.type || 'html',
+              completed: true,
+              timestamp: new Date().toISOString()
+            });
+
+            // Push the latest master copy to the global state
+            // We pass a fresh copy to ensure React detects the change
+            updateCourseData('structure', { 
+              ...courseData.structure, 
+              modules: JSON.parse(JSON.stringify(currentModules)) 
+            });
+            
+            completedCount++;
+          } catch (err) {
+            console.error(`Failed for ${chap.title}`, err);
+            failCount++;
+          } finally {
+            setLoadingMap(prev => ({ ...prev, [key]: false }));
+          }
         }
       }
     }
     
-    setLoadingMap(newLoadingMap);
-    
-    const results = await Promise.all(promises);
-    
-    results.forEach(result => {
-      const { mIdx, cIdx, res, type, error } = result;
-      setLoadingMap(prev => ({ ...prev, [`${mIdx}-${cIdx}`]: false }));
-      
-      if (!error) {
-        const chapter = newModules[mIdx].chapters[cIdx];
-        if (!chapter.contents) chapter.contents = [];
-        chapter.contents.push({
-          ...res,
-          source: 'ai',
-          type: type,
-          completed: true,
-          timestamp: new Date().toISOString()
-        });
-      } else {
-        setError(`Failed to generate content for some lessons.`);
-      }
-    });
-    
-    updateCourseData('structure', { ...courseData.structure, modules: newModules });
     setIsGeneratingAll(false);
+    
+    setModalConfig({
+      title: 'Generation Complete',
+      message: failCount > 0 
+        ? `Successfully generated ${completedCount} lessons. ${failCount} lessons failed to generate.`
+        : `Successfully generated content for all ${completedCount} pending lessons!`,
+      type: failCount > 0 ? 'warning' : 'success',
+      confirmText: 'Great!'
+    });
   };
 
   const handleGenerateAllContent = async () => {

@@ -204,8 +204,8 @@ export default function PublishDashboard({ courseData, onBack, onComplete }) {
                                       <CheckCircle2 className="w-3.5 h-3.5" /> Ready
                                     </span>
                                   ) : (
-                                    <span className="flex items-center gap-1.5 text-amber-500 font-bold uppercase text-[9px] tracking-wide animate-pulse">
-                                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Pending
+                                    <span className="flex items-center gap-1.5 text-slate-300 font-bold uppercase text-[9px] tracking-wide">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-slate-300" /> Pending
                                     </span>
                                   )}
                                 </button>
