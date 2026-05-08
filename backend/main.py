@@ -12,6 +12,7 @@ from course_planner import generate_course_structure
 from content_generator import generate_chapter_content, generate_course_quiz
 from rag_pipeline import ingest_document
 from course_store import save_course, get_courses, get_course, update_course, delete_course
+from database import save_course_to_mysql
 import os
 import shutil
 from dotenv import load_dotenv
@@ -131,6 +132,12 @@ async def finalize_course(course: dict):
     cid = course.get("id") or str(uuid4())
     try:
         save_course(cid, course)
+        # Also save to MySQL
+        try:
+            save_course_to_mysql(course)
+        except Exception as db_err:
+            print(f"Warning: Course saved to JSON but MySQL sync failed: {db_err}")
+            
         return {"status": "success", "course_id": cid}
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
@@ -139,6 +146,12 @@ async def finalize_course(course: dict):
 async def edit_course(course_id: str, course: dict):
     try:
         update_course(course_id, course)
+        # Also update MySQL (for now we re-insert or we could implement a full update)
+        try:
+            save_course_to_mysql(course)
+        except Exception as db_err:
+            print(f"Warning: Course updated in JSON but MySQL sync failed: {db_err}")
+            
         return {"status": "success", "course_id": course_id}
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
@@ -307,7 +320,7 @@ async def generate_flashcards(req: GenerateFlashcardsRequest):
         flashcards: list[FlashcardModel]
     
     from openai import OpenAI
-    client = OpenAI()
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     
     try:
         completion = client.beta.chat.completions.parse(
@@ -343,7 +356,7 @@ async def upload_media(file: UploadFile = File(...)):
 @app.post("/course/mcq")
 async def generate_mcqs(req: GenerateMCQRequest):
     from openai import OpenAI
-    client = OpenAI()
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     
     try:
         from schemas import MCQResponse
@@ -367,7 +380,7 @@ Assessment Guidelines: {req.assessment_text or 'None'}"""
 @app.post("/course/assessment")
 async def generate_assessment(req: GenerateAssessmentRequest):
     from openai import OpenAI
-    client = OpenAI()
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     
     try:
         from schemas import MCQResponse
@@ -398,7 +411,7 @@ async def api_auto_fill():
 @app.post("/course/chat")
 async def api_chat(req: dict):
     from openai import OpenAI
-    client = OpenAI()
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     
     messages = req.get("messages", [])
     try:

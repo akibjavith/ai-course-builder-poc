@@ -9,14 +9,20 @@ import uuid
 
 from course_planner import generate_course_structure
 from content_generator import generate_chapter_content, generate_course_quiz
-from app.services.video_compiler import compile_video
+# video_compiler is imported lazily inside functions that need it
 from openai import OpenAI
 from schemas import (
     OutlineRequest, ChapterContent, CourseQuiz, CourseDetails,
     LessonRequest, QuizRequest, GenerateAsyncRequest, StoreCourseRequest
 )
 
-client = OpenAI()
+_client = None
+
+def get_openai_client():
+    global _client
+    if _client is None:
+        _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    return _client
 
 router = APIRouter(prefix="/course", tags=["online_course_generator"])
 
@@ -84,7 +90,7 @@ async def generate_lesson(req: LessonRequest):
         }}
         """
         
-        response = client.chat.completions.create(
+        response = get_openai_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a senior AI architect and instructional designer."},
@@ -167,7 +173,7 @@ async def generate_voice(payload: Dict[str, str]):
     try:
         # Just generate a streamlined narration script via LLM
         prompt = f"Convert the following textbook explanation into a conversational, engaging voice-over script, suitable for text-to-speech. Do not include sound cues or stage directions or character names. Just the raw spoken text.\nText:\n{lesson_text[:3000]}"
-        response = client.chat.completions.create(
+        response = get_openai_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7
@@ -186,7 +192,7 @@ async def generate_image_prompt(payload: Dict[str, str]):
         
     prompt = f"Create a vivid, highly descriptive DALL-E image prompt that visually explains this topic. Keep the prompt strictly visual. Topic: {lesson_text[:1000]}"
     try:
-         response = client.chat.completions.create(
+         response = get_openai_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7
@@ -200,7 +206,7 @@ async def generate_image_prompt(payload: Dict[str, str]):
 async def generate_image(payload: Dict[str, str]):
     prompt = payload.get("prompt", "")
     try:
-        response = client.images.generate(
+        response = get_openai_client().images.generate(
             model="dall-e-3",
             prompt=prompt[:1000] if prompt else "Beautiful futuristic educational digital art.",
             n=1,
@@ -236,6 +242,8 @@ class VideoCompileRequest(BaseModel):
 async def compile_video_endpoint(req: VideoCompileRequest):
     try:
         # Generate video dynamically using our new ffmpeg wrapper
+        # Lazy import — only loaded when video compilation is requested
+        from app.services.video_compiler import compile_video
         filename = f"compiled_lesson_{uuid.uuid4().hex[:8]}.mp4"
         video_url = compile_video(
             image_url=req.image_url, 

@@ -6,7 +6,13 @@ from openai import OpenAI
 import imageio_ffmpeg
 import subprocess
 
-client = OpenAI()
+client = None
+
+def _get_client():
+    global client
+    if client is None:
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    return client
 
 # Get the path to the ffmpeg executable bundled with imageio-ffmpeg
 FFMPEG_BIN = imageio_ffmpeg.get_ffmpeg_exe()
@@ -18,7 +24,7 @@ def download_image(url: str, dest_path: str):
 
 def generate_audio_and_subtitles(text: str, audio_path: str, srt_path: str):
     # 1. Generate TTS
-    response = client.audio.speech.create(
+    response = _get_client().audio.speech.create(
         model="tts-1",
         voice="alloy",
         input=text
@@ -27,7 +33,7 @@ def generate_audio_and_subtitles(text: str, audio_path: str, srt_path: str):
     
     # 2. Transcribe to get perfect SRT syncing using Whisper
     with open(audio_path, "rb") as audio_file:
-        transcription = client.audio.transcriptions.create(
+        transcription = _get_client().audio.transcriptions.create(
             model="whisper-1",
             file=audio_file,
             response_format="srt"
