@@ -10,6 +10,7 @@ import CoursesDashboard from './pages/CoursesDashboard';
 import CourseViewer from './components/CourseViewer';
 import CourseStructure from './components/CourseStructure';
 import CourseContent from './components/CourseContent';
+import { getCourseById } from './api';
 
 function App() {
   const [view, setView] = useState('dashboard'); // 'dashboard' | 'builder' | 'viewer'
@@ -66,31 +67,52 @@ function App() {
     setCourseData(prev => ({ ...prev, [key]: value }));
   };
 
-  const handleEditCourse = (course) => {
-    // Populate courseData with existing course data
-    setCourseData({
-      id: course.id,
-      sourceType: course.sourceType || course.details?.source_type || 'external',
-      details: course.details || {
-        courseType: 'Custom Course',
-        subject: '',
-        courseName: '',
-        description: '',
-        price: '',
-        duration: '',
-        requirements: '',
-        level: 'beginner',
-        language: 'English',
-        scriptingLanguage: 'NA',
-        bannerImage: null,
-        evaluator: ''
-      },
-      structure: course.structure || { modules: [] },
-      content: course.content || [],
-      quiz: course.quiz || []
-    });
-    setCurrentStep(1);
-    setView('builder');
+  const handleEditCourse = async (course) => {
+    try {
+      // Fetch full data from MySQL first
+      const res = await getCourseById(course.id);
+      const fullCourse = res.course || course;
+
+      setCourseData({
+        id: fullCourse.id,
+        sourceType: fullCourse.sourceType || fullCourse.details?.source_type || 'external',
+        details: fullCourse.details || {
+          courseType: 'Custom Course',
+          subject: '',
+          courseName: '',
+          description: '',
+          price: '',
+          duration: '',
+          requirements: '',
+          level: 'beginner',
+          language: 'English',
+          scriptingLanguage: 'NA',
+          bannerImage: null,
+          evaluator: ''
+        },
+        structure: fullCourse.structure || { modules: [] },
+        content: fullCourse.content || [],
+        quiz: fullCourse.quiz || []
+      });
+      setCurrentStep(1);
+      setView('builder');
+    } catch (err) {
+      console.error("Error loading course for edit", err);
+      alert("Failed to load full course content.");
+    }
+  };
+
+  const handleViewCourse = async (course) => {
+    try {
+      // Fetch full data from MySQL first
+      const res = await getCourseById(course.id);
+      const fullCourse = res.course || course;
+      setViewingCourse(fullCourse);
+      setView('viewer');
+    } catch (err) {
+      console.error("Error loading course for view", err);
+      alert("Failed to load course content.");
+    }
   };
 
   if (view === 'dashboard') {
@@ -115,7 +137,7 @@ function App() {
         <main>
           <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
             <CoursesDashboard 
-               onViewCourse={(course) => { setViewingCourse(course); setView('viewer'); }} 
+               onViewCourse={handleViewCourse} 
                onEditCourse={handleEditCourse}
             />
           </div>

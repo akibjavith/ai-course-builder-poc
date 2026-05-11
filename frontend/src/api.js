@@ -176,4 +176,9 @@ export const chatWithAI = async (messages) => {
   return response.data;
 };
 
+export const getCourseById = async (courseId) => {
+  const response = await axios.get(`${API_URL}/course/${courseId}`);
+  return response.data;
+};
+
 

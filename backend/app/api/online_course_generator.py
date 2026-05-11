@@ -390,18 +390,4 @@ async def task_status(task_id: str):
     return TASK_STORE[task_id]
 
 
-# ── GET /courses ────────────────────────────────────────────────────────────
-# The dashboard calls GET /courses to list all published courses.
-from fastapi import APIRouter as _AR
-_courses_router = APIRouter(prefix="", tags=["courses"])
-
-@_courses_router.get("/courses")
-async def list_courses():
-    import json, os
-    file_path = os.path.join(os.path.dirname(__file__), "..", "courses.json")
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception:
-        data = []
-    return {"courses": data}
+# Removed duplicate list_courses endpoint; using main.py implementation.

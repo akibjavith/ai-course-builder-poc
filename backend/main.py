@@ -163,9 +163,37 @@ async def remove_course(course_id: str):
 
 @app.get("/courses")
 async def list_courses():
-    courses = get_courses()
-    # Ensure dashboard always gets list under "courses" key
-    return {"courses": courses}
+    try:
+        from database import get_courses_from_mysql
+        courses = get_courses_from_mysql()
+        return {"courses": courses}
+    except Exception as e:
+        print(f"Error fetching from MySQL: {e}")
+        # Fallback to JSON if MySQL fails
+        courses = get_courses()
+        return {"courses": courses}
+
+@app.get("/course/{course_id}")
+async def get_single_course(course_id: str):
+    try:
+        from database import get_course_details_from_mysql
+        # Convert string ID to int if it's numeric
+        cid = int(course_id) if course_id.isdigit() else None
+        
+        if cid:
+            course = get_course_details_from_mysql(cid)
+            if course:
+                return {"status": "success", "course": course}
+        
+        # Fallback to JSON if not found in MySQL or ID is UUID
+        from course_store import get_course
+        course = get_course(course_id)
+        if course:
+            return {"status": "success", "course": course}
+            
+        raise HTTPException(status_code=404, detail="Course not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/course/generate-title", response_model=GenerateTitleResponse)
 async def api_generate_title(req: GenerateTitleRequest):

@@ -25,7 +25,8 @@ SUBJECT_MAP = {
 }
 
 def save_course_to_mysql(course_data: Dict[str, Any]):
-    print("DEBUG: Starting save_course_to_mysql...")
+    db_name = os.getenv("MYSQL_DB", "ai_course_db")
+    print(f"DEBUG: Starting save_course_to_mysql to database: {db_name}...")
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -36,8 +37,24 @@ def save_course_to_mysql(course_data: Dict[str, Any]):
         
         print(f"DEBUG: Mapping course: {details.get('courseName')}")
         
-        # 1. Insert into corp_course
-        subject_id = SUBJECT_MAP.get(details.get("subject"), 1) # Default to 1 (English) if not found
+        # 1. Dynamic Subject ID Lookup
+        subject_name = details.get("subject", "General")
+        print(f"DEBUG: Looking up ID for subject: {subject_name}")
+        
+        # Try to find matching subject in m_subject table
+        cursor.execute("SELECT subject_id FROM m_subject WHERE subject_name = %s", (subject_name,))
+        result = cursor.fetchone()
+        
+        if result:
+            subject_id = result[0]
+            print(f"DEBUG: Found Subject ID: {subject_id}")
+        else:
+            # Fallback: Just grab the first available subject ID so it doesn't crash
+            print(f"DEBUG: Subject '{subject_name}' not found in m_subject. Using fallback...")
+            cursor.execute("SELECT subject_id FROM m_subject LIMIT 1")
+            fallback = cursor.fetchone()
+            subject_id = fallback[0] if fallback else 1
+            print(f"DEBUG: Using Fallback Subject ID: {subject_id}")
         
         course_sql = """
             INSERT INTO corp_course (
@@ -133,6 +150,115 @@ def save_course_to_mysql(course_data: Dict[str, Any]):
         conn.rollback()
         print(f"DEBUG ERROR: {str(e)}")
         raise e
+    finally:
+        cursor.close()
+        conn.close()
+
+def get_courses_from_mysql():
+    """Fetches all courses for the dashboard list with module counts."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # Join with m_subject and subquery for module count
+        sql = """
+            SELECT c.*, s.subject_name,
+            (SELECT COUNT(*) FROM corp_course_conf_section WHERE corp_course_id = c.id) as module_count
+            FROM corp_course c
+            LEFT JOIN m_subject s ON c.subject_id = s.subject_id
+            ORDER BY c.id DESC
+        """
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+        
+        courses = []
+        for row in rows:
+            courses.append({
+                "id": str(row["id"]),
+                "details": {
+                    "courseName": row["course_name"],
+                    "description": row["course_desc"],
+                    "subject": row["subject_name"],
+                    "level": row["course_level"],
+                    "price": str(row["course_price"]),
+                    "duration": str(row["no_of_days"]),
+                    "language": row["course_language"],
+                    "requirements": row["requirements"],
+                    "scriptingLanguage": row["script_lang"]
+                },
+                # Provide a fake module list with the correct length so the UI shows the count
+                "structure": {"modules": [None] * row["module_count"]} 
+            })
+        return courses
+    finally:
+        cursor.close()
+        conn.close()
+
+def get_course_details_from_mysql(course_id: int):
+    """Fetches the full course structure (modules + lessons) for the viewer."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 1. Fetch Course Meta
+        cursor.execute("SELECT c.*, s.subject_name FROM corp_course c LEFT JOIN m_subject s ON c.subject_id = s.subject_id WHERE c.id = %s", (course_id,))
+        course_row = cursor.fetchone()
+        if not course_row:
+            return None
+            
+        course_obj = {
+            "id": str(course_row["id"]),
+            "details": {
+                "courseName": course_row["course_name"],
+                "description": course_row["course_desc"],
+                "subject": course_row["subject_name"],
+                "level": course_row["course_level"],
+                "price": str(course_row["course_price"]),
+                "duration": str(course_row["no_of_days"]),
+                "language": course_row["course_language"],
+                "requirements": course_row["requirements"],
+                "scriptingLanguage": course_row["script_lang"]
+            },
+            "structure": {"modules": []}
+        }
+        
+        # 2. Fetch Modules (Sections)
+        cursor.execute("SELECT * FROM corp_course_conf_section WHERE corp_course_id = %s ORDER BY seq_num", (course_id,))
+        module_rows = cursor.fetchall()
+        
+        for m_row in module_rows:
+            module_obj = {
+                "title": m_row["section_name"],
+                "chapters": []
+            }
+            
+            # 3. Fetch Lessons (Section Details)
+            cursor.execute("SELECT * FROM corp_course_conf_section_details WHERE corp_course_conf_section_id = %s ORDER BY seq_num", (m_row["id"],))
+            lesson_rows = cursor.fetchall()
+            
+            for l_row in lesson_rows:
+                # Reconstruct contents blocks
+                contents = []
+                if l_row["page_content"]:
+                    contents.append({"type": "ai_generated", "content": l_row["page_content"]})
+                if l_row["content_path"]:
+                    ctype = "video" if l_row["content_type"] == 2 else "document"
+                    contents.append({"type": ctype, "file_url": l_row["content_path"]})
+                if l_row["code_area"]:
+                    contents.append({
+                        "type": "code", 
+                        "code": l_row["code_area"], 
+                        "expected_output": l_row["code_area_result"]
+                    })
+
+                module_obj["chapters"].append({
+                    "title": l_row["page_name"],
+                    "contents": contents
+                })
+            
+            course_obj["structure"]["modules"].append(module_obj)
+            
+        return course_obj
     finally:
         cursor.close()
         conn.close()
