@@ -173,6 +173,15 @@ async def list_courses():
         courses = get_courses()
         return {"courses": courses}
 
+@app.get("/subjects")
+async def list_subjects():
+    try:
+        from database import get_all_subjects_from_mysql
+        subjects = get_all_subjects_from_mysql()
+        return {"status": "success", "subjects": subjects}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/course/{course_id}")
 async def get_single_course(course_id: str):
     try:

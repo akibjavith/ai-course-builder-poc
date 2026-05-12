@@ -181,4 +181,9 @@ export const getCourseById = async (courseId) => {
   return response.data;
 };
 
+export const getSubjects = async () => {
+  const response = await axios.get(`${API_URL}/subjects`);
+  return response.data;
+};
+
 

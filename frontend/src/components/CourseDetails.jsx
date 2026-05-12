@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Sparkles, ChevronLeft, ChevronRight, Plus, X, CheckCircle2, MessageSquareText, Wand2, Loader2, AlertCircle, Upload, Image as ImageIcon } from 'lucide-react';
 import CustomSelect from './CustomSelect';
 import AIAssistantSidebar from './AIAssistantSidebar';
-import { autoFillCourseDetails } from '../api';
+import { autoFillCourseDetails, getSubjects } from '../api';
 
 export default function CourseDetails({ courseData, updateCourseData, onNext, onBack }) {
   const [details, setDetails] = useState(courseData.details || {
@@ -24,7 +24,26 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
   const [showSidebar, setShowSidebar] = useState(false);
   const [error, setError] = useState('');
   const [bannerPreview, setBannerPreview] = useState(null);
+  const [dynamicSubjects, setDynamicSubjects] = useState([]);
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    const fetchSubjects = async () => {
+      try {
+        const res = await getSubjects();
+        if (res.status === 'success') {
+          const options = res.subjects.map(s => ({
+            value: s.subject_name,
+            label: s.subject_name
+          }));
+          setDynamicSubjects(options);
+        }
+      } catch (err) {
+        console.error("Failed to fetch subjects", err);
+      }
+    };
+    fetchSubjects();
+  }, []);
 
   const courseTypeOptions = [
     { value: 'Custom Course', label: 'Custom Course' },
@@ -101,12 +120,13 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
   const handleApplyAISuggestion = (suggestion) => {
     // Helper to find closest match in options
     const findMatch = (val, options) => {
-      if (!val) return null;
+      if (!val || !options || options.length === 0) return val; // Return the raw value if no options yet
       const normalized = val.toString().toLowerCase().trim();
-      return options.find(opt => 
+      const match = options.find(opt => 
         opt.value.toLowerCase() === normalized || 
         opt.label.toLowerCase() === normalized
-      )?.value;
+      );
+      return match ? match.value : val; // Fallback to raw value if no match, so it still "pastes"
     };
 
     const adapted = {
@@ -180,7 +200,7 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
               <CustomSelect 
                 label="Subject Name *"
                 value={details.subject}
-                options={subjectOptions}
+                options={dynamicSubjects}
                 onChange={(val) => handleChange('subject', val)}
               />
               <div className="space-y-1.5">
@@ -344,6 +364,7 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
               onApply={handleApplyAISuggestion} 
               onClose={() => setShowSidebar(false)} 
               scope="Course Details"
+              availableSubjects={dynamicSubjects}
             />
           )}
         </div>

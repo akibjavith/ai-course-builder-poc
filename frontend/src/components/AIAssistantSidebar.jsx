@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Bot, User, RefreshCw, Minus, X, Send, Sparkles, Wand2, PencilLine, CheckCircle2, Loader2, MessageSquareText, ChevronDown, Maximize2, Zap } from 'lucide-react';
 import { chatWithAI } from '../api';
 
-export default function AIAssistantSidebar({ details, courseData, onApply, onClose, scope = 'Course Details', initialInput = '' }) {
+export default function AIAssistantSidebar({ details, courseData, onApply, onClose, scope = 'Course Details', initialInput = '', availableSubjects = [] }) {
   const [messages, setMessages] = useState([
     {
       id: 1,
@@ -90,6 +90,7 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
         - ALWAYS RETURN THE FULL AND COMPLETE OBJECT IN [METADATA]. 
         - IF A FIELD IS ALREADY PROVIDED IN "CURRENT CONTEXT" AND YOU ARE NOT CHANGING IT, YOU MUST STILL INCLUDE IT EXACTLY AS IS. 
         - YOU ARE STRICTLY FORBIDDEN FROM RETURNING EMPTY STRINGS ("") OR PLACEHOLDERS FOR FIELDS THAT ALREADY HAVE CONTENT.
+        ${availableSubjects.length > 0 ? `- SUBJECT RESTRICTION: You MUST ONLY use one of the following subject names: ${availableSubjects.map(s => s.label).join(', ')}. Do not invent new subjects.` : ''}
         
         CURRENT CONTEXT: ${JSON.stringify(details)}. 
         ${(scope.includes('Structure') || scope.includes('Content')) ? `CRITICAL: USE THE FOLLOWING STRUCTURE ONLY: ${JSON.stringify(courseData?.structure || {})}` : ''}

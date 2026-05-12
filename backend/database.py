@@ -7,14 +7,19 @@ from typing import Dict, Any
 load_dotenv()
 
 def get_db_connection():
+    # Convert port to integer, defaulting to 3306 if not found
+    db_port = int(os.getenv("DB_PORT", 3306)) 
+    
     return mysql.connector.connect(
-        host=os.getenv("MYSQL_HOST", "localhost"),
-        user=os.getenv("MYSQL_USER", "root"),
-        password=os.getenv("MYSQL_PASSWORD", ""),
-        database=os.getenv("MYSQL_DB", "ai_course_db"),
+        host=os.getenv("DB_HOST"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+        database=os.getenv("DB_NAME"),
+        port=db_port, # <--- Now it's a number!
         charset='utf8mb4',
         collation='utf8mb4_unicode_ci'
     )
+
 
 # Mapping subject names to IDs (matching the frontend dropdown options)
 SUBJECT_MAP = {
@@ -56,42 +61,54 @@ def save_course_to_mysql(course_data: Dict[str, Any]):
             subject_id = fallback[0] if fallback else 1
             print(f"DEBUG: Using Fallback Subject ID: {subject_id}")
         
+        # Determine elearn_flag (1 if there are chapters with content)
+        has_content = 0
+        for mod in modules:
+            if mod.get("chapters"):
+                has_content = 1
+                break
+        
+        # We only provide values for columns we actually want to set.
+        # Columns like ppt_count, pdf_count, etc., will remain NULL.
         course_sql = """
             INSERT INTO corp_course (
                 course_name, course_desc, subject_id, course_price, script_lang, 
-                no_of_days, requirements, course_level, course_language, active_status
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                no_of_days, requirements, course_level, course_language, 
+                active_status, elearn_flag, exam_flag, created_by, tenant_id
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         course_vals = (
             details.get("courseName"),
             details.get("description"),
             subject_id,
-            details.get("price") or 0,
-            details.get("scriptingLanguage", "NA"),
+            details.get("price") if details.get("price") else None,
+            details.get("scriptingLanguage") if details.get("scriptingLanguage") != "NA" else None,
             details.get("duration") or 30,
             details.get("requirements"),
             details.get("level"),
             details.get("language", "English"),
-            1 # Active
+            0,            # Active Status = 0
+            has_content,  # Elearn Flag
+            1,            # Exam Flag = 1 (to match working Row 694)
+            2354,         # Your Created By ID
+            1             # Your Tenant ID
         )
         
         cursor.execute(course_sql, course_vals)
         corp_course_id = cursor.lastrowid
         print(f"DEBUG: Inserted into corp_course. ID: {corp_course_id}")
         
-        # 2. Insert into corp_course_conf
+        # 2. Insert into corp_course_conf (Matching your schema exactly)
         conf_sql = """
             INSERT INTO corp_course_conf (
-                course_conf_name, corp_course_id, track_flag, control_flow_flag
-            ) VALUES (%s, %s, %s, %s)
+                course_conf_name, corp_course_id, track_flag, control_flow_flag, restrict_flow_flag
+            ) VALUES (%s, %s, %s, %s, %s)
         """
-        cursor.execute(conf_sql, (f"{details.get('courseName')} Config", corp_course_id, 1, 1))
+        cursor.execute(conf_sql, (f"{details.get('courseName')} Config", corp_course_id, 1, 1, 1))
         corp_course_conf_id = cursor.lastrowid
-        print(f"DEBUG: Inserted into corp_course_conf. ID: {corp_course_conf_id}")
         
         # 3. Iterate Modules and Lessons
         for mod_idx, mod in enumerate(modules):
-            print(f"DEBUG: Processing Module: {mod.get('title')}")
             section_sql = """
                 INSERT INTO corp_course_conf_section (
                     corp_course_id, corp_course_conf_id, section_name, seq_num
@@ -101,34 +118,26 @@ def save_course_to_mysql(course_data: Dict[str, Any]):
             section_id = cursor.lastrowid
             
             for chap_idx, chap in enumerate(mod.get("chapters", [])):
-                print(f"DEBUG:   Processing Lesson: {chap.get('title')}")
                 contents = chap.get("contents", [])
                 combined_html = ""
                 file_path = None
                 code_snippet = None
                 code_result = None
                 
-                # Check for AI generated content or files
                 if isinstance(contents, list):
                     for block in contents:
-                        if block.get("content"):
-                            combined_html += block["content"] + "<br/>"
-                        if block.get("file_url"):
-                            file_path = block["file_url"]
+                        if block.get("content"): combined_html += block["content"] + "<br/>"
+                        if block.get("file_url"): file_path = block["file_url"]
                         if block.get("code"):
                             code_snippet = block["code"]
                             code_result = block.get("expected_output")
                 
-                # Fallback for old schema
-                if not combined_html and chap.get("content"):
-                    combined_html = chap["content"].get("explanation", "")
-
                 details_sql = """
                     INSERT INTO corp_course_conf_section_details (
                         corp_course_id, corp_course_conf_id, corp_course_conf_section_id,
                         page_name, seq_num, content_type, content_path, 
-                        page_content, code_area, code_area_result
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        page_content, code_area, code_area_result, days
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
                 
                 ctype = 10 # Default AI Content
@@ -139,7 +148,7 @@ def save_course_to_mysql(course_data: Dict[str, Any]):
                 cursor.execute(details_sql, (
                     corp_course_id, corp_course_conf_id, section_id,
                     chap.get("title"), chap_idx + 1, ctype, file_path,
-                    combined_html, code_snippet, code_result
+                    combined_html, code_snippet, code_result, 1
                 ))
         
         conn.commit()
@@ -240,25 +249,56 @@ def get_course_details_from_mysql(course_id: int):
                 # Reconstruct contents blocks
                 contents = []
                 if l_row["page_content"]:
-                    contents.append({"type": "ai_generated", "content": l_row["page_content"]})
+                    # CRITICAL: Match frontend expectations (type 'html', source 'ai', completed true)
+                    contents.append({
+                        "type": "html", 
+                        "content": l_row["page_content"],
+                        "source": "ai",
+                        "completed": True,
+                        "timestamp": l_row.get("created_at") # Optional
+                    })
+                
                 if l_row["content_path"]:
                     ctype = "video" if l_row["content_type"] == 2 else "document"
-                    contents.append({"type": ctype, "file_url": l_row["content_path"]})
+                    contents.append({
+                        "type": ctype, 
+                        "file_url": l_row["content_path"],
+                        "source": "manual",
+                        "completed": True,
+                        "file_name": l_row["content_path"].split('/')[-1]
+                    })
+                
                 if l_row["code_area"]:
                     contents.append({
                         "type": "code", 
+                        "content": l_row["code_area"], # In viewer, 'code' might be expected, but 'content' is standard for blocks
                         "code": l_row["code_area"], 
-                        "expected_output": l_row["code_area_result"]
+                        "expected_output": l_row["code_area_result"],
+                        "source": "ai",
+                        "completed": True
                     })
 
                 module_obj["chapters"].append({
                     "title": l_row["page_name"],
-                    "contents": contents
+                    "contents": contents,
+                    # Fallback for older code that might look at 'content' directly
+                    "content": contents[0] if contents else {"completed": False}
                 })
             
             course_obj["structure"]["modules"].append(module_obj)
             
         return course_obj
+    finally:
+        cursor.close()
+        conn.close()
+
+def get_all_subjects_from_mysql():
+    """Fetches all subject names and IDs from m_subject table."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT subject_id, subject_name FROM m_subject ORDER BY subject_name")
+        return cursor.fetchall()
     finally:
         cursor.close()
         conn.close()
