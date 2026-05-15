@@ -40,107 +40,88 @@ def save_course_to_mysql(course_data: Dict[str, Any]):
         structure = course_data.get("structure", {})
         modules = structure.get("modules", [])
         
-        print(f"DEBUG: Mapping course: {details.get('courseName')}")
+        # Determine if we should update or insert
+        mysql_id = course_data.get("mysql_id")
         
         # 1. Dynamic Subject ID Lookup
         subject_name = details.get("subject", "General")
-        print(f"DEBUG: Looking up ID for subject: {subject_name}")
-        
-        # Try to find matching subject in m_subject table
         cursor.execute("SELECT subject_id FROM m_subject WHERE subject_name = %s", (subject_name,))
         result = cursor.fetchone()
+        subject_id = result[0] if result else 1
         
-        if result:
-            subject_id = result[0]
-            print(f"DEBUG: Found Subject ID: {subject_id}")
+        # Determine elearn_flag
+        has_content = 1 if any(mod.get("chapters") for mod in modules) else 0
+        
+        if mysql_id:
+            # UPDATE EXISTING COURSE
+            print(f"DEBUG: Updating course {mysql_id}")
+            course_sql = """
+                UPDATE corp_course SET 
+                    course_name = %s, course_desc = %s, subject_id = %s, course_price = %s, 
+                    script_lang = %s, no_of_days = %s, requirements = %s, course_level = %s, 
+                    course_language = %s, elearn_flag = %s
+                WHERE id = %s
+            """
+            course_vals = (
+                details.get("courseName"), details.get("description"), subject_id,
+                details.get("price"), details.get("scriptingLanguage"), details.get("duration") or 30,
+                details.get("requirements"), details.get("level"), details.get("language", "English"),
+                has_content, mysql_id
+            )
+            cursor.execute(course_sql, course_vals)
+            corp_course_id = mysql_id
+            
+            # Flush old structure to rebuild
+            cursor.execute("DELETE FROM corp_course_conf_section_details WHERE corp_course_id = %s", (mysql_id,))
+            cursor.execute("DELETE FROM corp_course_conf_section WHERE corp_course_id = %s", (mysql_id,))
+            cursor.execute("DELETE FROM corp_course_conf WHERE corp_course_id = %s", (mysql_id,))
         else:
-            # Fallback: Just grab the first available subject ID so it doesn't crash
-            print(f"DEBUG: Subject '{subject_name}' not found in m_subject. Using fallback...")
-            cursor.execute("SELECT subject_id FROM m_subject LIMIT 1")
-            fallback = cursor.fetchone()
-            subject_id = fallback[0] if fallback else 1
-            print(f"DEBUG: Using Fallback Subject ID: {subject_id}")
+            # INSERT NEW COURSE
+            course_sql = """
+                INSERT INTO corp_course (
+                    course_name, course_desc, subject_id, course_price, script_lang, 
+                    no_of_days, requirements, course_level, course_language, 
+                    active_status, elearn_flag, exam_flag, created_by, tenant_id
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """
+            course_vals = (
+                details.get("courseName"), details.get("description"), subject_id,
+                details.get("price"), details.get("scriptingLanguage"), details.get("duration") or 30,
+                details.get("requirements"), details.get("level"), details.get("language", "English"),
+                0, has_content, 1, 2354, 1
+            )
+            cursor.execute(course_sql, course_vals)
+            corp_course_id = cursor.lastrowid
         
-        # Determine elearn_flag (1 if there are chapters with content)
-        has_content = 0
-        for mod in modules:
-            if mod.get("chapters"):
-                has_content = 1
-                break
-        
-        # We only provide values for columns we actually want to set.
-        # Columns like ppt_count, pdf_count, etc., will remain NULL.
-        course_sql = """
-            INSERT INTO corp_course (
-                course_name, course_desc, subject_id, course_price, script_lang, 
-                no_of_days, requirements, course_level, course_language, 
-                active_status, elearn_flag, exam_flag, created_by, tenant_id
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """
-        course_vals = (
-            details.get("courseName"),
-            details.get("description"),
-            subject_id,
-            details.get("price") if details.get("price") else None,
-            details.get("scriptingLanguage") if details.get("scriptingLanguage") != "NA" else None,
-            details.get("duration") or 30,
-            details.get("requirements"),
-            details.get("level"),
-            details.get("language", "English"),
-            0,            # Active Status = 0
-            has_content,  # Elearn Flag
-            1,            # Exam Flag = 1 (to match working Row 694)
-            2354,         # Your Created By ID
-            1             # Your Tenant ID
-        )
-        
-        cursor.execute(course_sql, course_vals)
-        corp_course_id = cursor.lastrowid
-        print(f"DEBUG: Inserted into corp_course. ID: {corp_course_id}")
-        
-        # 2. Insert into corp_course_conf (Matching your schema exactly)
-        conf_sql = """
-            INSERT INTO corp_course_conf (
-                course_conf_name, corp_course_id, track_flag, control_flow_flag, restrict_flow_flag
-            ) VALUES (%s, %s, %s, %s, %s)
-        """
+        # 2. Insert into corp_course_conf
+        conf_sql = "INSERT INTO corp_course_conf (course_conf_name, corp_course_id, track_flag, control_flow_flag, restrict_flow_flag) VALUES (%s, %s, %s, %s, %s)"
         cursor.execute(conf_sql, (f"{details.get('courseName')} Config", corp_course_id, 1, 1, 1))
         corp_course_conf_id = cursor.lastrowid
         
         # 3. Iterate Modules and Lessons
         for mod_idx, mod in enumerate(modules):
-            section_sql = """
-                INSERT INTO corp_course_conf_section (
-                    corp_course_id, corp_course_conf_id, section_name, seq_num
-                ) VALUES (%s, %s, %s, %s)
-            """
+            section_sql = "INSERT INTO corp_course_conf_section (corp_course_id, corp_course_conf_id, section_name, seq_num) VALUES (%s, %s, %s, %s)"
             cursor.execute(section_sql, (corp_course_id, corp_course_conf_id, mod.get("title"), mod_idx + 1))
             section_id = cursor.lastrowid
             
             for chap_idx, chap in enumerate(mod.get("chapters", [])):
                 contents = chap.get("contents", [])
-                combined_html = ""
-                file_path = None
-                code_snippet = None
-                code_result = None
+                combined_html = "".join([b.get("content", "") + "<br/>" for b in contents]) if isinstance(contents, list) else ""
+                file_path = next((b.get("file_url") for b in contents if b.get("file_url")), None) if isinstance(contents, list) else None
+                code_snippet = next((b.get("code") for b in contents if b.get("code")), None) if isinstance(contents, list) else None
+                code_result = next((b.get("expected_output") for b in contents if b.get("expected_output")), None) if isinstance(contents, list) else None
                 
-                if isinstance(contents, list):
-                    for block in contents:
-                        if block.get("content"): combined_html += block["content"] + "<br/>"
-                        if block.get("file_url"): file_path = block["file_url"]
-                        if block.get("code"):
-                            code_snippet = block["code"]
-                            code_result = block.get("expected_output")
-                
+                # UPDATED: Added time_to_spend and time_to_spend_per_page with DEFAULT 0
                 details_sql = """
                     INSERT INTO corp_course_conf_section_details (
                         corp_course_id, corp_course_conf_id, corp_course_conf_section_id,
                         page_name, seq_num, content_type, content_path, 
-                        page_content, code_area, code_area_result, days
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        page_content, code_area, code_area_result, days,
+                        time_to_spend, time_to_spend_per_page
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0, 0)
                 """
                 
-                ctype = 10 # Default AI Content
+                ctype = 10 
                 if file_path:
                     if ".mp4" in file_path.lower(): ctype = 2
                     elif ".pdf" in file_path.lower(): ctype = 3
@@ -152,9 +133,7 @@ def save_course_to_mysql(course_data: Dict[str, Any]):
                 ))
         
         conn.commit()
-        print(f"DEBUG: MySQL Transaction Committed successfully.")
         return corp_course_id
-        
     except Exception as e:
         conn.rollback()
         print(f"DEBUG ERROR: {str(e)}")
@@ -184,6 +163,7 @@ def get_courses_from_mysql():
         for row in rows:
             courses.append({
                 "id": str(row["id"]),
+                "mysql_id": row["id"],
                 "details": {
                     "courseName": row["course_name"],
                     "description": row["course_desc"],
@@ -228,6 +208,7 @@ def get_course_details_from_mysql(course_id: int):
                 "requirements": course_row["requirements"],
                 "scriptingLanguage": course_row["script_lang"]
             },
+            "mysql_id": course_id,
             "structure": {"modules": []}
         }
         

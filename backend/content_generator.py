@@ -162,7 +162,7 @@ def generate_course_details_from_context() -> dict:
     7. courseType as 'Custom Course'
     8. language as 'English'
     9. scriptingLanguage as 'NA' or relevant language if content is technical
-    10. price (suggest a fair price in USD as a numeric string)
+    10. price (Suggest a fair price based on the complexity and depth of the topic. The price MUST be a numeric string and MUST ALWAYS be above 199).
     
     Output MUST be a JSON matching the CourseDetails schema.
     """

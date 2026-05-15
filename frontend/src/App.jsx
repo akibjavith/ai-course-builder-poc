@@ -92,7 +92,9 @@ function App() {
         },
         structure: fullCourse.structure || { modules: [] },
         content: fullCourse.content || [],
-        quiz: fullCourse.quiz || []
+        quiz: fullCourse.quiz || [],
+        usageHistory: fullCourse.usageHistory || [],
+        mysql_id: fullCourse.mysql_id
       });
       setCurrentStep(1);
       setView('builder');

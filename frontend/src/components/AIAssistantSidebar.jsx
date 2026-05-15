@@ -86,6 +86,11 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
         - Wrap JSON in [METADATA] blocks: [METADATA]{...}[/METADATA].
         - ALWAYS RETURN THE FULL AND COMPLETE OBJECT IN [METADATA].
         
+        PRICING RULES (CRITICAL):
+        - When suggesting details, ALWAYS include a "price" field.
+        - The price MUST be dynamic based on the course content complexity.
+        - The price MUST ALWAYS be a numeric string and MUST ALWAYS be above 199.
+        
         CRITICAL RULES FOR METADATA:
         - ALWAYS RETURN THE FULL AND COMPLETE OBJECT IN [METADATA]. 
         - IF A FIELD IS ALREADY PROVIDED IN "CURRENT CONTEXT" AND YOU ARE NOT CHANGING IT, YOU MUST STILL INCLUDE IT EXACTLY AS IS. 
