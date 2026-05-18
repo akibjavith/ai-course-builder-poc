@@ -107,21 +107,22 @@ def save_course_to_mysql(course_data: Dict[str, Any]):
             for chap_idx, chap in enumerate(mod.get("chapters", [])):
                 contents = chap.get("contents", [])
                 combined_html = "".join([b.get("content", "") + "<br/>" for b in contents]) if isinstance(contents, list) else ""
-                file_path = next((b.get("file_url") for b in contents if b.get("file_url")), None) if isinstance(contents, list) else None
-                code_snippet = next((b.get("code") for b in contents if b.get("code")), None) if isinstance(contents, list) else None
-                code_result = next((b.get("expected_output") for b in contents if b.get("expected_output")), None) if isinstance(contents, list) else None
+                file_path = next((b.get("file_url") for b in contents if b.get("file_url")), "") if isinstance(contents, list) else ""
+                code_snippet = next((b.get("code") for b in contents if b.get("code")), "") if isinstance(contents, list) else ""
+                code_result = next((b.get("expected_output") for b in contents if b.get("expected_output")), "") if isinstance(contents, list) else ""
                 
-                # UPDATED: Added time_to_spend and time_to_spend_per_page with DEFAULT 0
+                # UPDATED: Added time_to_spend and time_to_spend_per_page with DEFAULT 0, and page_num, file_name, elearn_fcard_ids, reference_links with DEFAULT ''
                 details_sql = """
                     INSERT INTO corp_course_conf_section_details (
                         corp_course_id, corp_course_conf_id, corp_course_conf_section_id,
                         page_name, seq_num, content_type, content_path, 
                         page_content, code_area, code_area_result, days,
-                        time_to_spend, time_to_spend_per_page
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0, 0)
+                        time_to_spend, time_to_spend_per_page,
+                        page_num, file_name, elearn_fcard_ids, reference_links
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0, 0, '', '', '', '')
                 """
                 
-                ctype = 10 
+                ctype = 0 
                 if file_path:
                     if ".mp4" in file_path.lower(): ctype = 2
                     elif ".pdf" in file_path.lower(): ctype = 3
