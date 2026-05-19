@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Bot, User, RefreshCw, Minus, X, Send, Sparkles, Wand2, PencilLine, CheckCircle2, Loader2, MessageSquareText, ChevronDown, Maximize2, Zap } from 'lucide-react';
 import { chatWithAI } from '../api';
 
-export default function AIAssistantSidebar({ details, courseData, onApply, onClose, scope = 'Course Details', initialInput = '', availableSubjects = [] }) {
+export default function AIAssistantSidebar({ details, courseData, onApply, onClose, scope = 'Course Details', initialInput = '', availableSubjects = [], onGenerateAllContent }) {
   const [messages, setMessages] = useState([
     {
       id: 1,
@@ -16,6 +16,7 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
+  const processedInputRef = useRef(null);
 
   const [isMinimized, setIsMinimized] = useState(false);
 
@@ -31,6 +32,12 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
 
   useEffect(() => {
     if (initialInput) {
+      const inputKey = typeof initialInput === 'object' ? initialInput.text : initialInput;
+      if (processedInputRef.current === inputKey) {
+        return; // Already processed this initial input, skip!
+      }
+      processedInputRef.current = inputKey;
+
       if (typeof initialInput === 'object') {
         if (initialInput.fillInput) setInput(initialInput.text);
         handleSend(initialInput.text, initialInput.display);
@@ -79,7 +86,8 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
         - NEVER ASK THE USER FOR DETAILS THEY ALREADY PROVIDED in the chat or in the "CURRENT CONTEXT".
         - PROACTIVE GENERATION: If the user gives you a topic (e.g., "Java" or "I want to create a course on Java"), DO NOT just ask them for more details. Immediately invent and generate a COMPLETE, highly detailed [METADATA] suggestion card (filling in a catchy title, full description, audience, and objectives yourself) to save them time. Add a conversational note like: "I've drafted some details for you! You can apply these, or let me know if you want to provide your own specifics."
         - If the user explicitly asks you to generate something but has provided absolutely NO topic in the chat or context, only then ask them: 'What topic would you like to create a course about?'
-        - If the user asks you to "create a structure", DO NOT ask them for the title, description, or objectives. Immediately use the "CURRENT CONTEXT" to build and output the full [METADATA] Structure Card. If the existing structure is empty, invent a comprehensive curriculum with at least 3-4 modules and 3-4 lessons each.
+        - If the user asks you to "create a structure", "Refine Structure", "Add Modules", or "Refine Topics", DO NOT ask them for the title, description, or objectives. Immediately build, update, and output the full [METADATA] Course Structure suggestion card. If the existing structure is empty, invent a comprehensive curriculum with at least 3-4 modules and 3-4 lessons each.
+        - Whenever modifying or refining a structure, you MUST return the entire updated Course Structure JSON wrapped inside a [METADATA]...[/METADATA] block.
         - For specific action requests, provide the conversational text AND the [METADATA] block.
         
         STRUCTURED DATA RULES:
@@ -382,7 +390,7 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
                       </div>
                       <div className="pt-2 flex gap-2 border-t border-slate-50 mt-4">
                          <button onClick={() => onApply(msg.data)} className="flex-1 bg-sky-600 text-white px-4 py-2.5 rounded-xl text-[11px] font-bold hover:bg-sky-700 transition flex items-center justify-center gap-2"><CheckCircle2 className="w-3.5 h-3.5" /> Apply Structure</button>
-                         <button onClick={() => handleSend("Optimize the logical flow.", "Refine Structure")} className="flex-1 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-[11px] font-bold hover:bg-slate-50 transition">Refine Structure</button>
+                         <button onClick={() => handleSend("Optimize the logical flow of the course structure. YOU MUST RETURN THE ENTIRE UPDATED COURSE STRUCTURE WITHIN A [METADATA]...[/METADATA] BLOCK MATCHING THE STRUCTURE SCHEMA.", "Refine Structure")} className="flex-1 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-[11px] font-bold hover:bg-slate-50 transition">Refine Structure</button>
                       </div>
                     </div>
                   )}
@@ -503,59 +511,73 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
                          ]);
                          return;
                        }
-                       const prompt = currentModules.length === 0 
-                         ? `The current structure is empty. Please generate a complete course structure with exactly 2 new, distinct modules (each containing 3-4 lessons) based on the course details. RETURN A FULL LIST containing these 2 new modules.`
-                         : `Keep the existing modules exactly as they are: ${JSON.stringify(currentModules)}. Suggest exactly 2 new, distinct modules to follow these that add more value to the course based on the course objectives. RETURN A FULL, COMBINED LIST containing all the existing modules PLUS the 2 new ones.`;
-                       handleSend(prompt, "Add Modules");
-                     };
- 
-                     const handleRefineTopics = () => {
-                       const prompt = `Keep the Module titles exactly as they are: ${JSON.stringify(currentModules.map(m => m.title || m.module_title))}. For each module, refine the chapter/lesson titles to be more practical, hands-on, and engaging. Return the FULL structure with updated lesson titles. DO NOT add or remove modules.`;
-                       handleSend(prompt, "Refine Topics");
-                     };
+                        const prompt = currentModules.length === 0 
+                          ? `The current structure is empty. Please generate a complete course structure with exactly 2 new, distinct modules (each containing 3-4 lessons) based on the course details. YOU MUST RETURN THE ENTIRE UPDATED COURSE STRUCTURE WITHIN A [METADATA]...[/METADATA] BLOCK MATCHING THE STRUCTURE SCHEMA.`
+                          : `Keep the existing modules exactly as they are: ${JSON.stringify(currentModules)}. Suggest exactly 2 new, distinct modules to follow these that add more value to the course based on the course objectives. YOU MUST RETURN THE ENTIRE UPDATED COURSE STRUCTURE CONTAINING ALL THE EXISTING MODULES PLUS THE 2 NEW ONES WITHIN A [METADATA]...[/METADATA] BLOCK MATCHING THE STRUCTURE SCHEMA.`;
+                        handleSend(prompt, "Add Modules");
+                      };
+
+                      const handleRefineTopics = () => {
+                        const prompt = `Keep the Module titles exactly as they are: ${JSON.stringify(currentModules.map(m => m.title || m.module_title))}. For each module, refine the chapter/lesson titles to be more practical, hands-on, and engaging. DO NOT add or remove modules. YOU MUST RETURN THE ENTIRE UPDATED COURSE STRUCTURE WITH THE REFINE TOPICS WITHIN A [METADATA]...[/METADATA] BLOCK MATCHING THE STRUCTURE SCHEMA.`;
+                        handleSend(prompt, "Refine Topics");
+                      };
  
                      if (!hasSuggestion) {
-                       return <button onClick={() => handleSend("Generate a complete course structure.", "Suggest Structure")} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Suggest Structure</button>;
-                     }
+                        return <button onClick={() => handleSend("Generate a complete course structure.", "Suggest Structure")} className="text-[10px] font-bold text-slate-500 hover:text-sky-600 hover:bg-sky-50 active:scale-95 active:bg-sky-100 transition-all border border-slate-200 bg-white px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm cursor-pointer hover:shadow">Suggest Structure</button>;
+                      }
  
                      return (
                        <>
-                         <button onClick={handleAddModules} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Add Modules</button>
-                         <button onClick={handleRefineTopics} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Refine Topics</button>
+                         <button onClick={handleAddModules} className="text-[10px] font-bold text-slate-500 hover:text-sky-600 hover:bg-sky-50 active:scale-95 active:bg-sky-100 transition-all border border-slate-200 bg-white px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm cursor-pointer hover:shadow">Add Modules</button>
+                         <button onClick={handleRefineTopics} className="text-[10px] font-bold text-slate-500 hover:text-sky-600 hover:bg-sky-50 active:scale-95 active:bg-sky-100 transition-all border border-slate-200 bg-white px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm cursor-pointer hover:shadow">Refine Topics</button>
                        </>
                      );
                    })()}
                  </>
                )}
  
-               {scope.includes("Content") && (
-                 <>
-                   {!messages.some(m => m.type === 'suggestion_content') ? (
-                     <button onClick={() => {
-                        const prompt = `Please generate high-quality, practical, and EXTREMELY detailed AI content generation prompts for ALL lessons in this course. 
- 
-                        QUALITY STANDARD:
-                        For every single lesson, the prompt must be a comprehensive guide that is exactly 100 to 150 words long. 
-                        Example of quality: "Write a comprehensive chapter on the fundamentals of Python variables. You must cover naming conventions, dynamic typing, and memory allocation in deep detail. Use a 'Storage Box' analogy to make it easy for beginners to understand. Include exactly 3 hands-on coding exercises where the user has to declare different types of variables, and provide a 5-question multiple choice quiz on Python naming rules at the end. Ensure the tone is encouraging and professional."
- 
-                        CRITICAL RULE: Do NOT provide short or generic single-line summaries. If a course has 10 lessons, you must provide 10 long, highly detailed prompts, each being 100-150 words.
- 
-                        Course Context:
-                        - Title: "${details?.title}"
-                        - Description: "${details?.description}"
- 
-                        RETURN THE FULL LIST:
-                        Format: { "prompts": [ { "module": "...", "title": "...", "prompt": "..." } ] }`;
-                        handleSend(prompt, "Generate All Prompts");
-                      }} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Generate All Prompts</button>
-                   ) : (
-                     <>
-                       <button onClick={() => handleSend("Make prompts more practical.", "Practical Focus")} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Practical Focus</button>
-                       <button onClick={() => handleSend("Make prompts more academic.", "Academic Focus")} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Academic Focus</button>
-                     </>
-                   )}
-                 </>
-               )}
+                {scope.includes("Content") && (
+                  <div className="flex flex-wrap gap-2">
+                    <button 
+                       onClick={() => {
+                          const prompt = `Please generate high-quality, practical, and EXTREMELY detailed AI content generation prompts for ALL lessons in this course. 
+
+                          QUALITY STANDARD:
+                          For every single lesson, the prompt must be a comprehensive guide that is exactly 100 to 150 words long. 
+                          Example of quality: "Write a comprehensive chapter on the fundamentals of Python variables. You must cover naming conventions, dynamic typing, and memory allocation in deep detail. Use a 'Storage Box' analogy to make it easy for beginners to understand. Include exactly 3 hands-on coding exercises where the user has to declare different types of variables, and provide a 5-question multiple choice quiz on Python naming rules at the end. Ensure the tone is encouraging and professional."
+
+                          CRITICAL RULE: Do NOT provide short or generic single-line summaries. If a course has 10 lessons, you must provide 10 long, highly detailed prompts, each being 100-150 words.
+
+                          Course Context:
+                          - Title: "${details?.courseName || details?.title}"
+                          - Description: "${details?.description}"
+
+                          RETURN THE FULL LIST:
+                          Format: { "prompts": [ { "module": "...", "title": "...", "prompt": "..." } ] }`;
+                          handleSend(prompt, "Generate All Prompts");
+                       }} 
+                       className="text-[10px] font-bold text-slate-500 hover:text-sky-600 hover:bg-sky-50 active:scale-95 active:bg-sky-100 transition-all border border-slate-200 bg-white px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm cursor-pointer hover:shadow"
+                     >
+                       <Bot className="w-3 h-3 text-sky-500" />
+                       <span>Generate All Prompts</span>
+                     </button>
+
+                     <button 
+                       onClick={onGenerateAllContent}
+                       className="text-[10px] font-bold text-slate-500 hover:text-sky-600 hover:bg-sky-50 active:scale-95 active:bg-sky-100 transition-all border border-slate-200 bg-white px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm cursor-pointer hover:shadow"
+                     >
+                       <Zap className="w-3 h-3 text-sky-500 animate-pulse" />
+                       <span>Generate All Content</span>
+                     </button>
+
+                     {messages.some(m => m.type === 'suggestion_content') && (
+                       <>
+                         <button onClick={() => handleSend("Make prompts more practical.", "Practical Focus")} className="text-[10px] font-bold text-slate-500 hover:text-sky-600 hover:bg-sky-50 active:scale-95 active:bg-sky-100 transition-all border border-slate-200 bg-white px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm cursor-pointer hover:shadow">Practical Focus</button>
+                         <button onClick={() => handleSend("Make prompts more academic.", "Academic Focus")} className="text-[10px] font-bold text-slate-500 hover:text-sky-600 hover:bg-sky-50 active:scale-95 active:bg-sky-100 transition-all border border-slate-200 bg-white px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm cursor-pointer hover:shadow">Academic Focus</button>
+                       </>
+                     )}
+                   </div>
+                )}
             </div>
           </div>
         </>

@@ -52,6 +52,9 @@ def save_course_to_mysql(course_data: Dict[str, Any]):
         # Determine elearn_flag
         has_content = 1 if any(mod.get("chapters") for mod in modules) else 0
         
+        import datetime
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
         if mysql_id:
             # UPDATE EXISTING COURSE
             print(f"DEBUG: Updating course {mysql_id}")
@@ -59,36 +62,43 @@ def save_course_to_mysql(course_data: Dict[str, Any]):
                 UPDATE corp_course SET 
                     course_name = %s, course_desc = %s, subject_id = %s, course_price = %s, 
                     script_lang = %s, no_of_days = %s, requirements = %s, course_level = %s, 
-                    course_language = %s, elearn_flag = %s
+                    course_language = %s, elearn_flag = %s, last_updated_on = %s
                 WHERE id = %s
             """
             course_vals = (
                 details.get("courseName"), details.get("description"), subject_id,
                 details.get("price"), details.get("scriptingLanguage"), details.get("duration") or 30,
                 details.get("requirements"), details.get("level"), details.get("language", "English"),
-                has_content, mysql_id
+                has_content, now_str, mysql_id
             )
             cursor.execute(course_sql, course_vals)
             corp_course_id = mysql_id
             
-            # Flush old structure to rebuild
-            cursor.execute("DELETE FROM corp_course_conf_section_details WHERE corp_course_id = %s", (mysql_id,))
+            # Flush old structure to rebuild (using safe cascading order and disabling foreign key checks during rebuilding)
+            cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
+            cursor.execute("""
+                DELETE FROM corp_course_conf_section_details 
+                WHERE corp_course_id = %s OR corp_course_conf_section_id IN (
+                    SELECT id FROM corp_course_conf_section WHERE corp_course_id = %s
+                )
+            """, (mysql_id, mysql_id))
             cursor.execute("DELETE FROM corp_course_conf_section WHERE corp_course_id = %s", (mysql_id,))
             cursor.execute("DELETE FROM corp_course_conf WHERE corp_course_id = %s", (mysql_id,))
+            cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
         else:
             # INSERT NEW COURSE
             course_sql = """
                 INSERT INTO corp_course (
                     course_name, course_desc, subject_id, course_price, script_lang, 
                     no_of_days, requirements, course_level, course_language, 
-                    active_status, elearn_flag, exam_flag, created_by, tenant_id
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    active_status, elearn_flag, exam_flag, created_by, tenant_id, last_updated_on
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             course_vals = (
                 details.get("courseName"), details.get("description"), subject_id,
                 details.get("price"), details.get("scriptingLanguage"), details.get("duration") or 30,
                 details.get("requirements"), details.get("level"), details.get("language", "English"),
-                0, has_content, 1, 2354, 1
+                0, has_content, 1, 2354, 1, now_str
             )
             cursor.execute(course_sql, course_vals)
             corp_course_id = cursor.lastrowid

@@ -147,23 +147,6 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
     updateCourseData('details', adapted);
   };
 
-  const handleAutoFill = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const res = await autoFillCourseDetails();
-      if (res.status === 'success' && res.details) {
-        handleApplyAISuggestion(res.details);
-      } else {
-        setError('Failed to extract details from content.');
-      }
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to auto-fill course details.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const isMandatoryFilled = details.courseType && details.subject && details.courseName && details.description && details.price && details.duration;
 
   return (
@@ -198,14 +181,6 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
               </div>
               
               <div className="flex items-center gap-2">
-                <button 
-                  onClick={handleAutoFill}
-                  disabled={loading}
-                  className="flex items-center gap-2 bg-white border-2 border-sky-100 text-sky-600 px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-sky-50 transition shadow-sm active:scale-95 disabled:opacity-50"
-                >
-                  {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
-                  <span>AUTO-FILL</span>
-                </button>
                 <button 
                   onClick={() => setShowSidebar(true)}
                   className="flex items-center gap-2 bg-sky-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-sky-700 transition shadow-lg shadow-sky-100 active:scale-95 group"

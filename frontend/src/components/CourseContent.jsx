@@ -25,7 +25,19 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
   const [loadingMap, setLoadingMap] = useState({});
   const [error, setError] = useState('');
   const [sidebarRequest, setSidebarRequest] = useState('');
+  const [showBulkMenu, setShowBulkMenu] = useState(false);
   const fileInputRef = useRef(null);
+  const bulkMenuRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (bulkMenuRef.current && !bulkMenuRef.current.contains(event.target)) {
+        setShowBulkMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Sync state helper
   const updateLessonContent = (mIdx, cIdx, updates, blockIdx = null) => {
@@ -120,6 +132,12 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
         })
       }));
       updateCourseData('structure', { ...courseData.structure, modules: newModules });
+      setModalConfig({
+        title: 'Prompts Applied',
+        message: 'The AI-generated prompts have been successfully added to your lessons!',
+        type: 'success',
+        confirmText: 'Great!'
+      });
     } else if (suggestion.prompt) {
       // Robust Targeted Application: Use title and module from metadata if available
       // Otherwise fallback to expandedLesson
@@ -159,8 +177,20 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
 
       if (targetM !== -1 && targetC !== -1) {
         updateLessonContent(targetM, targetC, { prompt: suggestion.prompt, source: 'ai' });
+        setModalConfig({
+          title: 'Prompt Applied',
+          message: 'The AI-generated prompt has been successfully added to this lesson!',
+          type: 'success',
+          confirmText: 'Great!'
+        });
       } else if (expandedLesson) {
         updateLessonContent(expandedLesson.mIdx, expandedLesson.cIdx, { prompt: suggestion.prompt, source: 'ai' });
+        setModalConfig({
+          title: 'Prompt Applied',
+          message: 'The AI-generated prompt has been successfully added to this lesson!',
+          type: 'success',
+          confirmText: 'Great!'
+        });
       }
     }
   };
@@ -181,10 +211,12 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
       };
       const res = await generateLessonContent(payload);
       
-      // Add as a NEW block instead of overwriting
-      const newModules = [...(courseData.structure?.modules || [])];
-      const chapter = newModules[mIdx].chapters[cIdx];
-      if (!chapter.contents) chapter.contents = (chapter.content && chapter.content.completed) ? [chapter.content] : [];
+      // Deep clone modules to avoid direct state mutation and ensure React detects change
+      const currentModules = JSON.parse(JSON.stringify(courseData.structure?.modules || []));
+      const chapter = currentModules[mIdx].chapters[cIdx];
+      if (!chapter.contents) {
+        chapter.contents = (chapter.content && chapter.content.completed) ? [chapter.content] : [];
+      }
       
       chapter.contents.push({ 
         ...res, 
@@ -194,7 +226,7 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
         timestamp: new Date().toISOString()
       });
 
-      updateCourseData('structure', { ...courseData.structure, modules: newModules });
+      updateCourseData('structure', { ...courseData.structure, modules: currentModules });
     } catch (err) {
       setError(`Failed to generate content for ${lesson.title}`);
     } finally {
@@ -284,12 +316,12 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
     setIsGeneratingAll(true);
     setError('');
     
-    // We maintain a local master copy of modules to avoid closure staleness issues
-    // during the loop updates.
     let currentModules = JSON.parse(JSON.stringify(courseData.structure.modules || []));
     let completedCount = 0;
     let failCount = 0;
 
+    // Collect all pending tasks
+    const tasks = [];
     for (let mIdx = 0; mIdx < currentModules.length; mIdx++) {
       const mod = currentModules[mIdx];
       for (let cIdx = 0; cIdx < (mod.chapters || []).length; cIdx++) {
@@ -297,48 +329,61 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
         const hasContents = (chap.contents && chap.contents.length > 0) || chap.content?.completed;
         
         if (!hasContents && chap.content?.prompt?.trim()) {
-          const key = `${mIdx}-${cIdx}`;
-          setLoadingMap(prev => ({ ...prev, [key]: true }));
-          
-          try {
-            const payload = {
-              title: chap.title,
-              module_title: mod.title,
-              prompt: chap.content.prompt,
-              type: chap.content.type || 'html',
-              course_details: courseData.details
-            };
-            
-            const res = await generateLessonContent(payload);
-            
-            // Update our local master copy
-            if (!currentModules[mIdx].chapters[cIdx].contents) {
-              currentModules[mIdx].chapters[cIdx].contents = [];
-            }
-            
-            currentModules[mIdx].chapters[cIdx].contents.push({
-              ...res,
-              source: 'ai',
-              type: chap.content.type || 'html',
-              completed: true,
-              timestamp: new Date().toISOString()
-            });
-
-            // Push the latest master copy to the global state
-            // We pass a fresh copy to ensure React detects the change
-            updateCourseData('structure', { 
-              ...courseData.structure, 
-              modules: JSON.parse(JSON.stringify(currentModules)) 
-            });
-            
-            completedCount++;
-          } catch (err) {
-            console.error(`Failed for ${chap.title}`, err);
-            failCount++;
-          } finally {
-            setLoadingMap(prev => ({ ...prev, [key]: false }));
-          }
+          tasks.push({ mIdx, cIdx, chap, mod });
         }
+      }
+    }
+
+    if (tasks.length === 0) {
+      setIsGeneratingAll(false);
+      return;
+    }
+
+    // Process tasks sequentially, one-by-one, so the UI updates in real-time
+    for (const task of tasks) {
+      const { mIdx, cIdx, chap, mod } = task;
+      const key = `${mIdx}-${cIdx}`;
+      setLoadingMap(prev => ({ ...prev, [key]: true }));
+      
+      try {
+        const payload = {
+          title: chap.title,
+          module_title: mod.title,
+          prompt: chap.content.prompt,
+          type: chap.content.type || 'html',
+          course_details: courseData.details
+        };
+        
+        const res = await generateLessonContent(payload);
+        
+        // Update our local copy safely
+        if (!currentModules[mIdx].chapters[cIdx].contents) {
+          currentModules[mIdx].chapters[cIdx].contents = 
+            (currentModules[mIdx].chapters[cIdx].content && currentModules[mIdx].chapters[cIdx].content.completed) 
+            ? [currentModules[mIdx].chapters[cIdx].content] 
+            : [];
+        }
+        
+        currentModules[mIdx].chapters[cIdx].contents.push({
+          ...res,
+          source: 'ai',
+          type: chap.content.type || 'html',
+          completed: true,
+          timestamp: new Date().toISOString()
+        });
+
+        // Update the React state immediately so this lesson's content renders right away!
+        updateCourseData('structure', { 
+          ...courseData.structure, 
+          modules: JSON.parse(JSON.stringify(currentModules)) 
+        });
+
+        completedCount++;
+      } catch (err) {
+        console.error(`Failed for ${chap.title}`, err);
+        failCount++;
+      } finally {
+        setLoadingMap(prev => ({ ...prev, [key]: false }));
       }
     }
     
@@ -352,6 +397,31 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
       type: failCount > 0 ? 'warning' : 'success',
       confirmText: 'Great!'
     });
+  };
+
+  const handleBulkGeneratePrompts = () => {
+    const prompt = `Please generate high-quality, practical, and EXTREMELY detailed AI content generation prompts for ALL lessons in this course. 
+
+    QUALITY STANDARD:
+    For every single lesson, the prompt must be a comprehensive guide that is exactly 100 to 150 words long. 
+    Example of quality: "Write a comprehensive chapter on the fundamentals of Python variables. You must cover naming conventions, dynamic typing, and memory allocation in deep detail. Use a 'Storage Box' analogy to make it easy for beginners to understand. Include exactly 3 hands-on coding exercises where the user has to declare different types of variables, and provide a 5-question multiple choice quiz on Python naming rules at the end. Ensure the tone is encouraging and professional."
+
+    CRITICAL RULE: Do NOT provide short or generic single-line summaries. If a course has 10 lessons, you must provide 10 long, highly detailed prompts, each being 100-150 words.
+
+    Course Context:
+    - Title: "${courseData.details?.courseName || courseData.details?.title}"
+    - Description: "${courseData.details?.description}"
+
+    RETURN THE FULL LIST:
+    Format: { "prompts": [ { "module": "...", "title": "...", "prompt": "..." } ] }`;
+    
+    setSidebarRequest({ 
+      text: prompt, 
+      display: "Generate All Prompts", 
+      fillInput: false 
+    });
+    setShowSidebar(true);
+    setTimeout(() => setSidebarRequest(null), 100);
   };
 
   const handleGenerateAllContent = async () => {
@@ -401,7 +471,16 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
       return;
     }
 
-    triggerGenerateAll();
+    setModalConfig({
+      title: 'Bulk Generation Started',
+      message: 'We are now generating comprehensive, interactive learning materials for all ready lessons. Please sit back and watch your course come to life lesson-by-lesson!',
+      type: 'success',
+      confirmText: 'Awesome!',
+      onConfirm: () => {
+        setModalConfig(null);
+        triggerGenerateAll();
+      }
+    });
   };
 
   return (
@@ -436,16 +515,8 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
                 <p className="text-slate-400 font-semibold text-[10px] tracking-wide uppercase leading-relaxed">Grouped by modules. AI is enabled by default with HTML content.</p>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={handleGenerateAllContent}
-                  disabled={isGeneratingAll}
-                  title="Generate content for all missing lessons"
-                  className="flex items-center gap-2 bg-sky-600 text-white px-5 py-3 rounded-xl text-xs font-bold hover:bg-sky-700 transition shadow-lg shadow-sky-100 active:scale-95 disabled:opacity-50"
-                >
-                  {isGeneratingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-                  <span>{isGeneratingAll ? 'GENERATING...' : 'GENERATE ALL'}</span>
-                </button>
+              <div className="flex items-center gap-2 relative">
+                {/* ASK AI Button (moved to the left) */}
                 <button 
                   onClick={() => setShowSidebar(true)}
                   className="flex items-center gap-2 bg-sky-600 text-white px-5 py-3 rounded-xl text-xs font-bold hover:bg-sky-700 transition shadow-lg shadow-sky-100 active:scale-95 group"
@@ -453,6 +524,44 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
                   <MessageSquareText className="w-3.5 h-3.5" /> 
                   <span>ASK AI</span>
                 </button>
+
+                {/* Bulk Action Dropdown Container */}
+                <div className="relative" ref={bulkMenuRef}>
+                  <button 
+                    onClick={() => setShowBulkMenu(!showBulkMenu)}
+                    className="flex items-center gap-2 bg-white border-2 border-slate-100 text-slate-700 px-5 py-3 rounded-xl text-xs font-bold hover:bg-slate-50 hover:border-slate-200 transition shadow-sm active:scale-95"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-sky-600 animate-pulse" />
+                    <span>BULK ACTION</span>
+                    <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${showBulkMenu ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {showBulkMenu && (
+                    <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-white border border-slate-100 shadow-xl py-2 z-50 animate-scale-in">
+                      <button 
+                        onClick={() => {
+                          setShowBulkMenu(false);
+                          handleBulkGeneratePrompts();
+                        }}
+                        className="w-full text-left px-4 py-3 text-xs font-bold text-slate-600 hover:text-sky-600 hover:bg-sky-50/50 transition flex items-center gap-2"
+                      >
+                        <Bot className="w-4 h-4 text-sky-500" />
+                        <span>Generate all Prompt</span>
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setShowBulkMenu(false);
+                          handleGenerateAllContent();
+                        }}
+                        className="w-full text-left px-4 py-3 text-xs font-bold text-slate-600 hover:text-sky-600 hover:bg-sky-50/50 transition flex items-center gap-2"
+                      >
+                        <Zap className="w-4 h-4 text-sky-500" />
+                        <span>Generate all Content</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -494,17 +603,26 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
                                 >
                                   <MessageSquareText className={`w-2.5 h-2.5 ${chap.content?.prompt?.trim() ? 'text-sky-600' : 'text-slate-400'}`} />
                                 </div>
-                                {/* Content Type Icons */}
-                                {((chap.contents || (chap.content?.completed ? [chap.content] : []))).map((c, i) => {
-                                  const TypeIcon = CONTENT_TYPES.find(t => t.id === (c.type || 'html'))?.icon || FileJson;
-                                  return (
-                                    <div key={i} className="w-5 h-5 rounded-full bg-white border border-slate-100 flex items-center justify-center shadow-sm" title={c.type}>
-                                      <TypeIcon className="w-2.5 h-2.5 text-sky-600" />
-                                    </div>
-                                  );
-                                })}
-                                {(chap.contents || []).length === 0 && !chap.content?.completed && (
-                                  <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest px-2">No Content</span>
+                                {/* Loading Spinner or Normal Content Type Icons */}
+                                {loadingMap[`${mIdx}-${cIdx}`] ? (
+                                  <div className="flex items-center gap-1.5 bg-sky-50 border border-sky-100 px-2 py-0.5 rounded-full shadow-sm animate-pulse z-20">
+                                    <Loader2 className="w-2.5 h-2.5 text-sky-600 animate-spin" />
+                                    <span className="text-[8px] font-black text-sky-600 uppercase tracking-wider">Generating...</span>
+                                  </div>
+                                ) : (
+                                  <>
+                                    {((chap.contents || (chap.content?.completed ? [chap.content] : []))).map((c, i) => {
+                                      const TypeIcon = CONTENT_TYPES.find(t => t.id === (c.type || 'html'))?.icon || FileJson;
+                                      return (
+                                        <div key={i} className="w-5 h-5 rounded-full bg-white border border-slate-100 flex items-center justify-center shadow-sm" title={c.type}>
+                                          <TypeIcon className="w-2.5 h-2.5 text-sky-600" />
+                                        </div>
+                                      );
+                                    })}
+                                    {(chap.contents || []).length === 0 && !chap.content?.completed && (
+                                      <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest px-2">No Content</span>
+                                    )}
+                                  </>
                                 )}
                               </div>
                               <button 
@@ -718,6 +836,7 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
               onClose={() => setShowSidebar(false)} 
               scope="Step 4: Course Content"
               initialInput={sidebarRequest}
+              onGenerateAllContent={handleGenerateAllContent}
             />
           )}
         </div>
