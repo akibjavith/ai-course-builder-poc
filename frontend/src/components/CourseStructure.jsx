@@ -15,6 +15,8 @@ export default function CourseStructure({ courseData, updateCourseData, onNext, 
   const [expandedModules, setExpandedModules] = useState({});
   const [editingModuleIdx, setEditingModuleIdx] = useState(null);
   const [editingLessonIdx, setEditingLessonIdx] = useState({ modIdx: null, chapIdx: null });
+  const [draggedModuleIdx, setDraggedModuleIdx] = useState(null);
+  const [draggedLesson, setDraggedLesson] = useState({ modIdx: null, chapIdx: null });
 
   const toggleModule = (idx) => {
     setExpandedModules(prev => ({ ...prev, [idx]: !prev[idx] }));
@@ -23,6 +25,76 @@ export default function CourseStructure({ courseData, updateCourseData, onNext, 
   const updateGlobalStructure = (newStructure) => {
     setStructure(newStructure);
     updateCourseData('structure', newStructure);
+  };
+
+  const handleModuleDragStart = (e, idx) => {
+    const targetTag = e.target.tagName.toLowerCase();
+    if (
+      targetTag === 'input' || 
+      targetTag === 'button' || 
+      e.target.closest('.group\\/lesson') || 
+      e.target.closest('button')
+    ) {
+      e.preventDefault();
+      return;
+    }
+    setDraggedModuleIdx(idx);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleModuleDragOver = (e, idx) => {
+    e.preventDefault();
+  };
+
+  const handleModuleDrop = (e, targetIdx) => {
+    e.preventDefault();
+    if (draggedModuleIdx === null || draggedModuleIdx === targetIdx) return;
+
+    const newModules = [...structure.modules];
+    const [removed] = newModules.splice(draggedModuleIdx, 1);
+    newModules.splice(targetIdx, 0, removed);
+
+    updateGlobalStructure({ ...structure, modules: newModules });
+    setDraggedModuleIdx(null);
+  };
+
+  const handleModuleDragEnd = () => {
+    setDraggedModuleIdx(null);
+  };
+
+  const handleLessonDragStart = (e, modIdx, chapIdx) => {
+    e.stopPropagation();
+    setDraggedLesson({ modIdx, chapIdx });
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleLessonDragOver = (e, modIdx, chapIdx) => {
+    e.preventDefault();
+  };
+
+  const handleLessonDrop = (e, targetModIdx, targetChapIdx) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const { modIdx: sourceModIdx, chapIdx: sourceChapIdx } = draggedLesson;
+    
+    if (sourceModIdx === null || sourceModIdx !== targetModIdx || sourceChapIdx === targetChapIdx) {
+      setDraggedLesson({ modIdx: null, chapIdx: null });
+      return;
+    }
+
+    const newModules = [...structure.modules];
+    const chapters = [...newModules[targetModIdx].chapters];
+    const [removed] = chapters.splice(sourceChapIdx, 1);
+    chapters.splice(targetChapIdx, 0, removed);
+    newModules[targetModIdx].chapters = chapters;
+
+    updateGlobalStructure({ ...structure, modules: newModules });
+    setDraggedLesson({ modIdx: null, chapIdx: null });
+  };
+
+  const handleLessonDragEnd = () => {
+    setDraggedLesson({ modIdx: null, chapIdx: null });
   };
 
   const handleAddModule = () => {
@@ -156,7 +228,15 @@ export default function CourseStructure({ courseData, updateCourseData, onNext, 
               ) : (
                 <div className="space-y-4">
                   {structure.modules.map((mod, modIdx) => (
-                    <div key={modIdx} className="group animate-scale-in">
+                    <div 
+                      key={modIdx} 
+                      className={`group animate-scale-in transition-all duration-200 ${draggedModuleIdx === modIdx ? 'opacity-30 border-2 border-dashed border-sky-400 bg-sky-50/10 rounded-[1.5rem]' : ''}`}
+                      draggable={true}
+                      onDragStart={(e) => handleModuleDragStart(e, modIdx)}
+                      onDragOver={(e) => handleModuleDragOver(e, modIdx)}
+                      onDrop={(e) => handleModuleDrop(e, modIdx)}
+                      onDragEnd={handleModuleDragEnd}
+                    >
                       {/* Module Header */}
                       <div className={`
                         flex items-center gap-4 p-4 rounded-[1.5rem] border-2 transition-all duration-300
@@ -213,7 +293,18 @@ export default function CourseStructure({ courseData, updateCourseData, onNext, 
                       {expandedModules[modIdx] && (
                         <div className="ml-14 mt-2 space-y-2 pb-2">
                           {mod.chapters?.map((chap, chapIdx) => (
-                            <div key={chapIdx} className="flex items-center gap-3 p-3 rounded-2xl bg-white border border-slate-50 group/lesson hover:border-sky-50 hover:shadow-sm transition-all">
+                            <div 
+                              key={chapIdx} 
+                              className={`flex items-center gap-3 p-3 rounded-2xl bg-white border border-slate-50 group/lesson hover:border-sky-50 hover:shadow-sm transition-all duration-200 ${draggedLesson.modIdx === modIdx && draggedLesson.chapIdx === chapIdx ? 'opacity-30 border-2 border-dashed border-sky-400 bg-sky-50/10' : ''}`}
+                              draggable={true}
+                              onDragStart={(e) => handleLessonDragStart(e, modIdx, chapIdx)}
+                              onDragOver={(e) => handleLessonDragOver(e, modIdx, chapIdx)}
+                              onDrop={(e) => handleLessonDrop(e, modIdx, chapIdx)}
+                              onDragEnd={handleLessonDragEnd}
+                            >
+                              <div className="flex-shrink-0 cursor-grab active:cursor-grabbing p-0.5 opacity-40 group-hover/lesson:opacity-100 transition-opacity">
+                                <GripVertical className="w-3.5 h-3.5 text-slate-400" />
+                              </div>
                               <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center flex-shrink-0 group-hover/lesson:bg-sky-50 transition-colors">
                                 <FileJson className="w-3.5 h-3.5 text-slate-400 group-hover/lesson:text-sky-500" />
                               </div>

@@ -620,7 +620,14 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
                                       );
                                     })}
                                     {(chap.contents || []).length === 0 && !chap.content?.completed && (
-                                      <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest px-2">No Content</span>
+                                      isGeneratingAll ? (
+                                        <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-100/60 px-2 py-0.5 rounded-full shadow-sm z-20 animate-pulse">
+                                          <Loader2 className="w-2.5 h-2.5 text-amber-500 animate-spin" style={{ animationDuration: '3s' }} />
+                                          <span className="text-[8px] font-black text-amber-600 uppercase tracking-wider">In Progress</span>
+                                        </div>
+                                      ) : (
+                                        <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest px-2">No Content</span>
+                                      )
                                     )}
                                   </>
                                 )}
