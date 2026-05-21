@@ -852,14 +852,44 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
   );
 }
 
+const MenuBar = () => {
+  const exec = (command, value = null) => {
+    document.execCommand(command, false, value);
+  };
+  
+  return (
+    <div className="flex flex-wrap items-center gap-1 p-2 bg-slate-50 border-b border-slate-100 rounded-t-2xl">
+      <button onClick={() => exec('bold')} className="p-1.5 rounded text-slate-600 hover:bg-slate-200 transition"><b>B</b></button>
+      <button onClick={() => exec('italic')} className="p-1.5 rounded text-slate-600 hover:bg-slate-200 transition italic">I</button>
+      <button onClick={() => exec('strikeThrough')} className="p-1.5 rounded text-slate-600 hover:bg-slate-200 transition line-through">S</button>
+      <div className="w-px h-4 bg-slate-200 mx-1" />
+      <button onClick={() => exec('formatBlock', 'H1')} className="p-1.5 rounded text-[11px] font-bold text-slate-600 hover:bg-slate-200 transition">H1</button>
+      <button onClick={() => exec('formatBlock', 'H2')} className="p-1.5 rounded text-[11px] font-bold text-slate-600 hover:bg-slate-200 transition">H2</button>
+      <button onClick={() => exec('formatBlock', 'H3')} className="p-1.5 rounded text-[11px] font-bold text-slate-600 hover:bg-slate-200 transition">H3</button>
+      <div className="w-px h-4 bg-slate-200 mx-1" />
+      <button onClick={() => exec('insertUnorderedList')} className="p-1.5 rounded text-[11px] font-bold text-slate-600 hover:bg-slate-200 transition">• List</button>
+      <button onClick={() => exec('insertOrderedList')} className="p-1.5 rounded text-[11px] font-bold text-slate-600 hover:bg-slate-200 transition">1. List</button>
+    </div>
+  );
+};
+
 function ContentBlock({ block, onDelete, onUpdate, onMoveUp, onMoveDown, isFirst, isLast }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [editValue, setEditValue] = useState(block.content || '');
+  const editorRef = useRef(null);
   const TypeIcon = CONTENT_TYPES.find(t => t.id === (block.type || 'html'))?.icon || FileJson;
 
+  useEffect(() => {
+    if (editorRef.current && !isEditing) {
+      editorRef.current.innerHTML = block.content || '';
+    }
+  }, [block.content, isEditing]);
+
   const handleSave = () => {
-    onUpdate({ content: editValue });
+    if (editorRef.current) {
+      onUpdate({ content: editorRef.current.innerHTML });
+    }
     setIsEditing(false);
   };
 
@@ -925,11 +955,16 @@ function ContentBlock({ block, onDelete, onUpdate, onMoveUp, onMoveDown, isFirst
         <div className="p-5">
           {isEditing ? (
             <div className="space-y-3">
-               <textarea 
-                 value={editValue}
-                 onChange={(e) => setEditValue(e.target.value)}
-                 className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-[11px] font-medium min-h-[200px] focus:border-sky-200 outline-none transition-all leading-relaxed"
-               />
+               <div className="border-2 border-slate-100 rounded-2xl bg-white overflow-hidden transition-all focus-within:border-sky-200 shadow-sm flex flex-col">
+                 <MenuBar />
+                 <div 
+                   ref={editorRef}
+                   className="prose prose-slate prose-sm max-w-none p-4 text-[12px] text-slate-600 leading-relaxed outline-none min-h-[200px] flex-1 overflow-y-auto"
+                   contentEditable={true}
+                   suppressContentEditableWarning={true}
+                   dangerouslySetInnerHTML={{ __html: block.content || '' }}
+                 />
+               </div>
                <div className="flex justify-end gap-2">
                   <button onClick={() => setIsEditing(false)} className="px-3 py-1.5 text-[10px] font-bold text-slate-400 hover:text-slate-600">Cancel</button>
                   <button onClick={handleSave} className="bg-sky-600 text-white px-4 py-1.5 rounded-xl text-[10px] font-bold shadow-lg shadow-sky-100">Save Changes</button>
