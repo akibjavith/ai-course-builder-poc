@@ -147,6 +147,15 @@ async def list_courses():
     try:
         from database import get_courses_from_mysql
         courses = get_courses_from_mysql()
+        # Merge in any locally-saved JSON courses that are not in MySQL (e.g., if DB save failed)
+        try:
+            json_courses = get_courses()
+            seen_ids = {str(c.get("id")) for c in courses if c.get("id") is not None}
+            for jc in json_courses:
+                if str(jc.get("id")) not in seen_ids:
+                    courses.append(jc)
+        except Exception:
+            pass
         return {"courses": courses}
     except Exception as e:
         print(f"Error fetching from MySQL: {e}")

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import AIAssistantSidebar from './AIAssistantSidebar';
 import ActionModal from './ActionModal';
+import LessonPreviewEditorModal from './LessonPreviewEditorModal';
 import { generateLessonContent, uploadChapterMedia } from '../api';
 
 const CONTENT_TYPES = [
@@ -19,15 +20,37 @@ const CONTENT_TYPES = [
   { id: 'assessment', label: 'Assessment', icon: CheckSquare, color: 'text-slate-300', bg: 'bg-slate-50', disabled: true },
 ];
 
-export default function CourseContent({ courseData, updateCourseData, onNext, onBack }) {
+export default function CourseContent({ courseData, updateCourseData, contentGenUi, setContentGenUi, onNext, onBack }) {
   const [expandedLesson, setExpandedLesson] = useState(null); // { mIdx, cIdx }
+  const [previewLesson, setPreviewLesson] = useState(null); // { mIdx, cIdx, startInEdit }
   const [showSidebar, setShowSidebar] = useState(false);
-  const [loadingMap, setLoadingMap] = useState({});
   const [error, setError] = useState('');
   const [sidebarRequest, setSidebarRequest] = useState('');
   const [showBulkMenu, setShowBulkMenu] = useState(false);
   const fileInputRef = useRef(null);
   const bulkMenuRef = useRef(null);
+
+  const loadingMap = contentGenUi?.loadingMap || {};
+  const isGeneratingAll = !!contentGenUi?.isGeneratingAll;
+  const modalConfig = contentGenUi?.modalConfig || null;
+
+  const setLoadingMap = (updater) => {
+    if (!setContentGenUi) return;
+    setContentGenUi((prev) => ({
+      ...prev,
+      loadingMap: typeof updater === 'function' ? updater(prev.loadingMap || {}) : updater,
+    }));
+  };
+
+  const setIsGeneratingAll = (value) => {
+    if (!setContentGenUi) return;
+    setContentGenUi((prev) => ({ ...prev, isGeneratingAll: value }));
+  };
+
+  const setModalConfig = (value) => {
+    if (!setContentGenUi) return;
+    setContentGenUi((prev) => ({ ...prev, modalConfig: value }));
+  };
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -109,6 +132,8 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
     });
     updateCourseData('structure', { ...courseData.structure, modules: newModules });
   };
+
+  // NOTE: deleting lessons is not supported here; only content blocks should be deleted.
 
   const handleApplyAISuggestion = (suggestion) => {
     if (suggestion.prompts && Array.isArray(suggestion.prompts) && suggestion.prompts.length > 0) {
@@ -309,8 +334,7 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
     });
   });
 
-  const [isGeneratingAll, setIsGeneratingAll] = useState(false);
-  const [modalConfig, setModalConfig] = useState(null);
+
 
   const triggerGenerateAll = async () => {
     setIsGeneratingAll(true);
@@ -645,21 +669,18 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
                         {/* Lesson Detail (Expanded) */}
                         {expandedLesson?.mIdx === mIdx && expandedLesson?.cIdx === cIdx && (
                           <div className="mt-4 space-y-8 animate-in slide-in-from-top-2 duration-300">
-                            
-                            {/* Existing Content Blocks */}
+
+                            {/* Existing Generated Content (preview/edit/delete) */}
                             {(chap.contents || (chap.content?.completed ? [chap.content] : [])).length > 0 && (
-                              <div className="space-y-4">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2">Lesson Material Stack</label>
+                              <div className="space-y-3">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2">Lesson Material</label>
                                 {(chap.contents || (chap.content?.completed ? [chap.content] : [])).map((block, bIdx) => (
-                                  <ContentBlock 
+                                  <ContentBlock
                                     key={bIdx}
                                     block={block}
                                     onDelete={() => deleteContentBlock(mIdx, cIdx, bIdx)}
-                                    onUpdate={(updates) => updateLessonContent(mIdx, cIdx, updates, bIdx)}
-                                    onMoveUp={() => moveContentBlock(mIdx, cIdx, bIdx, -1)}
-                                    onMoveDown={() => moveContentBlock(mIdx, cIdx, bIdx, 1)}
-                                    isFirst={bIdx === 0}
-                                    isLast={bIdx === (chap.contents?.length || 1) - 1}
+                                    onPreview={() => setPreviewLesson({ mIdx, cIdx, startInEdit: false })}
+                                    onEdit={() => setPreviewLesson({ mIdx, cIdx, startInEdit: true })}
                                   />
                                 ))}
                               </div>
@@ -818,6 +839,17 @@ export default function CourseContent({ courseData, updateCourseData, onNext, on
           </div>
         </div>
 
+        {previewLesson && (
+          <LessonPreviewEditorModal
+            courseData={courseData}
+            updateCourseData={updateCourseData}
+            initialMIdx={previewLesson.mIdx}
+            initialCIdx={previewLesson.cIdx}
+            startInEdit={previewLesson.startInEdit}
+            onClose={() => setPreviewLesson(null)}
+          />
+        )}
+
         {/* AI Assistant Sidebar Area */}
         <div className="col-span-12 lg:col-span-4 h-full relative lg:sticky lg:top-6 flex-shrink-0 min-w-[400px]">
           {!showSidebar ? (
@@ -873,30 +905,12 @@ const MenuBar = () => {
   );
 };
 
-function ContentBlock({ block, onDelete, onUpdate, onMoveUp, onMoveDown, isFirst, isLast }) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
-  const [editValue, setEditValue] = useState(block.content || '');
-  const editorRef = useRef(null);
+function ContentBlock({ block, onDelete, onPreview, onEdit }) {
   const TypeIcon = CONTENT_TYPES.find(t => t.id === (block.type || 'html'))?.icon || FileJson;
-
-  useEffect(() => {
-    if (editorRef.current && !isEditing) {
-      editorRef.current.innerHTML = block.content || '';
-    }
-  }, [block.content, isEditing]);
-
-  const handleSave = () => {
-    if (editorRef.current) {
-      onUpdate({ content: editorRef.current.innerHTML });
-    }
-    setIsEditing(false);
-  };
 
   return (
     <div className="bg-white border border-slate-100 rounded-3xl overflow-hidden shadow-sm group/block animate-in fade-in slide-in-from-bottom-2">
-      {/* Block Header */}
-      <div className="bg-slate-50/50 px-4 py-3 border-b border-slate-50 flex items-center justify-between">
+      <div className="bg-slate-50/50 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-sky-600 shadow-sm">
             <TypeIcon className="w-4 h-4" />
@@ -910,33 +924,18 @@ function ContentBlock({ block, onDelete, onUpdate, onMoveUp, onMoveDown, isFirst
         </div>
         
         <div className="flex items-center gap-1 opacity-0 group-hover/block:opacity-100 transition-opacity">
-          <button 
-            onClick={() => setIsMinimized(!isMinimized)}
+          <button
+            onClick={onPreview}
             className="p-1.5 text-slate-400 hover:bg-white hover:text-sky-600 rounded-lg transition"
-            title={isMinimized ? "Expand" : "Minimize"}
+            title="Preview lesson"
           >
-            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isMinimized ? '-rotate-90' : ''}`} />
+            <Eye className="w-3.5 h-3.5" />
           </button>
-          <div className="w-px h-4 bg-slate-200 mx-1" />
-          <button 
-            disabled={isFirst}
-            onClick={onMoveUp}
-            className="p-1.5 text-slate-400 hover:bg-white hover:text-sky-600 rounded-lg transition disabled:opacity-30"
-          >
-            <ChevronDown className="w-3.5 h-3.5 rotate-180" />
-          </button>
-          <button 
-            disabled={isLast}
-            onClick={onMoveDown}
-            className="p-1.5 text-slate-400 hover:bg-white hover:text-sky-600 rounded-lg transition disabled:opacity-30"
-          >
-            <ChevronDown className="w-3.5 h-3.5" />
-          </button>
-          <div className="w-px h-4 bg-slate-200 mx-1" />
           {block.type === 'html' && (
-            <button 
-              onClick={() => setIsEditing(!isEditing)}
-              className={`p-1.5 rounded-lg transition ${isEditing ? 'bg-sky-100 text-sky-600' : 'text-slate-400 hover:bg-white hover:text-sky-600'}`}
+            <button
+              onClick={onEdit}
+              className="p-1.5 rounded-lg transition text-slate-400 hover:bg-white hover:text-sky-600"
+              title="Edit in preview"
             >
               <Edit3 className="w-3.5 h-3.5" />
             </button>
@@ -944,64 +943,12 @@ function ContentBlock({ block, onDelete, onUpdate, onMoveUp, onMoveDown, isFirst
           <button 
             onClick={onDelete}
             className="p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 rounded-lg transition"
+            title="Delete block"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
-
-      {/* Block Content */}
-      {!isMinimized && (
-        <div className="p-5">
-          {isEditing ? (
-            <div className="space-y-3">
-               <div className="border-2 border-slate-100 rounded-2xl bg-white overflow-hidden transition-all focus-within:border-sky-200 shadow-sm flex flex-col">
-                 <MenuBar />
-                 <div 
-                   ref={editorRef}
-                   className="prose prose-slate prose-sm max-w-none p-4 text-[12px] text-slate-600 leading-relaxed outline-none min-h-[200px] flex-1 overflow-y-auto"
-                   contentEditable={true}
-                   suppressContentEditableWarning={true}
-                   dangerouslySetInnerHTML={{ __html: block.content || '' }}
-                 />
-               </div>
-               <div className="flex justify-end gap-2">
-                  <button onClick={() => setIsEditing(false)} className="px-3 py-1.5 text-[10px] font-bold text-slate-400 hover:text-slate-600">Cancel</button>
-                  <button onClick={handleSave} className="bg-sky-600 text-white px-4 py-1.5 rounded-xl text-[10px] font-bold shadow-lg shadow-sky-100">Save Changes</button>
-               </div>
-            </div>
-          ) : (
-            <div className="prose prose-slate prose-sm max-w-none">
-              {block.type === 'html' ? (
-                <div 
-                  className="text-[12px] text-slate-600 leading-relaxed space-y-4"
-                  dangerouslySetInnerHTML={{ __html: block.content }} 
-                />
-              ) : block.file_name ? (
-                <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100/50">
-                  <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-sky-500 shadow-sm">
-                    <FileJson className="w-6 h-6" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-[11px] font-bold text-slate-900">{block.file_name}</p>
-                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{block.type || 'FILE'}</p>
-                  </div>
-                  <a 
-                    href={block.file_url} 
-                    target="_blank" 
-                    rel="noreferrer"
-                    className="p-2 bg-white border border-slate-100 rounded-xl text-sky-600 hover:bg-sky-50 transition shadow-sm"
-                  >
-                    <Eye className="w-4 h-4" />
-                  </a>
-                </div>
-              ) : (
-                <p className="text-[11px] text-slate-400 italic">No content available for this block.</p>
-              )}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

@@ -36,6 +36,24 @@ def save_course_to_mysql(course_data: Dict[str, Any]):
     cursor = conn.cursor()
     
     try:
+        # Fetch available columns for compatibility across DB variants
+        cursor.execute(
+            """
+            SELECT COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'corp_course_conf_section_details'
+            """
+        )
+        # Case-insensitive lookup to avoid missing columns due to casing differences.
+        details_cols_raw = [row[0] for row in cursor.fetchall()]
+        details_cols_map = {str(name).lower(): name for name in details_cols_raw}
+        track_col = details_cols_map.get("track_excercise")
+        # DBs may use camelCase or snake_case for this flag.
+        docwise_col = details_cols_map.get("docwisetimetrackflag") or details_cols_map.get("doc_wise_time_track_flag")
+        has_track_excercise = track_col is not None
+        has_docwise_flag = docwise_col is not None
+
         details = course_data.get("details", {})
         structure = course_data.get("structure", {})
         modules = structure.get("modules", [])
@@ -121,15 +139,27 @@ def save_course_to_mysql(course_data: Dict[str, Any]):
                 code_snippet = next((b.get("code") for b in contents if b.get("code")), "") if isinstance(contents, list) else ""
                 code_result = next((b.get("expected_output") for b in contents if b.get("expected_output")), "") if isinstance(contents, list) else ""
                 
-                # UPDATED: Added time_to_spend and time_to_spend_per_page with DEFAULT 0, and page_num, file_name, elearn_fcard_ids, reference_links with DEFAULT ''
-                details_sql = """
+                # Build INSERT based on actual table columns (avoids breaking when columns differ)
+                col_names = [
+                    "corp_course_id", "corp_course_conf_id", "corp_course_conf_section_id",
+                    "page_name", "seq_num", "content_type", "content_path",
+                    "page_content", "code_area", "code_area_result", "days",
+                    "time_to_spend", "time_to_spend_per_page",
+                    "page_num", "file_name", "elearn_fcard_ids", "reference_links",
+                ]
+                placeholders = ["%s"] * 11 + ["0", "0", "''", "''", "''", "''"]
+
+                if has_track_excercise:
+                    col_names.append(track_col)
+                    placeholders.append("1")
+                if has_docwise_flag:
+                    col_names.append(docwise_col)
+                    placeholders.append("1")
+
+                details_sql = f"""
                     INSERT INTO corp_course_conf_section_details (
-                        corp_course_id, corp_course_conf_id, corp_course_conf_section_id,
-                        page_name, seq_num, content_type, content_path, 
-                        page_content, code_area, code_area_result, days,
-                        time_to_spend, time_to_spend_per_page,
-                        page_num, file_name, elearn_fcard_ids, reference_links
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0, 0, '', '', '', '')
+                        {", ".join(col_names)}
+                    ) VALUES ({", ".join(placeholders)})
                 """
                 
                 ctype = 0 
@@ -142,6 +172,49 @@ def save_course_to_mysql(course_data: Dict[str, Any]):
                     chap.get("title"), chap_idx + 1, ctype, file_path,
                     combined_html, code_snippet, code_result, 1
                 ))
+
+        # Ensure flags are set to 1 for all inserted lesson rows.
+        # Some environments have schema/name variations (camelCase vs snake_case) or defaults/triggers.
+        def try_update_flag(possible_cols, value_sql):
+            for col in possible_cols:
+                if not col:
+                    continue
+                try:
+                    cursor.execute(
+                        f"UPDATE corp_course_conf_section_details SET {col} = {value_sql} WHERE corp_course_id = %s",
+                        (corp_course_id,)
+                    )
+                except Exception:
+                    # Ignore unknown-column errors and try the next variant
+                    continue
+
+        if has_track_excercise:
+            try_update_flag(
+                [
+                    track_col,
+                    details_cols_map.get("track_excercise"),
+                    details_cols_map.get("track_exercise"),
+                    details_cols_map.get("trackexcercise"),
+                    details_cols_map.get("trackexercise"),
+                ],
+                "1",
+            )
+
+        # For docWiseTimeTrackFlag, try multiple known naming variants (including the exact snake_case you reported).
+        try_update_flag(
+            [
+                docwise_col,
+                details_cols_map.get("docwisetimetrackflag"),
+                details_cols_map.get("docwise_time_track_flag"),
+                details_cols_map.get("doc_wise_time_track_flag"),
+                details_cols_map.get("doc_wise_time_track_flg"),
+                # If INFORMATION_SCHEMA isn't accessible, still try the literal column name.
+                "doc_Wise_Time_Track_Flag",
+                details_cols_map.get("docwisetimetrackflg"),
+                details_cols_map.get("docwisetimetrack"),
+            ],
+            "1",
+        )
         
         conn.commit()
         return corp_course_id

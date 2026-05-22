@@ -1,59 +1,21 @@
 import React, { useState } from 'react';
 import { storeCourse } from '../api';
 import { Loader2, CheckCircle2, Database, ChevronLeft, Sparkles, AlertCircle, Rocket, Eye } from 'lucide-react';
-import LessonPreviewModal from './LessonPreviewModal';
+import LessonPreviewEditorModal from './LessonPreviewEditorModal';
 import ActionModal from './ActionModal';
 import CourseViewer from './CourseViewer';
 
-export default function PublishDashboard({ courseData, onBack, onComplete }) {
+export default function PublishDashboard({ courseData, updateCourseData, onBack, onComplete }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
-  const [previewData, setPreviewData] = useState(null);
+  const [previewData, setPreviewData] = useState(null); // { mIdx, cIdx, startInEdit }
   const [modalConfig, setModalConfig] = useState(null);
   const [showFullPreview, setShowFullPreview] = useState(false);
 
   const { details, structure, content } = courseData;
 
-  const allLessons = [];
-  (structure?.modules || []).forEach((mod, mIdx) => {
-    (mod?.chapters || []).forEach((chap, cIdx) => {
-      allLessons.push({ mIdx, cIdx, modTitle: mod?.title, chapter: chap });
-    });
-  });
-
-  const getLessonPreviewData = (mIdx, cIdx) => {
-    const chap = structure?.modules?.[mIdx]?.chapters?.[cIdx];
-    if (!chap) return null;
-    const validContents = (chap?.contents || []).filter(c => c?.completed && c?.content);
-    if (validContents.length === 0 && chap?.content?.completed && chap?.content?.content) {
-        validContents.push(chap.content);
-    }
-    const isReady = validContents.length > 0;
-    const cData = isReady ? {
-        html_content: validContents.map(c => c?.content).join('<hr class="my-8 border-slate-100" />'),
-        files: validContents.filter(c => c?.file_url).map(c => ({ url: c.file_url, name: c.file_name }))
-    } : null;
-    return { chapter: chap, content: cData, mIdx, cIdx };
-  };
-
-  const handleNextPreview = () => {
-    if (!previewData) return;
-    const idx = allLessons.findIndex(l => l.mIdx === previewData.mIdx && l.cIdx === previewData.cIdx);
-    if (idx < allLessons.length - 1) {
-      const next = allLessons[idx + 1];
-      setPreviewData(getLessonPreviewData(next.mIdx, next.cIdx));
-    }
-  };
-
-  const handlePrevPreview = () => {
-    if (!previewData) return;
-    const idx = allLessons.findIndex(l => l.mIdx === previewData.mIdx && l.cIdx === previewData.cIdx);
-    if (idx > 0) {
-      const prev = allLessons[idx - 1];
-      setPreviewData(getLessonPreviewData(prev.mIdx, prev.cIdx));
-    }
-  };
+  const openPreview = (mIdx, cIdx) => setPreviewData({ mIdx, cIdx, startInEdit: false });
 
   const handleSave = async () => {
     // Check if any lessons are pending
@@ -192,7 +154,7 @@ export default function PublishDashboard({ courseData, onBack, onComplete }) {
                                 return (
                                   <button 
                                     key={j} 
-                                    onClick={() => setPreviewData(getLessonPreviewData(i, j))}
+                                    onClick={() => openPreview(i, j)}
                                     className="w-full flex justify-between items-center text-[11px] py-2.5 px-4 rounded-2xl bg-white border border-slate-100/50 shadow-sm hover:border-sky-200 hover:bg-sky-50/30 transition-all group/chap"
                                   >
                                   <span className="font-semibold text-slate-600 flex items-center gap-2">
@@ -292,14 +254,14 @@ export default function PublishDashboard({ courseData, onBack, onComplete }) {
       )}
 
       {previewData && (
-        <LessonPreviewModal 
-          chapter={previewData.chapter}
-          chapterContent={previewData.content}
+        <LessonPreviewEditorModal
+          courseData={courseData}
+          updateCourseData={updateCourseData}
+          initialMIdx={previewData.mIdx}
+          initialCIdx={previewData.cIdx}
+          startInEdit={previewData.startInEdit}
+          readOnly={true}
           onClose={() => setPreviewData(null)}
-          onNext={handleNextPreview}
-          onPrev={handlePrevPreview}
-          hasNext={allLessons.findIndex(l => l.mIdx === previewData.mIdx && l.cIdx === previewData.cIdx) < allLessons.length - 1}
-          hasPrev={allLessons.findIndex(l => l.mIdx === previewData.mIdx && l.cIdx === previewData.cIdx) > 0}
         />
       )}
     </div>

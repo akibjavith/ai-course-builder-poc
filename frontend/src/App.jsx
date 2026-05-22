@@ -17,6 +17,11 @@ function App() {
   const [viewingCourse, setViewingCourse] = useState(null);
   
   const [currentStep, setCurrentStep] = useState(1);
+  const [contentGenUi, setContentGenUi] = useState({
+    loadingMap: {},
+    isGeneratingAll: false,
+    modalConfig: null,
+  });
   const [courseData, setCourseData] = useState({
     sourceType: 'external',
     details: {
@@ -196,6 +201,8 @@ function App() {
             <CourseContent 
               courseData={courseData} 
               updateCourseData={updateCourseData} 
+              contentGenUi={contentGenUi}
+              setContentGenUi={setContentGenUi}
               onNext={nextStep} 
               onBack={prevStep}
             />
@@ -203,6 +210,7 @@ function App() {
           {currentStep === 5 && (
             <PublishDashboard 
               courseData={courseData} 
+              updateCourseData={updateCourseData}
               onBack={prevStep}
               onComplete={resetBuilder}
             />
