@@ -8,7 +8,7 @@ import {
 import QuizViewer from './QuizViewer';
 import FlashcardViewer from './FlashcardViewer';
 
-// ─── Custom HTML5 Video Player ─────────────────────────────────────────────
+// --- Custom HTML5 Video Player ---------------------------------------------
 function CustomVideoPlayer({ src }) {
   const videoRef = useRef(null);
   const [playing, setPlaying] = useState(false);
@@ -143,7 +143,7 @@ function CustomVideoPlayer({ src }) {
   );
 }
 
-// ─── Quiz Modal Overlay ─────────────────────────────────────────────────────
+// --- Quiz Modal Overlay -----------------------------------------------------
 function QuizModal({ quiz, onClose, onFinish }) {
   const [answers, setAnswers] = useState({});
   const [submitted, setSubmitted] = useState(false);
@@ -185,7 +185,7 @@ function QuizModal({ quiz, onClose, onFinish }) {
                 <span className={`text-4xl font-black ${score >= 70 ? 'text-green-400' : 'text-red-400'}`}>{score}%</span>
               </div>
               <h3 className="text-3xl font-black text-white mb-3">
-                {score >= 70 ? '🎉 Excellent!' : '📚 Keep Learning!'}
+                {score >= 70 ? 'Excellent!' : 'Keep Learning!'}
               </h3>
               <p className="text-gray-400 mb-8">
                 {score >= 70
@@ -205,7 +205,7 @@ function QuizModal({ quiz, onClose, onFinish }) {
                   onClick={() => onFinish(score)}
                   className="flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-8 rounded-full transition transform hover:scale-105"
                 >
-                  {score >= 70 ? '🏆 Get Certificate' : 'Continue Learning'}
+                  {score >= 70 ? 'Get Certificate' : 'Continue Learning'}
                 </button>
               </div>
             </div>

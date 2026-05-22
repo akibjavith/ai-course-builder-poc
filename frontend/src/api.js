@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const API_URL =  'http://192.168.3.158:8000'; // FastAPI running on your Wi-Fi IP
+const API_URL =
+  import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, '') ||
+  'http://localhost:8000';
 
 export const uploadDoc = async (file) => {
   const formData = new FormData();

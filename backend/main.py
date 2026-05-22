@@ -59,25 +59,6 @@ async def upload_doc(file: UploadFile = File(...)):
             os.remove(temp_file)
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/course/upload-media")
-async def upload_media(file: UploadFile = File(...)):
-    import uuid
-    import shutil
-    
-    # Generate unique filename to avoid collision
-    extension = os.path.splitext(file.filename)[1]
-    unique_filename = f"{uuid.uuid4()}{extension}"
-    file_path = os.path.join("uploads", unique_filename)
-    
-    try:
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        
-        # We assume FastAPI runs on default localhost port, but relative URL /uploads/xxx is best
-        return {"status": "success", "url": f"http://localhost:8000/uploads/{unique_filename}"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.post("/course/structure")
 async def create_structure(req: CourseStructureRequest):
     structure = generate_course_structure(
