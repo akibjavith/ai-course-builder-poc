@@ -4,8 +4,10 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from schemas import CourseStructureResponse
 
+LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+
 def generate_course_structure(courseName: str, description: str, subject: str, level: str) -> dict:
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
+    llm = ChatOpenAI(model=LLM_MODEL, temperature=0.7)
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", "You are an expert curriculum designer. Provide a structured JSON output of the course modules and chapters. The output must match the provided JSON schema exactly."),

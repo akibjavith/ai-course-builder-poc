@@ -1,10 +1,13 @@
+import os
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from schemas import ChapterContent, CourseQuiz
 from rag_pipeline import retrieve_context
 
+LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+
 def generate_chapter_content(course_title, module_title, chapter_title, source_type, audience, difficulty, objectives, output_format="text") -> dict:
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.5)
+    llm = ChatOpenAI(model=LLM_MODEL, temperature=0.5)
     
     context = ""
     if source_type == "internal":
@@ -49,7 +52,7 @@ def generate_chapter_content(course_title, module_title, chapter_title, source_t
     return response.model_dump()
 
 def generate_course_quiz(course_title, modules, source_type, audience, difficulty, objectives) -> dict:
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
+    llm = ChatOpenAI(model=LLM_MODEL, temperature=0.7)
     
     context = ""
     if source_type == "internal":
@@ -98,7 +101,7 @@ def generate_brief_title(description: str) -> str:
     from langchain_openai import ChatOpenAI
     from langchain_core.prompts import ChatPromptTemplate
     
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
+    llm = ChatOpenAI(model=LLM_MODEL, temperature=0.7)
     prompt = ChatPromptTemplate.from_messages([
         ("system", "You are an expert copywriter. Generate a concise, engaging course title based on the description. The title MUST be under 50 characters."),
         ("user", "{description}")
@@ -120,7 +123,7 @@ def generate_outline_skeleton(description: str, modules_count: int, chapters_cou
     from langchain_openai import ChatOpenAI
     from langchain_core.prompts import ChatPromptTemplate
 
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
+    llm = ChatOpenAI(model=LLM_MODEL, temperature=0.7)
     
     prompt_str = f"Create a structured course outline with exactly {modules_count} modules. Each module must have exactly {chapters_count} chapters based on the following course description:\n{{description}}"
     prompt = ChatPromptTemplate.from_messages([
@@ -137,7 +140,7 @@ def generate_course_details_from_context() -> dict:
     from langchain_core.prompts import ChatPromptTemplate
     from rag_pipeline import retrieve_context
     
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.5)
+    llm = ChatOpenAI(model=LLM_MODEL, temperature=0.5)
     
     # Retrieve a broad set of context to understand the whole course
     context = retrieve_context("General overview and summary of the entire document", k=15)

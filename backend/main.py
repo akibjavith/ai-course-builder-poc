@@ -6,7 +6,7 @@ from schemas import (
     CourseStructureRequest, GenerateContentRequest, RegenerateRequest, GenerateQuizRequest,
     GenerateTitleRequest, GenerateTitleResponse, FetchWebRequest, FetchYouTubeRequest,
     GenerateOutlineBaseRequest, ExportChapterRequest, GenerateVoiceScriptReq, GenerateFlashcardsRequest,
-    GenerateMCQRequest, GenerateAssessmentRequest
+    GenerateMCQRequest, GenerateAssessmentRequest, ChatRequest
 )
 from course_planner import generate_course_structure
 from content_generator import generate_chapter_content, generate_course_quiz
@@ -16,8 +16,17 @@ from database import save_course_to_mysql
 import os
 import shutil
 from dotenv import load_dotenv
+import logging
+from openai import OpenAI
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("main")
 
 load_dotenv()
+
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
 
 app = FastAPI()
 
@@ -37,12 +46,32 @@ app.add_middleware(
 os.makedirs("uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
+def validate_uploaded_file(file: UploadFile, max_size_mb: float, allowed_extensions: list[str]):
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"File extension '{ext}' is not allowed. Supported formats: {', '.join(allowed_extensions)}"
+        )
+    
+    file.file.seek(0, 2)
+    file_size = file.file.tell()
+    file.file.seek(0)
+    
+    max_size_bytes = max_size_mb * 1024 * 1024
+    if file_size > max_size_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File size exceeds the limit of {max_size_mb}MB. Got {file_size / (1024 * 1024):.2f}MB."
+        )
+
 @app.get("/")
 def read_root():
     return {"message": "AI Course Builder API is running"}
 
 @app.post("/course/upload-doc")
 async def upload_doc(file: UploadFile = File(...)):
+    validate_uploaded_file(file, 10.0, ['.pdf', '.docx', '.txt', '.pptx', '.doc'])
     temp_file = file.filename
     try:
         with open(temp_file, "wb") as f:
@@ -55,7 +84,7 @@ async def upload_doc(file: UploadFile = File(...)):
             
         return {"status": "success", "chunks_processed": chunks_count}
     except Exception as e:
-        if os.path.exists(temp_file):
+        if 'temp_file' in locals() and os.path.exists(temp_file):
             os.remove(temp_file)
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -112,12 +141,17 @@ async def finalize_course(course: dict):
     from uuid import uuid4
     cid = course.get("id") or str(uuid4())
     try:
-        save_course(cid, course)
+        logger.warning("Saving course to deprecated JSON file storage.")
+        try:
+            save_course(cid, course)
+        except Exception as json_err:
+            logger.error(f"Error saving to JSON storage: {json_err}")
+            
         # Also save to MySQL
         try:
             save_course_to_mysql(course)
         except Exception as db_err:
-            print(f"Warning: Course saved to JSON but MySQL sync failed: {db_err}")
+            logger.error(f"Course saved to JSON but MySQL sync failed: {db_err}")
             
         return {"status": "success", "course_id": cid}
     except ValueError as ve:
@@ -126,12 +160,17 @@ async def finalize_course(course: dict):
 @app.put("/course/{course_id}")
 async def edit_course(course_id: str, course: dict):
     try:
-        update_course(course_id, course)
-        # Also update MySQL (for now we re-insert or we could implement a full update)
+        logger.warning("Updating course in deprecated JSON file storage.")
+        try:
+            update_course(course_id, course)
+        except Exception as json_err:
+            logger.error(f"Error updating JSON storage: {json_err}")
+            
+        # Also update MySQL
         try:
             save_course_to_mysql(course)
         except Exception as db_err:
-            print(f"Warning: Course updated in JSON but MySQL sync failed: {db_err}")
+            logger.error(f"Course updated in JSON but MySQL sync failed: {db_err}")
             
         return {"status": "success", "course_id": course_id}
     except ValueError as ve:
@@ -147,7 +186,7 @@ async def list_courses():
     try:
         from database import get_courses_from_mysql
         courses = get_courses_from_mysql()
-        # Merge in any locally-saved JSON courses that are not in MySQL (e.g., if DB save failed)
+        # Merge in any locally-saved JSON courses that are not in MySQL
         try:
             json_courses = get_courses()
             seen_ids = {str(c.get("id")) for c in courses if c.get("id") is not None}
@@ -158,8 +197,8 @@ async def list_courses():
             pass
         return {"courses": courses}
     except Exception as e:
-        print(f"Error fetching from MySQL: {e}")
-        # Fallback to JSON if MySQL fails
+        logger.error(f"Error fetching from MySQL: {e}")
+        logger.warning("MySQL failed. Falling back to deprecated courses.json storage.")
         courses = get_courses()
         return {"courses": courses}
 
@@ -184,7 +223,8 @@ async def get_single_course(course_id: str):
             if course:
                 return {"status": "success", "course": course}
         
-        # Fallback to JSON if not found in MySQL or ID is UUID
+        # Fallback to JSON if not found in MySQL
+        logger.warning("Course not found in MySQL. Falling back to deprecated JSON file storage lookup.")
         from course_store import get_course
         course = get_course(course_id)
         if course:
@@ -202,6 +242,7 @@ async def api_generate_title(req: GenerateTitleRequest):
 
 @app.post("/course/upload-thumbnail")
 async def upload_thumbnail(file: UploadFile = File(...)):
+    validate_uploaded_file(file, 5.0, ['.jpg', '.jpeg', '.png', '.gif', '.webp'])
     import uuid
     import shutil
     
@@ -289,8 +330,6 @@ async def export_chapter(req: ExportChapterRequest):
             import pdfkit
             file_path += ".pdf"
             html_content = f"<h1>{req.chapter_title}</h1><p>{req.content.get('explanation', '')}</p>"
-            # pdfkit requires wkhtmltopdf to be installed on system, this might fail if not present.
-            # Using basic try-except. If wkhtmltopdf is not found, we can write a fallback.
             try:
                 pdfkit.from_string(html_content, file_path)
             except OSError:
@@ -319,14 +358,12 @@ async def export_chapter(req: ExportChapterRequest):
 @app.post("/course/voice")
 async def generate_voice(req: GenerateVoiceScriptReq):
     import uuid
-    from openai import OpenAI
     
     unique_filename = f"tts_{uuid.uuid4()}.mp3"
     file_path = os.path.join("uploads", unique_filename)
     
     try:
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        response = client.audio.speech.create(
+        response = openai_client.audio.speech.create(
             model="tts-1",
             voice="alloy",
             input=req.text
@@ -346,12 +383,9 @@ async def generate_flashcards(req: GenerateFlashcardsRequest):
     class FlashcardsResponse(BaseModel):
         flashcards: list[FlashcardModel]
     
-    from openai import OpenAI
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    
     try:
-        completion = client.beta.chat.completions.parse(
-            model="gpt-4o-mini",
+        completion = openai_client.beta.chat.completions.parse(
+            model=LLM_MODEL,
             messages=[
                 {"role": "system", "content": "You are a helpful educational AI. Generate exactly 5 flashcards from the provided text."},
                 {"role": "user", "content": f"Text:\n{req.text[:2000]}"}
@@ -364,6 +398,7 @@ async def generate_flashcards(req: GenerateFlashcardsRequest):
 
 @app.post("/course/upload-media")
 async def upload_media(file: UploadFile = File(...)):
+    validate_uploaded_file(file, 10.0, ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.mp3', '.wav', '.pdf', '.docx', '.txt', '.pptx'])
     import uuid
     import shutil
     
@@ -382,9 +417,6 @@ async def upload_media(file: UploadFile = File(...)):
 
 @app.post("/course/mcq")
 async def generate_mcqs(req: GenerateMCQRequest):
-    from openai import OpenAI
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    
     try:
         from schemas import MCQResponse
         prompt = f"""You are an expert educator. Generate exactly 5 multiple-choice questions (each with 4 options) that test understanding for the following context.
@@ -393,8 +425,8 @@ Module: {req.module_title}
 Chapter: {req.chapter_title or 'General'}
 Assessment Guidelines: {req.assessment_text or 'None'}"""
 
-        completion = client.beta.chat.completions.parse(
-            model="gpt-4o-mini",
+        completion = openai_client.beta.chat.completions.parse(
+            model=LLM_MODEL,
             messages=[
                 {"role": "system", "content": prompt},
             ],
@@ -406,9 +438,6 @@ Assessment Guidelines: {req.assessment_text or 'None'}"""
 
 @app.post("/course/assessment")
 async def generate_assessment(req: GenerateAssessmentRequest):
-    from openai import OpenAI
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    
     try:
         from schemas import MCQResponse
         prompt = f"""You are an expert educator. Generate exactly 10 multiple-choice questions (each with 4 options) that form a comprehensive assessment for the following module.
@@ -416,8 +445,8 @@ Course: {req.course_title}
 Module: {req.module_title}
 Assessment Guidelines: {req.assessment_text or 'None'}"""
 
-        completion = client.beta.chat.completions.parse(
-            model="gpt-4o-mini",
+        completion = openai_client.beta.chat.completions.parse(
+            model=LLM_MODEL,
             messages=[
                 {"role": "system", "content": prompt},
             ],
@@ -425,6 +454,7 @@ Assessment Guidelines: {req.assessment_text or 'None'}"""
         )
         return {"status": "success", "mcqs": completion.choices[0].message.parsed.model_dump().get("mcqs")}
     except Exception as e:
+        logger.error(f"Error generating assessment: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/course/auto-fill")
@@ -436,37 +466,46 @@ async def api_auto_fill():
     return {"status": "success", "details": details}
 
 @app.post("/course/chat")
-async def api_chat(req: dict):
-    from openai import OpenAI
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    
-    messages = req.get("messages", [])
-    
-    # Prepend backend-level strict safety and focus instruction
-    safety_instruction = {
-        "role": "system",
-        "content": (
-            "SAFETY & FOCUS POLICY (CRITICAL):\n"
-            "- You are strictly an educational and professional course design assistant. "
-            "Your main role is to help the user build details, structure, and content for their courses.\n"
-            "- You are STRICTLY FORBIDDEN from generating, discussing, or engaging in inappropriate, "
-            "sexual, violent, illegal, terrorist, weapons-related, self-harm, or harassing content. "
-            "If the user prompts you with anything inappropriate or unsafe, you MUST immediately refuse politely and firmly, "
-            "stating that you are an educational course creation assistant and cannot assist with that topic.\n"
-            "- Do not act as an open-ended general chat assistant. Keep conversations strictly focused on course creation, educational subjects, "
-            "or answering basic learning/knowledge questions. If a user asks a valid educational question, answer it concisely, "
-            "then immediately offer to help them design a complete course about that topic (e.g., 'Would you like to build an introductory course on this?').\n"
-            "- If the conversation is entirely off-topic and not educational, politely steer the user back to course building."
-        )
-    }
-    messages = [safety_instruction] + messages
+async def api_chat(req: ChatRequest):
+    from chat_service import build_system_prompt, parse_metadata
+
+    logger.info(f"Chat request received. Scope: {req.scope}, Details: {req.details}")
+
+    system_prompt = build_system_prompt(
+        scope=req.scope,
+        details=req.details,
+        course_data=req.courseData,
+        available_subjects=req.availableSubjects
+    )
+
+    messages = [{"role": "system", "content": system_prompt}] + req.messages
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages
+        response = openai_client.chat.completions.create(
+            model=LLM_MODEL,
+            messages=messages,
+            temperature=0.7,
+            max_tokens=2000
         )
-        return {"status": "success", "reply": response.choices[0].message.content}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        
+        # Log token usage
+        if hasattr(response, "usage") and response.usage:
+            logger.info(f"Token usage - Prompt: {response.usage.prompt_tokens}, Completion: {response.usage.completion_tokens}, Total: {response.usage.total_tokens}")
 
+        ai_reply = response.choices[0].message.content
+
+        reply_text, metadata, type_val = parse_metadata(
+            ai_reply=ai_reply,
+            scope=req.scope,
+            details=req.details
+        )
+
+        return {
+            "status": "success",
+            "reply": reply_text,
+            "metadata": metadata,
+            "type": type_val
+        }
+    except Exception as e:
+        logger.error(f"Error in chat completion API: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

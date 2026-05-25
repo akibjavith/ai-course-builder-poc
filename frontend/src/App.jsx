@@ -4,7 +4,6 @@ import Stepper from './components/Stepper';
 import SourceSelection from './components/SourceSelection';
 import CourseDetails from './components/CourseDetails';
 import InteractiveCourseCreator from './components/InteractiveCourseCreator';
-import HybridContentEditor from './components/HybridContentEditor';
 import PublishDashboard from './components/PublishDashboard';
 import CoursesDashboard from './pages/CoursesDashboard';
 import CourseViewer from './components/CourseViewer';

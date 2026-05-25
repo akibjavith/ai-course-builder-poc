@@ -176,3 +176,11 @@ class ExportChapterRequest(BaseModel):
     chapter_title: str
     content: dict
     format: str # 'pdf', 'pptx', 'txt', 'mp4'
+
+class ChatRequest(BaseModel):
+    messages: list
+    scope: str = "Course Details"
+    details: Optional[dict] = {}
+    courseData: Optional[dict] = {}
+    availableSubjects: Optional[list] = []
+

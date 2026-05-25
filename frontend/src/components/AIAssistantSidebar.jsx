@@ -62,7 +62,6 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
     setMessages(prev => [...prev, userMsg]);
     if (!overrideInput) setInput('');
     setLoading(true);
-
     try {
       const chatHistory = messages.map(m => ({
         role: m.sender === 'ai' ? 'assistant' : 'user',
@@ -70,179 +69,39 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
       }));
       chatHistory.push({ role: 'user', content: textToSend });
 
-      const systemMsg = { 
-        role: 'system', 
-        content: `You are an expert instructional design assistant. Your PRIMARY MOTTO and core purpose is to generate specific JSON [METADATA] suggestion cards for the user to apply to their course, based on their current section.
-
-        YOUR PRIMARY MOTTO & RESPONSIBILITIES:
-        - In the Details section (Step 2), your main job is to output a Details suggestion card.
-        - In the Structure section (Step 3), your main job is to output a Structure suggestion card.
-        - In the Content section (Step 4), your main job is to output Content Prompt suggestion cards.
-        - While you can be conversational, your primary objective is ALWAYS to produce these actionable cards so the user can easily click "Apply". Do not just chat; provide the structured data!
-
-        SAFETY, MODERATION & FOCUS POLICY (CRITICAL):
-        - You are strictly an educational and professional course design assistant.
-        - You are STRICTLY FORBIDDEN from generating or engaging with inappropriate, sexual, violent, illegal, terrorist, weapons-related, self-harm, or harassing content. If the user prompts you with anything inappropriate or unsafe, you MUST immediately refuse politely and firmly, explaining that you can only help build educational courses.
-        - If the user asks general-knowledge or educational questions (e.g., "What is Python?"), answer them briefly and conversationally, but you MUST immediately offer to build a course on it (e.g., "Would you like to build an introductory course on this subject? I can draft a curriculum for you right now!").
-        - If the conversation drifts into totally non-educational off-topic chatter (e.g., romantic chat, general roleplay, creative storytelling unrelated to courses), politely redirect the user back to course building.
-
-        SECTION-SCOPE AND TOPIC CONSISTENCY (CRITICAL):
-        - You are currently in the "${scope}" section. YOU MUST NEVER generate metadata/cards for other sections. 
-          * If you are in the Details section and the user asks for a Structure, DO NOT generate a Structure card. Politely tell them: "To create a course structure, please proceed to the Structure tab."
-          * If you are in the Structure section and the user asks for Content prompts, DO NOT generate Content Prompt cards. Politely tell them: "To generate content, please proceed to the Content tab."
-          * If you are in the Content section and the user asks for a Structure, DO NOT generate a Structure card. Politely tell them: "To modify the structure, please go back to the Structure tab."
-        - TOPIC CONSISTENCY: The current course topic is based on the "CURRENT CONTEXT". If the user asks you to generate a structure, details, or content for a COMPLETELY DIFFERENT, unrelated topic, YOU MUST REFUSE. Politely remind them: "Your course is currently focused on its defined topic. I can only generate content related to that topic. Would you like me to generate relevant structure/content instead?"
-        - NO EMPTY CARDS: If a request violates the section-scope or topic consistency rules, YOU ARE STRICTLY FORBIDDEN from outputting any [METADATA] block. Only output the polite conversational refusal text.
-
-        PERSONALITY & BEHAVIOR:
-        - Be professional, highly proactive, and conversational.
-        - If the user simply greets you (e.g., "hi", "hello"), respond conversationally FIRST and ask how you can help them with the ${scope}. DO NOT generate an empty JSON card for a simple greeting.
-        - NEVER ASK THE USER FOR DETAILS THEY ALREADY PROVIDED in the chat or in the "CURRENT CONTEXT".
-        - PROACTIVE GENERATION: If the user gives you a topic (e.g., "Java" or "I want to create a course on Java"), DO NOT just ask them for more details. Immediately invent and generate a COMPLETE, highly detailed [METADATA] suggestion card (filling in a catchy title, full description, audience, and objectives yourself) to save them time. Add a conversational note like: "I've drafted some details for you! You can apply these, or let me know if you want to provide your own specifics."
-        - If the user explicitly asks you to generate something but has provided absolutely NO topic in the chat or context, only then ask them: 'What topic would you like to create a course about?'
-        - If the user asks you to "create a structure", "Refine Structure", "Add Modules", or "Refine Topics", DO NOT ask them for the title, description, or objectives. Immediately build, update, and output the full [METADATA] Course Structure suggestion card. If the existing structure is empty, invent a comprehensive curriculum with at least 3-4 modules and 3-4 lessons each.
-        - Whenever modifying or refining a structure, you MUST return the entire updated Course Structure JSON wrapped inside a [METADATA]...[/METADATA] block.
-        - For specific action requests, provide the conversational text AND the [METADATA] block.
-        
-        STRUCTURED DATA RULES:
-        - Wrap JSON in [METADATA] blocks: [METADATA]{...}[/METADATA].
-        - ALWAYS RETURN THE FULL AND COMPLETE OBJECT IN [METADATA].
-        
-        PRICING RULES (CRITICAL):
-        - When suggesting details, ALWAYS include a "price" field.
-        - The price MUST be dynamic based on the course content complexity.
-        - The price MUST ALWAYS be a numeric string and MUST ALWAYS be above 199.
-        
-        CRITICAL RULES FOR METADATA:
-        - ALWAYS RETURN THE FULL AND COMPLETE OBJECT IN [METADATA]. 
-        - IF A FIELD IS ALREADY PROVIDED IN "CURRENT CONTEXT" AND YOU ARE NOT CHANGING IT, YOU MUST STILL INCLUDE IT EXACTLY AS IS. 
-        - YOU ARE STRICTLY FORBIDDEN FROM RETURNING EMPTY STRINGS ("") OR PLACEHOLDERS FOR FIELDS THAT ALREADY HAVE CONTENT.
-        ${availableSubjects.length > 0 ? `- SUBJECT RESTRICTION: You MUST ONLY use one of the following subject names: ${availableSubjects.map(s => s.label).join(', ')}. Do not invent new subjects.` : ''}
-        
-        CURRENT CONTEXT: ${JSON.stringify(details)}. 
-        ${(scope.includes('Structure') || scope.includes('Content')) ? `CRITICAL: USE THE FOLLOWING STRUCTURE ONLY: ${JSON.stringify(courseData?.structure || {})}` : ''}
-        SCHEMAS:
-        - Course Details (Step 2): { "courseType": "...", "subject": "...", "courseName": "...", "description": "...", "price": "...", "duration": "...", "requirements": "...", "level": "...", "language": "...", "scriptingLanguage": "...", "evaluator": "..." }
-        - Course Structure (Step 3): { "modules": [{ "title": "...", "chapters": [{"title": "..."}] }] }
-        - Course Content (Step 4): { "prompts": [{ "module": "...", "title": "...", "prompt": "..." }] } OR { "module": "...", "title": "...", "prompt": "..." } for a single lesson.
-        
-        CRITICAL FOR SINGLE LESSONS & ALL LESSONS PROMPTS: 
-        1. When generating a prompt for a single lesson, you MUST include the "module" and "title" (lesson title) in the JSON so the application knows exactly where to apply it.
-        2. EVERY SINGLE PROMPT YOU GENERATE (whether for one lesson or bulk generation) MUST BE EXTREMELY LONG AND DETAILED.
-        3. Each individual prompt MUST be between 100 and 150 words in length. NEVER generate a single-line summary.
-
-        VALID DROPDOWN OPTIONS (YOU MUST USE ONLY THESE):
-        - courseType: Must be "Custom Course" or "SCORM Course"
-        - subject: Must be EXACTLY one of: "English", "Maths", "Science", "Social", "Physics", "Chemistry", "Biology", "History", "Geography", "Economics", "Computer Science", "Data Science", "Machine Learning", "AI", "Python Programming", "Digital Marketing", "Business Management".
-        - duration: Must be a NUMERIC string (e.g., "14" for 14 days). Do NOT include "days" or "weeks".
-        - level: Must be "beginner", "intermediate", or "advanced".
-        - scriptingLanguage: Must be EXACTLY one of: "NA", "Python", "SQL", "C++", "C", "MySQL", "PostgreSQL", "Java", "JavaScript".
-        - evaluator: Choose one from: "Sarah Johnson", "Michael Chen", "Dr. Emily Smith", "Alex Rivera".`
-      };
-
-      const resp = await chatWithAI([systemMsg, ...chatHistory]);
-      const aiReply = resp.reply || '';
+      const resp = await chatWithAI(chatHistory, scope, details, courseData, availableSubjects);
       
-      let metadataMatch = aiReply.match(/\[METADATA\]([\s\S]*?)\[\/METADATA\]/);
-      let metadataStr = metadataMatch ? metadataMatch[1] : null;
-      let textPart = '';
+      const reply = resp.reply || '';
+      const metadata = resp.metadata;
+      const type = resp.type;
 
-      if (metadataMatch) {
-        textPart = aiReply.replace(/\[METADATA\][\s\S]*?\[\/METADATA\]/, '').trim();
-      } else {
-        const prefixMatch = aiReply.match(/\[METADATA\]\s*(\{[\s\S]*\}|\[[\s\S]*\])/);
-        if (prefixMatch) {
-          metadataStr = prefixMatch[1];
-          const lastBrace = Math.max(metadataStr.lastIndexOf('}'), metadataStr.lastIndexOf(']'));
-          if (lastBrace !== -1) {
-            metadataStr = metadataStr.substring(0, lastBrace + 1);
-            textPart = aiReply.replace(/\[METADATA\][\s\S]*/, '').trim();
-          }
-        } else {
-          const jsonMatch = aiReply.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
-          if (jsonMatch) {
-            metadataStr = jsonMatch[0];
-            textPart = aiReply.replace(metadataStr, '').trim();
-          }
-        }
+      if (reply && reply.trim().length > 0) {
+        setMessages(prev => [...prev, { id: Date.now(), sender: 'ai', text: reply.trim(), type: 'text' }]);
       }
-      
-      if (metadataStr) {
-         try {
-            const metadata = JSON.parse(metadataStr);
-            
-            if (scope.includes("Details")) {
-              const lastDetails = [...messages].reverse().find(m => m.type === 'suggestion_details')?.data;
-              if (!metadata.courseName) metadata.courseName = details?.courseName || lastDetails?.courseName || '';
-              if (!metadata.description) metadata.description = details?.description || lastDetails?.description || '';
-              if (!metadata.subject) metadata.subject = details?.subject || lastDetails?.subject || '';
-              if (!metadata.level) metadata.level = details?.level || lastDetails?.level || 'beginner';
-              if (!metadata.price) metadata.price = details?.price || lastDetails?.price || '';
-              if (!metadata.duration) metadata.duration = details?.duration || lastDetails?.duration || '';
-              if (!metadata.requirements) metadata.requirements = details?.requirements || lastDetails?.requirements || '';
-              if (!metadata.language) metadata.language = details?.language || lastDetails?.language || 'English';
-              if (!metadata.scriptingLanguage) metadata.scriptingLanguage = details?.scriptingLanguage || lastDetails?.scriptingLanguage || 'NA';
-              if (!metadata.evaluator) metadata.evaluator = details?.evaluator || lastDetails?.evaluator || '';
-              if (!metadata.courseType) metadata.courseType = details?.courseType || lastDetails?.courseType || 'Custom Course';
-            }
-            
-            const cleanText = textPart.replace(/\[METADATA\]/g, '').replace(/\[\/METADATA\]/g, '').trim();
-            if (cleanText && cleanText.length > 2) {
-              setMessages(prev => [...prev, { id: Date.now(), sender: 'ai', text: cleanText, type: 'text' }]);
-            }
-            
-            if (scope.includes("Details")) {
-              setMessages(prev => [...prev, { 
-                id: Date.now() + 1, 
-                sender: 'ai', 
-                type: 'suggestion_details', 
-                data: {
-                  courseType: metadata.courseType || details?.courseType || 'Custom Course',
-                  subject: metadata.subject || '',
-                  courseName: metadata.courseName || '',
-                  description: metadata.description || '',
-                  price: metadata.price || '',
-                  duration: metadata.duration || '',
-                  requirements: metadata.requirements || '',
-                  level: metadata.level || 'beginner',
-                  language: metadata.language || 'English',
-                  scriptingLanguage: metadata.scriptingLanguage || 'NA',
-                  evaluator: metadata.evaluator || ''
-                } 
-              }]);
-            } else if (scope.includes("Structure")) {
-              const modules = Array.isArray(metadata.modules) ? metadata.modules : [];
-              const normalizedModules = modules.map(m => ({
-                ...m,
-                chapters: Array.isArray(m.chapters) ? m.chapters : Array.isArray(m.lessons) ? m.lessons : []
-              }));
-              setMessages(prev => [...prev, { 
-                id: Date.now() + 2, 
-                sender: 'ai', 
-                type: 'suggestion_structure', 
-                data: { modules: normalizedModules } 
-              }]);
-            } else {
-              const prompts = Array.isArray(metadata.prompts) ? metadata.prompts : [];
-              setMessages(prev => [...prev, { 
-                id: Date.now() + 5, 
-                sender: 'ai', 
-                type: 'suggestion_content', 
-                data: {
-                  strategy: Array.isArray(metadata.strategy) ? metadata.strategy : [],
-                  prompts: prompts,
-                  prompt: typeof metadata.prompt === 'string' ? metadata.prompt : null,
-                  module: metadata.module || null,
-                  title: metadata.title || metadata.lesson || null,
-                  isSingle: !!metadata.prompt
-                } 
-              }]);
-            }
-         } catch(e) {
-            setMessages(prev => [...prev, { id: Date.now(), sender: 'ai', text: aiReply.replace(/\[METADATA\]/g, '').replace(/\[\/METADATA\]/g, '').trim(), type: 'text' }]);
-         }
-      } else {
-          setMessages(prev => [...prev, { id: Date.now(), sender: 'ai', text: aiReply.replace(/\[METADATA\]/g, '').replace(/\[\/METADATA\]/g, '').trim(), type: 'text' }]);
+
+      if (metadata && type) {
+        if (type === 'details') {
+          setMessages(prev => [...prev, { 
+            id: Date.now() + 1, 
+            sender: 'ai', 
+            type: 'suggestion_details', 
+            data: metadata 
+          }]);
+        } else if (type === 'structure') {
+          setMessages(prev => [...prev, { 
+            id: Date.now() + 2, 
+            sender: 'ai', 
+            type: 'suggestion_structure', 
+            data: metadata 
+          }]);
+        } else if (type === 'content') {
+          setMessages(prev => [...prev, { 
+            id: Date.now() + 5, 
+            sender: 'ai', 
+            type: 'suggestion_content', 
+            data: metadata 
+          }]);
+        }
       }
     } catch (err) {
       setMessages(prev => [...prev, { id: Date.now(), sender: 'ai', text: "Sorry, I'm having trouble connecting right now.", type: 'text' }]);

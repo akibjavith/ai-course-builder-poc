@@ -173,8 +173,14 @@ export const autoFillCourseDetails = async () => {
   return response.data;
 };
 
-export const chatWithAI = async (messages) => {
-  const response = await axios.post(`${API_URL}/course/chat`, { messages });
+export const chatWithAI = async (messages, scope, details, courseData, availableSubjects) => {
+  const response = await axios.post(`${API_URL}/course/chat`, { 
+    messages,
+    scope,
+    details,
+    courseData,
+    availableSubjects
+  });
   return response.data;
 };
 

@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Edit3, Save, Trash2, X } from 'lucide-react';
-import PremiumRichEditor from './PremiumRichEditor';
 
 function flattenLessons(structure) {
   const lessons = [];
@@ -208,9 +207,12 @@ export default function LessonPreviewEditorModal({
         <div className="flex-1 overflow-y-auto no-scrollbar bg-slate-50/30">
           <div className="max-w-4xl mx-auto px-6 py-12 sm:px-12 space-y-10 bg-white shadow-sm my-10 rounded-[2rem] border border-slate-100">
             {editMode ? (
-              <PremiumRichEditor
-                value={htmlDraft}
-                onChange={setHtmlDraft}
+              <div 
+                contentEditable
+                suppressContentEditableWarning
+                onBlur={(e) => setHtmlDraft(e.target.innerHTML)}
+                dangerouslySetInnerHTML={{ __html: htmlDraft }}
+                className="w-full min-h-[400px] p-6 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-sky-600 overflow-y-auto prose prose-slate max-w-none text-slate-700 leading-relaxed text-lg"
                 placeholder="Write or edit lesson content in HTML..."
               />
             ) : previewContent?.html_content ? (

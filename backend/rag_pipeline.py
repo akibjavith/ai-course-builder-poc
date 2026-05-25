@@ -42,7 +42,8 @@ def retrieve_context(query: str, k: int = 15) -> str:
         return ""
 
     # 2. LLM Reranker
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+    llm = ChatOpenAI(model=LLM_MODEL, temperature=0)
     rerank_prompt = PromptTemplate(
         input_variables=["query", "documents"],
         template="""You are a ranking algorithm. Evaluate the relevance of the following documents to the query.
