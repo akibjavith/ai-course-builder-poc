@@ -49,7 +49,8 @@ def build_system_prompt(scope: str, details: dict, course_data: dict, available_
         "- For specific action requests, provide the conversational text AND the [METADATA] block.\n\n"
         "STRUCTURED DATA RULES:\n"
         "- Wrap JSON in [METADATA] blocks: [METADATA]{...}[/METADATA].\n"
-        "- ALWAYS RETURN THE FULL AND COMPLETE OBJECT IN [METADATA].\n\n"
+        "- ALWAYS RETURN THE FULL AND COMPLETE OBJECT IN [METADATA].\n"
+        "- CRITICAL: When generating or modifying a course structure, Do NOT prepend numbers, chapter numbers, or index prefixes (like '1.1', 'Module 1:', 'Chapter 1 -') to module or chapter titles in the generated schema. The UI handles ordering and numbering automatically.\n\n"
         "PRICING RULES (CRITICAL):\n"
         "- When suggesting details, ALWAYS include a \"price\" field.\n"
         "- The price MUST be dynamic based on the course content complexity.\n"
@@ -67,8 +68,9 @@ def build_system_prompt(scope: str, details: dict, course_data: dict, available_
         "- Course Content (Step 4): { \"prompts\": [{ \"module\": \"...\", \"title\": \"...\", \"prompt\": \"...\" }] } OR { \"module\": \"...\", \"title\": \"...\", \"prompt\": \"...\" } for a single lesson.\n\n"
         "CRITICAL FOR SINGLE LESSONS & ALL LESSONS PROMPTS:\n"
         "1. When generating a prompt for a single lesson, you MUST include the \"module\" and \"title\" (lesson title) in the JSON so the application knows exactly where to apply it.\n"
-        "2. EVERY SINGLE PROMPT YOU GENERATE (whether for one lesson or bulk generation) MUST BE EXTREMELY LONG AND DETAILED.\n"
-        "3. Each individual prompt MUST be between 100 and 150 words in length. NEVER generate a single-line summary.\n\n"
+        "2. EVERY SINGLE PROMPT YOU GENERATE (whether for one lesson or bulk generation) MUST BE EXTREMELY COMPREHENSIVE AND TARGETED.\n"
+        "3. Each individual prompt MUST be highly comprehensive, detailed, and extremely actionable. It should be between 100 and 150 words in length to cover all requirements. NEVER generate a single-line summary, and NEVER mention any word count limits or complain about prompt length restrictions in your chat replies.\n"
+        "4. CRITICAL FORMATTING INSTRUCTION: If you are returning any structured metadata (Details, Structure, or Content prompts), you MUST ALWAYS wrap the raw JSON object inside EXACTLY '[METADATA]' and '[/METADATA]' tags. NEVER return raw JSON outside these tags! For example: [METADATA]{\"prompts\": [...]}[/METADATA].\n\n"
         "VALID DROPDOWN OPTIONS (YOU MUST USE ONLY THESE):\n"
         "- courseType: Must be \"Custom Course\" or \"SCORM Course\"\n"
         "- subject: Must be EXACTLY one of: \"English\", \"Maths\", \"Science\", \"Social\", \"Physics\", \"Chemistry\", \"Biology\", \"History\", \"Geography\", \"Economics\", \"Computer Science\", \"Data Science\", \"Machine Learning\", \"AI\", \"Python Programming\", \"Digital Marketing\", \"Business Management\".\n"
@@ -78,6 +80,42 @@ def build_system_prompt(scope: str, details: dict, course_data: dict, available_
         "- evaluator: Choose one from: \"Sarah Johnson\", \"Michael Chen\", \"Dr. Emily Smith\", \"Alex Rivera\"."
     )
     return system_prompt
+
+def try_repair_truncated_json(s: str) -> str:
+    """
+    Attempts to repair a truncated JSON string by finding the last complete object boundary
+    and closing open brackets and braces.
+    """
+    s = s.strip()
+    try:
+        json.loads(s)
+        return s
+    except json.JSONDecodeError:
+        pass
+
+    # Find the last complete dictionary brace boundary
+    last_brace = s.rfind('}')
+    if last_brace != -1:
+        candidate = s[:last_brace + 1].strip()
+        if candidate.endswith(','):
+            candidate = candidate[:-1].strip()
+        
+        open_brackets = candidate.count('[') - candidate.count(']')
+        open_braces = candidate.count('{') - candidate.count('}')
+        
+        repaired = candidate
+        if open_brackets > 0:
+            repaired += ']' * open_brackets
+        if open_braces > 0:
+            repaired += '}' * open_braces
+            
+        try:
+            json.loads(repaired)
+            return repaired
+        except json.JSONDecodeError:
+            pass
+            
+    return s
 
 def parse_metadata(ai_reply: str, scope: str, details: dict) -> tuple:
     """
@@ -114,7 +152,8 @@ def parse_metadata(ai_reply: str, scope: str, details: dict) -> tuple:
 
     if metadata_str:
         try:
-            metadata = json.loads(metadata_str.strip())
+            repaired_str = try_repair_truncated_json(metadata_str.strip())
+            metadata = json.loads(repaired_str)
             
             if "Details" in scope:
                 type_val = "details"

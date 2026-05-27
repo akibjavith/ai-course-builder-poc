@@ -27,14 +27,30 @@ def generate_chapter_content(course_title, module_title, chapter_title, source_t
         prompt_str += "\nUse your internal knowledge to provide an in-depth, accurate explanation.\n"
         
     if output_format == "html":
-        prompt_str += "\nCRITICAL REQUIREMENT: The `html_content` field MUST contain a highly detailed, comprehensive lesson written in semantic HTML. Use <h2>, <h3>, <p>, <ul>, <li>, <strong>, and <em> tags. Do NOT include <html>, <body>, or <head> tags. The content should be AT LEAST 500 words long and styled for a premium educational experience. Ensure the `explanation` field is also populated with a text-only summary."
+        prompt_str += (
+            "\nCRITICAL REQUIREMENT: The `html_content` field MUST contain a highly detailed, comprehensive lesson written in semantic HTML. "
+            "Use modern structural HTML elements: <h2>, <h3>, <p>, <ul>, <li>, <strong>, <em>, and <blockquote class=\"callout\"> (for notes/pitfalls). "
+            "The lesson should be AT LEAST 600 words long, extremely engaging, and structured to feel premium (headings, callout boxes, highlighted takeaways, examples, and summaries). "
+            "Do NOT include <html>, <body>, or <head> tags. Ensure the `explanation` field is also populated with a text-only summary."
+        )
     else:
-        prompt_str += "\nCRITICAL REQUIREMENT: The `explanation` field MUST contain a highly detailed, comprehensive text that is AT LEAST 300 words long. Expand on topics deeply to meet this strict word count requirement."
+        prompt_str += "\nCRITICAL REQUIREMENT: The `explanation` field MUST contain a highly detailed, comprehensive text that is AT LEAST 400 words long. Expand on topics deeply to meet this strict word count requirement."
     
+    prompt_str += (
+        "\nSMART TABLES & REFERENCES OPTIONAL REQUIREMENT: "
+        "1. You MUST populate the `tables` JSON array with comparison specifications (caption, headers, rows) if the lesson covers: "
+        "concept comparisons (e.g. Supervised vs Unsupervised, Classification vs Regression), pros vs cons, algorithm trade-offs, workflows, parameters, or structured data comparisons. Render these in clean, styled HTML tables. "
+        "2. You MUST populate the `references` JSON array with a rich 'Further Reading / References' list including trusted resources, official documentation (e.g., Scikit-learn, TensorFlow, PyTorch docs), Wikipedia, research citations, or educational blogs. "
+        "Embed clickable inline citation links (e.g., <a href=\"URL\" target=\"_blank\">[Source]</a>) inside the `html_content` or `explanation` corresponding to these references. "
+        "3. CRITICAL IMAGE RULE: Do NOT include raw or hallucinated <img> tags with placeholder, fake, or generic domains (like example.com or via.placeholder). Never output broken image paths. The application handles visual generations dynamically."
+    )
+
+    prompt_str += "\nCRITICAL FORMATTING NOTICE: Do NOT return literal '\\n' or '\\\\n' characters in your JSON text fields or lists. Instead, use actual system newlines in your code blocks, and ALWAYS use semantic HTML tags like <ul> and <li> inside 'html_content' (and in your explanations where lists are needed) to cleanly separate bullet points, pitfalls, best practices, and exercises. All text sections must be beautifully formatted."
+
     prompt_str += "\nOutput MUST be a JSON matching the required schema. If the domain is non-technical (e.g., medical, business), YOU MUST set the `code` and `example` fields to null. Never hallucinate code where not applicable."
     
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are an expert educator. Output MUST exactly match the requested JSON schema. Do not include chapter-level quizzes."),
+        ("system", "You are a world-class instructional designer and educational content creator. Output MUST exactly match the requested JSON schema. Do not include chapter-level quizzes."),
         ("user", prompt_str)
     ])
     
@@ -127,7 +143,7 @@ def generate_outline_skeleton(description: str, modules_count: int, chapters_cou
     
     prompt_str = f"Create a structured course outline with exactly {modules_count} modules. Each module must have exactly {chapters_count} chapters based on the following course description:\n{{description}}"
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are an expert instructional designer. Generate a structured course outline matching the exact number of requested modules and chapters. Ensure the JSON conforms to the exact schema."),
+        ("system", "You are an expert instructional designer. Generate a structured course outline matching the exact number of requested modules and chapters. Ensure the JSON conforms to the exact schema. CRITICAL: Do NOT prepend numbers, chapter numbers, or index prefixes (like '1.1', 'Module 1:', 'Chapter 1 -') to module or chapter titles in the generated schema. The UI handles ordering and numbering automatically."),
         ("user", prompt_str)
     ])
     chain = prompt | llm.with_structured_output(CourseStructureResponse)

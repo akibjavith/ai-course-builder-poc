@@ -37,6 +37,16 @@ class QuizQuestion(BaseModel):
 class CourseQuiz(BaseModel):
     questions: List[QuizQuestion]
 
+class TableSpec(BaseModel):
+    caption: Optional[str] = None
+    headers: List[str]
+    rows: List[List[str]]
+
+class ReferenceSpec(BaseModel):
+    title: str
+    url: str
+    description: Optional[str] = None
+
 class ChapterContent(BaseModel):
     title: str
     content_type: str = "ai_generated" # ai_generated, video, document, html
@@ -47,6 +57,8 @@ class ChapterContent(BaseModel):
     summary: Optional[str] = None
     video_url: Optional[str] = None
     document_url: Optional[str] = None
+    tables: Optional[List[TableSpec]] = None
+    references: Optional[List[ReferenceSpec]] = None
 
 class GenerateFlashcardsRequest(BaseModel):
     text: str
@@ -125,7 +137,7 @@ class ImagePromptResponse(BaseModel):
     prompt: str
 
 class ImageResponse(BaseModel):
-    image_url: str
+    image_url: Optional[str] = None
 
 class StoreCourseRequest(BaseModel):
     course_json: dict

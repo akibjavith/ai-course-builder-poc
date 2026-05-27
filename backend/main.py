@@ -98,6 +98,35 @@ async def create_structure(req: CourseStructureRequest):
     )
     return {"status": "success", "data": structure}
 
+async def auto_generate_dalle_image(chapter_title: str, explanation: str) -> Optional[str]:
+    import requests
+    import uuid
+    import os
+    try:
+        visual_prompt = (
+            f"A clean professional educational illustration, workflow flow chart, or concept diagram explaining '{chapter_title}'. "
+            f"Style: clean modern infographic, dark theme, high vector graphics, highly informative, no text typos."
+        )
+        response = openai_client.images.generate(
+            model="dall-e-3",
+            prompt=visual_prompt[:1000],
+            n=1,
+            size="1024x1024"
+        )
+        url = response.data[0].url
+        img_data = requests.get(url, timeout=20).content
+        unique_filename = f"dalle_{uuid.uuid4().hex[:8]}.png"
+        os.makedirs("uploads", exist_ok=True)
+        file_path = os.path.join("uploads", unique_filename)
+        with open(file_path, "wb") as f:
+            f.write(img_data)
+        
+        base_url = os.getenv("PUBLIC_ASSET_URL", "http://localhost:8000")
+        return f"{base_url}/uploads/{unique_filename}"
+    except Exception as e:
+        logger.error(f"Failed to auto generate DALL-E visual for {chapter_title}: {e}")
+        return None
+
 @app.post("/course/generate")
 async def generate_chapter(req: GenerateContentRequest):
     content = generate_chapter_content(
@@ -109,6 +138,11 @@ async def generate_chapter(req: GenerateContentRequest):
         req.difficulty,
         req.objectives
     )
+    # Auto-generate visual diagram if HTML and has none
+    if content and not content.get("image_url") and content.get("html_content"):
+        img_url = await auto_generate_dalle_image(req.chapter_title, content.get("explanation", ""))
+        if img_url:
+            content["image_url"] = img_url
     return {"status": "success", "content": content}
 
 @app.post("/course/generate-quiz")
@@ -134,6 +168,11 @@ async def regenerate_chapter(req: RegenerateRequest):
         req.difficulty,
         req.objectives
     )
+    # Auto-generate visual diagram if HTML and has none
+    if content and not content.get("image_url") and content.get("html_content"):
+        img_url = await auto_generate_dalle_image(req.chapter_title, content.get("explanation", ""))
+        if img_url:
+            content["image_url"] = img_url
     return {"status": "success", "content": content}
 
 @app.post("/course/create")
@@ -147,13 +186,14 @@ async def finalize_course(course: dict):
         except Exception as json_err:
             logger.error(f"Error saving to JSON storage: {json_err}")
             
-        # Also save to MySQL
+        # Also save to MySQL and capture the generated ID
         try:
-            save_course_to_mysql(course)
+            mysql_course_id = save_course_to_mysql(course)
         except Exception as db_err:
             logger.error(f"Course saved to JSON but MySQL sync failed: {db_err}")
-            
-        return {"status": "success", "course_id": cid}
+            raise HTTPException(status_code=500, detail=f"Database error: {str(db_err)}")
+        return {"status": "success", "course_id": cid, "mysql_course_id": mysql_course_id}
+
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
 

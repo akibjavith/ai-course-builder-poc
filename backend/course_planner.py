@@ -10,7 +10,7 @@ def generate_course_structure(courseName: str, description: str, subject: str, l
     llm = ChatOpenAI(model=LLM_MODEL, temperature=0.7)
     
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are an expert curriculum designer. Provide a structured JSON output of the course modules and chapters. The output must match the provided JSON schema exactly."),
+        ("system", "You are an expert curriculum designer. Provide a structured JSON output of the course modules and chapters. The output must match the provided JSON schema exactly. CRITICAL: Do NOT prepend numbers, chapter numbers, or index prefixes (like '1.1', 'Module 1:', 'Chapter 1 -') to module or chapter titles in the generated schema. The UI handles ordering and numbering automatically."),
         ("user", "Create a course outline for deeply understanding:\nCourse Name: {name}\nDescription: {desc}\nSubject: {subject}\nLevel: {level}\nOutput strictly as JSON conforming to the schema.")
     ])
     

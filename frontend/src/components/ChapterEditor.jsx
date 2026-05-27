@@ -7,6 +7,132 @@ import {
 } from '../api';
 import PremiumRichEditor from './PremiumRichEditor';
 
+// Beautiful Tablespec component
+function BeautifulTablesList({ tables }) {
+  if (!tables || !Array.isArray(tables) || tables.length === 0) return null;
+  return (
+    <div className="space-y-8 mt-8 border-t border-gray-100 pt-6">
+      <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
+        📊 Data & Comparison Tables
+      </h3>
+      {tables.map((table, idx) => (
+        <div key={idx} className="overflow-x-auto my-6 border border-indigo-100 rounded-xl shadow-sm bg-white">
+          <table className="min-w-full divide-y divide-gray-200">
+            {table.caption && (
+              <caption className="p-4 text-sm font-semibold text-left text-gray-900 bg-gray-50/50 border-b border-gray-200">
+                {table.caption}
+              </caption>
+            )}
+            <thead className="bg-indigo-50/50">
+              <tr>
+                {table.headers?.map((header, hIdx) => (
+                  <th key={hIdx} scope="col" className="px-6 py-3.5 text-left text-xs font-bold text-indigo-900 uppercase tracking-wider">
+                    {header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {table.rows?.map((row, rIdx) => (
+                <tr key={rIdx} className="hover:bg-indigo-50/20 transition-colors">
+                  {row.map((cell, cIdx) => (
+                    <td key={cIdx} className="px-6 py-4 text-sm text-gray-700 font-medium">
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Beautiful References List
+function BeautifulReferencesList({ references }) {
+  if (!references || !Array.isArray(references) || references.length === 0) return null;
+  return (
+    <div className="mt-8 border-t border-gray-200 pt-6">
+      <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
+        📚 References & External Learning Links
+      </h3>
+      <ul className="space-y-3 list-none p-0 m-0">
+        {references.map((ref, idx) => (
+          <li key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-indigo-50/30 hover:bg-indigo-50/60 rounded-xl border border-indigo-100/50 transition-all gap-2">
+            <div>
+              <h4 className="text-sm font-bold text-indigo-950">{ref.title}</h4>
+              {ref.description && <p className="text-xs text-gray-650 mt-0.5">{ref.description}</p>}
+            </div>
+            <a 
+              href={ref.url} 
+              target="_blank" 
+              rel="noreferrer" 
+              className="inline-flex items-center gap-1.5 self-start sm:self-center text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-white border border-indigo-200 px-3 py-1.5 rounded-lg shadow-sm transition active:scale-95 whitespace-nowrap"
+            >
+              Visit Resource ↗
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// Custom hook to automatically add copy buttons to <pre> tags with MutationObserver
+function useCopyCode(containerRef, dependency) {
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const addCopyButtons = () => {
+      const preBlocks = containerRef.current.querySelectorAll('pre');
+      preBlocks.forEach((pre) => {
+        if (pre.querySelector('.copy-code-btn') || pre.dataset.hasCopyBtn) return;
+        pre.style.position = 'relative';
+        pre.dataset.hasCopyBtn = 'true';
+        const button = document.createElement('button');
+        button.className = 'copy-code-btn absolute top-3 right-3 bg-gray-800/95 hover:bg-gray-700 text-gray-350 hover:text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border border-gray-700/50 shadow-md flex items-center gap-1 active:scale-95 z-10';
+        button.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="copy-icon"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+          <span>Copy Code</span>
+        `;
+        button.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const codeElement = pre.querySelector('code');
+          const textToCopy = codeElement ? codeElement.innerText : pre.innerText.replace('Copy Code', '');
+          navigator.clipboard.writeText(textToCopy).then(() => {
+            button.innerHTML = `
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="check-icon text-green-400"><path d="M20 6 9 17l-5-5"/></svg>
+              <span class="text-green-400">Copied!</span>
+            `;
+            setTimeout(() => {
+              button.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="copy-icon"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                <span>Copy Code</span>
+              `;
+            }, 2000);
+          });
+        });
+        pre.appendChild(button);
+      });
+    };
+
+    addCopyButtons();
+    const observer = new MutationObserver(addCopyButtons);
+    observer.observe(containerRef.current, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [containerRef, dependency]);
+}
+
+// Parse raw markdown bold into <strong> tags
+function parseMarkdownBold(text) {
+  if (!text) return "";
+  return text
+    .toString()
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>');
+}
+
 export default function ChapterEditor({ courseTitle, moduleTitle, chapter, courseData, onSave, onRegenerate }) {
   const [content, setContent] = useState(chapter.content?.explanation || "");
   const [htmlContent, setHtmlContent] = useState(chapter.content?.html_content || "");
@@ -30,6 +156,8 @@ export default function ChapterEditor({ courseTitle, moduleTitle, chapter, cours
   const [linkUrl, setLinkUrl] = useState("");
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const containerRef = React.useRef(null);
+  useCopyCode(containerRef, htmlContent || content);
 
   useEffect(() => {
     if (chapter.content) {
@@ -349,12 +477,14 @@ export default function ChapterEditor({ courseTitle, moduleTitle, chapter, cours
                </div>
             </div>
           ) : (
-            <div className="prose prose-indigo max-w-none text-gray-700 leading-relaxed bg-gray-50/50 p-6 rounded-lg border border-gray-100">
-               {editorMode === 'rich' ? (
-                 <div dangerouslySetInnerHTML={{ __html: htmlContent }} />
-               ) : (
-                 <div dangerouslySetInnerHTML={{ __html: content.replace(/\n/g, '<br/>') }} />
-               )}
+            <div ref={containerRef} className="prose prose-indigo max-w-none text-gray-700 leading-relaxed bg-gray-50/50 p-6 rounded-lg border border-gray-100">
+                {editorMode === 'rich' ? (
+                  <div dangerouslySetInnerHTML={{ __html: parseMarkdownBold(htmlContent) }} />
+                ) : (
+                  <div dangerouslySetInnerHTML={{ __html: parseMarkdownBold(content).replace(/\n/g, '<br/>') }} />
+                )}
+               <BeautifulTablesList tables={chapter.content?.tables} />
+               <BeautifulReferencesList references={chapter.content?.references} />
             </div>
           )}
           

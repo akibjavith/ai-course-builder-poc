@@ -8,6 +8,132 @@ import {
 import QuizViewer from './QuizViewer';
 import FlashcardViewer from './FlashcardViewer';
 
+// Beautiful Tablespec component
+function BeautifulTablesList({ tables }) {
+  if (!tables || !Array.isArray(tables) || tables.length === 0) return null;
+  return (
+    <div className="space-y-8 mt-8 border-t border-gray-800 pt-6">
+      <h3 className="text-base font-bold text-white mb-4 flex items-center gap-2">
+        📊 Data & Comparison Tables
+      </h3>
+      {tables.map((table, idx) => (
+        <div key={idx} className="overflow-x-auto my-6 border border-gray-800 rounded-xl shadow-sm bg-gray-900">
+          <table className="min-w-full divide-y divide-gray-850">
+            {table.caption && (
+              <caption className="p-4 text-sm font-semibold text-left text-white bg-gray-950/50 border-b border-gray-800">
+                {table.caption}
+              </caption>
+            )}
+            <thead className="bg-gray-950/50">
+              <tr>
+                {table.headers?.map((header, hIdx) => (
+                  <th key={hIdx} scope="col" className="px-6 py-3.5 text-left text-xs font-bold text-red-400 uppercase tracking-wider">
+                    {header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="bg-gray-900 divide-y divide-gray-800">
+              {table.rows?.map((row, rIdx) => (
+                <tr key={rIdx} className="hover:bg-gray-800/40 transition-colors">
+                  {row.map((cell, cIdx) => (
+                    <td key={cIdx} className="px-6 py-4 text-sm text-gray-300 font-medium">
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Beautiful References List
+function BeautifulReferencesList({ references }) {
+  if (!references || !Array.isArray(references) || references.length === 0) return null;
+  return (
+    <div className="mt-8 border-t border-gray-800 pt-6">
+      <h3 className="text-base font-bold text-white mb-4 flex items-center gap-2">
+        📚 References & External Learning Links
+      </h3>
+      <ul className="space-y-3 list-none p-0 m-0">
+        {references.map((ref, idx) => (
+          <li key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-gray-900 hover:bg-gray-900/60 rounded-xl border border-gray-800 transition-all gap-2">
+            <div>
+              <h4 className="text-sm font-bold text-white">{ref.title}</h4>
+              {ref.description && <p className="text-xs text-gray-400 mt-0.5">{ref.description}</p>}
+            </div>
+            <a 
+              href={ref.url} 
+              target="_blank" 
+              rel="noreferrer" 
+              className="inline-flex items-center gap-1.5 self-start sm:self-center text-xs font-bold text-red-400 hover:text-red-300 bg-gray-800 border border-gray-700 px-3 py-1.5 rounded-lg shadow-sm transition active:scale-95 whitespace-nowrap"
+            >
+              Visit Resource ↗
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// Custom hook to automatically add copy buttons to <pre> tags with MutationObserver
+function useCopyCode(containerRef, dependency) {
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const addCopyButtons = () => {
+      const preBlocks = containerRef.current.querySelectorAll('pre');
+      preBlocks.forEach((pre) => {
+        if (pre.querySelector('.copy-code-btn') || pre.dataset.hasCopyBtn) return;
+        pre.style.position = 'relative';
+        pre.dataset.hasCopyBtn = 'true';
+        const button = document.createElement('button');
+        button.className = 'copy-code-btn absolute top-3 right-3 bg-gray-800/95 hover:bg-gray-700 text-gray-350 hover:text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border border-gray-700/50 shadow-md flex items-center gap-1 active:scale-95 z-10';
+        button.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="copy-icon"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+          <span>Copy Code</span>
+        `;
+        button.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const codeElement = pre.querySelector('code');
+          const textToCopy = codeElement ? codeElement.innerText : pre.innerText.replace('Copy Code', '');
+          navigator.clipboard.writeText(textToCopy).then(() => {
+            button.innerHTML = `
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="check-icon text-green-400"><path d="M20 6 9 17l-5-5"/></svg>
+              <span class="text-green-400">Copied!</span>
+            `;
+            setTimeout(() => {
+              button.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="copy-icon"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                <span>Copy Code</span>
+              `;
+            }, 2000);
+          });
+        });
+        pre.appendChild(button);
+      });
+    };
+
+    addCopyButtons();
+    const observer = new MutationObserver(addCopyButtons);
+    observer.observe(containerRef.current, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [containerRef, dependency]);
+}
+
+// Parse raw markdown bold into <strong> tags
+function parseMarkdownBold(text) {
+  if (!text) return "";
+  return text
+    .toString()
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>');
+}
+
 // --- Custom HTML5 Video Player ---------------------------------------------
 function CustomVideoPlayer({ src }) {
   const videoRef = useRef(null);
@@ -341,6 +467,7 @@ export default function CourseViewer({ course, onBack }) {
   const [quizOpen, setQuizOpen] = useState(false);
   const [surveyMode, setSurveyMode] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const containerRef = useRef(null);
 
   // Count totals
   let totalItems = 0;
@@ -358,6 +485,8 @@ export default function CourseViewer({ course, onBack }) {
     (c.module_title || "").trim().toLowerCase() === (activeModule?.title || "").trim().toLowerCase() && 
     (c.title || "").trim().toLowerCase() === (activeChapData?.title || "").trim().toLowerCase()
   );
+
+  useCopyCode(containerRef, activeChapBlocks);
 
   const hasContent = Array.isArray(activeChapBlocks) ? activeChapBlocks.length > 0 : !!activeChapBlocks;
 
@@ -608,17 +737,17 @@ export default function CourseViewer({ course, onBack }) {
               </div>
 
               {/* Material Stack Rendering */}
-              <div className="space-y-12">
+              <div ref={containerRef} className="space-y-12">
                 {(Array.isArray(activeChapBlocks) ? activeChapBlocks : [activeChapBlocks]).map((block, bIdx) => (
                   <div key={bIdx} className="animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: `${bIdx * 100}ms` }}>
                     {/* HTML / AI Text Block */}
                     {(block.content_type === 'html' || block.html_content || block.type === 'html' || block.content) && (
                       <div className="rich-content prose prose-invert prose-red max-w-none">
                         {block.html_content || block.content ? (
-                           <div dangerouslySetInnerHTML={{ __html: block.html_content || block.content }} />
+                           <div dangerouslySetInnerHTML={{ __html: parseMarkdownBold(block.html_content || block.content) }} />
                         ) : block.explanation ? (
                            <div className="space-y-6">
-                              <p className="text-gray-300 text-lg leading-relaxed whitespace-pre-wrap">{block.explanation}</p>
+                              <p className="text-gray-300 text-lg leading-relaxed whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: parseMarkdownBold(block.explanation).replace(/\n/g, '<br/>') }} />
                               {block.key_points?.length > 0 && (
                                 <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 my-8">
                                   <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
@@ -673,6 +802,10 @@ export default function CourseViewer({ course, onBack }) {
                          <FlashcardViewer flashcards={block.flashcards} />
                       </div>
                     )}
+                    {/* Tables */}
+                    {block.tables && <BeautifulTablesList tables={block.tables} />}
+                    {/* References */}
+                    {block.references && <BeautifulReferencesList references={block.references} />}
                   </div>
                 ))}
               </div>
