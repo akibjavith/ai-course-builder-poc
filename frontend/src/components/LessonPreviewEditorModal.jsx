@@ -346,8 +346,6 @@ export default function LessonPreviewEditorModal({
             ) : previewContent?.html_content ? (
               <div ref={containerRef} className="prose prose-slate max-w-none text-slate-700 leading-relaxed text-lg">
                 <div dangerouslySetInnerHTML={{ __html: parseMarkdownBold(previewContent.html_content) }} className="animate-fade-in" />
-                <BeautifulTablesList tables={chapter?.content?.tables || (chapter?.contents || []).find(b => b?.tables)?.tables} />
-                <BeautifulReferencesList references={chapter?.content?.references || (chapter?.contents || []).find(b => b?.references)?.references} />
               </div>
             ) : (
               <div className="text-slate-500 text-sm">

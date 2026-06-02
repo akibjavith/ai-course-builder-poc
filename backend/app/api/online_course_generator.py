@@ -220,6 +220,23 @@ async def generate_lesson(req: LessonRequest):
                 refs_html += f"<li style='margin-bottom:8px;'><a href='{ref.get('url','#')}' target='_blank' rel='noopener noreferrer' style='color:#2563eb;text-decoration:underline;'>{ref.get('title','Reference')}</a></li>"
             refs_html += "</ul></div>"
 
+        # Generate image first
+        image_url = None
+        try:
+            prompt_resp = await generate_image_prompt({"lesson_text": str(lesson_data.get('concept', ''))})
+            image_resp = await generate_image({"prompt": prompt_resp["prompt"]})
+            image_url = image_resp["image_url"]
+        except Exception as img_err:
+            print("Generate lesson auto-image failed", img_err)
+
+        image_html = ""
+        if image_url:
+            image_html = f"""
+            <div class="lesson-image" style="margin: 25px 0; text-align: center;">
+                <img src="{image_url}" alt="{req.title}" style="max-width: 100%; max-height: 450px; object-fit: contain; border-radius: 12px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); border: 1px solid rgba(128,128,128,0.2);" />
+            </div>
+            """
+
         # Copy button JS embedded in HTML
         copy_btn_style = "position:absolute;top:10px;right:10px;background:rgba(30,41,59,0.95);color:#94a3b8;border:1px solid rgba(148,163,184,0.3);padding:6px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;z-index:10;"
         copy_btn_script = "onclick=\"(function(btn){var code=btn.parentElement.querySelector('code');if(code){navigator.clipboard.writeText(code.innerText).then(function(){btn.innerText='Copied!';btn.style.color='#22c55e';setTimeout(function(){btn.innerText='Copy Code';btn.style.color='#94a3b8';},2000);})};})(this)\""
@@ -229,6 +246,7 @@ async def generate_lesson(req: LessonRequest):
             <div style="margin-bottom: 35px; border-left: 4px solid #3b82f6; padding-left: 20px;">
                 <h4 style="color: #3b82f6; text-transform: uppercase; font-size: 0.85rem; margin-bottom: 10px; font-weight: bold;">The Core Concept</h4>
                 <div style="font-size: 1.05rem;">{md_html(lesson_data.get('concept', ''))}</div>
+                {image_html}
             </div>
             <div class="example" style="background: rgba(34, 197, 94, 0.1); border-left: 6px solid #22c55e; padding: 25px; border-radius: 12px; margin-bottom: 30px;">
                 <h4 style="margin-top: 0; color: #22c55e; text-transform: uppercase; font-size: 0.85rem; font-weight: bold;">Professional Example</h4>
@@ -258,14 +276,6 @@ async def generate_lesson(req: LessonRequest):
             {refs_html}
         </div>
         """
-        
-        image_url = None
-        try:
-            prompt_resp = await generate_image_prompt({"lesson_text": str(lesson_data.get('concept', ''))})
-            image_resp = await generate_image({"prompt": prompt_resp["prompt"]})
-            image_url = image_resp["image_url"]
-        except Exception as img_err:
-            print("Generate lesson auto-image failed", img_err)
 
         return {
             "content": html_snippet,
@@ -320,31 +330,29 @@ async def generate_image(payload: Dict[str, str]):
     prompt = payload.get("prompt", "")
     url = None
     try:
-        # Try DALL-E-3 first
-        try:
-            response = get_openai_client().images.generate(
-                model="dall-e-3",
-                prompt=prompt[:1000] if prompt else "Beautiful futuristic educational digital art.",
-                n=1,
-                size="1024x1024"
-            )
-            url = response.data[0].url
-        except Exception as de3_err:
-            print("DALL-E-3 failed, falling back to DALL-E-2:", de3_err)
-            # Fallback to DALL-E-2
-            response = get_openai_client().images.generate(
-                model="dall-e-2",
-                prompt=prompt[:1000] if prompt else "Beautiful futuristic educational digital art.",
-                n=1,
-                size="1024x1024"
-            )
-            url = response.data[0].url
+        response = get_openai_client().images.generate(
+            model="gpt-image-2",
+            prompt=prompt[:1000] if prompt else "Beautiful futuristic educational digital art.",
+            n=1,
+            size="1024x1024",
+            quality="low"
+        )
+        print("Image response:", response)
+        img_data = None
+        first_item = response.data[0]
+        
+        url_val = getattr(first_item, 'url', None)
+        b64_val = getattr(first_item, 'b64_json', None)
+        
+        if b64_val:
+            import base64
+            img_data = base64.b64decode(b64_val)
+        elif url_val and url_val != "None":
+            import requests
+            img_data = requests.get(url_val, timeout=20).content
+        else:
+            raise ValueError(f"No valid image URL or b64_json found in response: {first_item}")
 
-        # Download the image to avoid expiration
-        import requests
-        import uuid
-        import os
-        img_data = requests.get(url).content
         unique_filename = f"dalle_{uuid.uuid4().hex[:8]}.png"
         os.makedirs("uploads", exist_ok=True)
         file_path = os.path.join("uploads", unique_filename)
@@ -356,7 +364,7 @@ async def generate_image(payload: Dict[str, str]):
         image_url = f"{base_url}/uploads/{unique_filename}"
         return ImageResponse(image_url=image_url).dict()
     except Exception as e:
-        print("Dalle fallback error:", e)
+        print("Image generation/download error:", e)
         # Return null image URL to indicate omission without placeholder
         return ImageResponse(image_url=None).dict()
 

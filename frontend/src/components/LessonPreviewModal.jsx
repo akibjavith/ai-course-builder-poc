@@ -288,10 +288,12 @@ export default function LessonPreviewModal({ chapter, chapterContent, onClose, o
                      {chapterContent.html_content ? (
                         <div dangerouslySetInnerHTML={{ __html: parseMarkdownBold(chapterContent.html_content) }} className="animate-fade-in" />
                      ) : (
-                        <div dangerouslySetInnerHTML={{ __html: parseMarkdownBold(chapterContent.explanation).replace(/\n/g, '<br/>') }} className="animate-fade-in" />
+                        <>
+                          <div dangerouslySetInnerHTML={{ __html: parseMarkdownBold(chapterContent.explanation).replace(/\n/g, '<br/>') }} className="animate-fade-in" />
+                          <BeautifulTablesList tables={chapterContent.tables} />
+                          <BeautifulReferencesList references={chapterContent.references} />
+                        </>
                      )}
-                    <BeautifulTablesList tables={chapterContent.tables} />
-                    <BeautifulReferencesList references={chapterContent.references} />
                  </div>
               </div>
 

@@ -108,13 +108,27 @@ async def auto_generate_dalle_image(chapter_title: str, explanation: str) -> Opt
             f"Style: clean modern infographic, dark theme, high vector graphics, highly informative, no text typos."
         )
         response = openai_client.images.generate(
-            model="dall-e-3",
+            model="gpt-image-2",
             prompt=visual_prompt[:1000],
             n=1,
-            size="1024x1024"
+            size="1024x1024",
+            quality="low"
         )
-        url = response.data[0].url
-        img_data = requests.get(url, timeout=20).content
+        logger.info(f"Image response: {response}")
+        img_data = None
+        first_item = response.data[0]
+        
+        url_val = getattr(first_item, 'url', None)
+        b64_val = getattr(first_item, 'b64_json', None)
+        
+        if b64_val:
+            import base64
+            img_data = base64.b64decode(b64_val)
+        elif url_val and url_val != "None":
+            img_data = requests.get(url_val, timeout=20).content
+        else:
+            raise ValueError(f"No valid image URL or b64_json found in response: {first_item}")
+
         unique_filename = f"dalle_{uuid.uuid4().hex[:8]}.png"
         os.makedirs("uploads", exist_ok=True)
         file_path = os.path.join("uploads", unique_filename)
@@ -138,11 +152,33 @@ async def generate_chapter(req: GenerateContentRequest):
         req.difficulty,
         req.objectives
     )
-    # Auto-generate visual diagram if HTML and has none
-    if content and not content.get("image_url") and content.get("html_content"):
+    # Auto-generate visual diagram if HTML or explanation is present and has none
+    if content and not content.get("image_url") and (content.get("html_content") or content.get("explanation")):
         img_url = await auto_generate_dalle_image(req.chapter_title, content.get("explanation", ""))
         if img_url:
             content["image_url"] = img_url
+            image_html = f"""
+            <div class="lesson-image" style="margin: 25px 0; text-align: center;">
+                <img src="{img_url}" alt="{req.chapter_title}" style="max-width: 100%; max-height: 450px; object-fit: contain; border-radius: 12px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); border: 1px solid rgba(128,128,128,0.2);" />
+            </div>
+            """
+            
+            # Inject into html_content if available
+            if content.get("html_content"):
+                orig_html = content.get("html_content", "")
+                if orig_html.strip().startswith("<div"):
+                    parts = orig_html.split(">", 1)
+                    if len(parts) == 2:
+                        content["html_content"] = f"{parts[0]}>{image_html}{parts[1]}"
+                    else:
+                        content["html_content"] = f"{image_html}{orig_html}"
+                else:
+                    content["html_content"] = f"{image_html}{orig_html}"
+            
+            # Inject into explanation to ensure it displays in Plain Text editor mode
+            if content.get("explanation"):
+                content["explanation"] = f"{image_html}{content.get('explanation', '')}"
+                
     return {"status": "success", "content": content}
 
 @app.post("/course/generate-quiz")
