@@ -30,18 +30,8 @@ export const generateStructure = async (sourceType, details) => {
   return response.data;
 };
 
-export const generateChapter = async (data) => {
-  const response = await axios.post(`${API_URL}/course/generate`, data);
-  return response.data;
-};
-
 export const generateCourseQuiz = async (data) => {
   const response = await axios.post(`${API_URL}/course/quiz`, data);
-  return response.data;
-};
-
-export const regenerateChapter = async (data) => {
-  const response = await axios.post(`${API_URL}/course/regenerate`, data);
   return response.data;
 };
 
@@ -64,11 +54,6 @@ export const generateLessonContent = async (payload) => {
   return response.data;
 };
 
-export const generateVoiceScript = async (payload) => {
-  const response = await axios.post(`${API_URL}/course/voice`, payload);
-  return response.data;
-};
-
 export const generateImagePrompt = async (payload) => {
   const response = await axios.post(`${API_URL}/course/image-prompt`, payload);
   return response.data;
@@ -79,20 +64,6 @@ export const generateImage = async (payload) => {
   return response.data;
 };
 
-export const compileVideo = async (payload) => {
-  const response = await axios.post(`${API_URL}/course/compile-video`, payload);
-  return response.data;
-};
-
-export const startAsyncGeneration = async (payload) => {
-  const response = await axios.post(`${API_URL}/course/generate-async`, payload);
-  return response.data;
-};
-
-export const checkAsyncStatus = async (taskId) => {
-  const response = await axios.get(`${API_URL}/course/task-status/${taskId}`);
-  return response.data;
-};
 
 export const storeCourse = async (payload) => {
   const courseId = payload.course_json.id;

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException
 import asyncio
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
@@ -14,8 +14,9 @@ from openai import OpenAI
 from schemas import ImagePromptResponse, ImageResponse
 from schemas import (
     OutlineRequest, ChapterContent, CourseQuiz, CourseDetails,
-    LessonRequest, QuizRequest, GenerateAsyncRequest, StoreCourseRequest
+    LessonRequest, QuizRequest, StoreCourseRequest
 )
+
 
 _client = None
 
@@ -368,31 +369,10 @@ async def generate_image(payload: Dict[str, str]):
         # Return null image URL to indicate omission without placeholder
         return ImageResponse(image_url=None).dict()
 
-class VideoCompileRequest(BaseModel):
-    image_url: str
-    script_text: str
-
-@router.post("/compile-video")
-async def compile_video_endpoint(req: VideoCompileRequest):
-    try:
-        # Generate video dynamically using our new ffmpeg wrapper
-        # Lazy import — only loaded when video compilation is requested
-        from app.services.video_compiler import compile_video
-        filename = f"compiled_lesson_{uuid.uuid4().hex[:8]}.mp4"
-        video_url = compile_video(
-            image_url=req.image_url, 
-            lesson_text=req.script_text, 
-            output_filename=filename
-        )
-        # Return the video path relative to the API host
-        return {"video_url": video_url}
-    except Exception as e:
-        # Fallback
-        raise HTTPException(status_code=500, detail=str(e))
-
 @router.post("/quiz")
 async def create_course_quiz(req: QuizRequest):
     from content_generator import generate_course_quiz
+
     try:
         quiz = generate_course_quiz(
             course_title=req.course_title,
@@ -405,132 +385,4 @@ async def create_course_quiz(req: QuizRequest):
         return quiz
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-async def async_course_worker(task_id: str, req: GenerateAsyncRequest):
-    try:
-        total_jobs = len(req.jobs)
-        results = []
-        for i, job in enumerate(req.jobs):
-            TASK_STORE[task_id]["progress"] = int((i / total_jobs) * 90)
-            TASK_STORE[task_id]["message"] = f"Generating content for {job.chapterTitle}..."
-            
-            # Try to find the prompt for this chapter in the modules
-            chap_prompt = f"Explain {job.chapterTitle} deeply."
-            for mod in req.modules:
-                if mod.get("title") == job.moduleTitle:
-                    for chap in mod.get("chapters", []):
-                        if chap.get("title") == job.chapterTitle:
-                            if chap.get("content") and chap["content"].get("prompt"):
-                                chap_prompt = chap["content"]["prompt"]
-                            break
-            
-            content = generate_chapter_content(
-                course_title=req.course_details.courseName,
-                module_title=job.moduleTitle,
-                chapter_title=job.chapterTitle,
-                source_type=req.source_type,
-                audience=req.course_details.requirements,
-                difficulty=req.course_details.level,
-                objectives=[req.course_details.requirements],
-                output_format=req.course_format
-            )
-            
-            voice_script = None
-            image_url = None
-            video_url = None
-            html_content = content.get("html_content")
-            content_type = 'ai_generated'
-            
-            if req.course_format == 'video':
-                TASK_STORE[task_id]["message"] = f"Generating audio & images for {job.chapterTitle}..."
-                voice_resp = await generate_voice({"lesson_text": content.get("explanation", "")})
-                prompt_resp = await generate_image_prompt({"lesson_text": content.get("explanation", "")})
-                image_resp = await generate_image({"prompt": prompt_resp["prompt"]})
-                
-                TASK_STORE[task_id]["message"] = f"Compiling MP4 for {job.chapterTitle}..."
-                vreq = VideoCompileRequest(image_url=image_resp["image_url"], script_text=content.get("explanation", ""))
-                video_resp = await compile_video_endpoint(vreq)
-                
-                voice_script = voice_resp["voice_script"]
-                image_url = image_resp["image_url"]
-                video_url = video_resp["video_url"]
-                content_type = 'video'
-            elif req.course_format == 'image':
-                prompt_resp = await generate_image_prompt({"lesson_text": content.get("explanation", "")})
-                image_resp = await generate_image({"prompt": prompt_resp["prompt"]})
-                image_url = image_resp["image_url"]
-                content_type = 'image'
-            elif req.course_format == 'html':
-                content_type = 'html'
-                try:
-                    prompt_resp = await generate_image_prompt({"lesson_text": content.get("explanation", "")})
-                    image_resp = await generate_image({"prompt": prompt_resp["prompt"]})
-                    image_url = image_resp["image_url"]
-                except Exception as img_err:
-                    print("Async worker auto-image failed", img_err)
-                    image_url = None
 
-            results.append({
-                "module_title": job.moduleTitle,
-                "title": job.chapterTitle,
-                "content_type": content_type,
-                "explanation": content.get("explanation", ""),
-                "html_content": html_content,
-                "examples": content.get("examples", []),
-                "key_points": content.get("key_points", []),
-                "tables": content.get("tables"),
-                "references": content.get("references"),
-                "voice_script": voice_script,
-                "image_url": image_url,
-                "video_url": video_url,
-                "document_url": None
-            })
-            
-        TASK_STORE[task_id]["progress"] = 90
-        TASK_STORE[task_id]["message"] = "Generating Global Course Quiz..."
-        
-        quiz = None
-        try:
-            quiz = generate_course_quiz(
-                course_title=req.course_details.courseName,
-                modules=req.modules,
-                source_type=req.source_type,
-                audience=req.course_details.requirements, # Use requirements as audience context
-                difficulty=req.course_details.level,
-                objectives=req.course_details.requirements
-            )
-        except Exception:
-            pass
-
-        TASK_STORE[task_id]["progress"] = 100
-        TASK_STORE[task_id]["status"] = "completed"
-        TASK_STORE[task_id]["message"] = "All AI processing complete."
-        TASK_STORE[task_id]["result"] = {
-            "content": results,
-            "quiz": quiz
-        }
-
-    except Exception as e:
-        TASK_STORE[task_id]["status"] = "failed"
-        TASK_STORE[task_id]["message"] = str(e)
-
-
-@router.post("/generate-async")
-async def generate_async(req: GenerateAsyncRequest, background_tasks: BackgroundTasks):
-    task_id = str(uuid.uuid4())
-    TASK_STORE[task_id] = {
-        "status": "running",
-        "progress": 0,
-        "message": "Initializing generation...",
-        "result": None
-    }
-    background_tasks.add_task(async_course_worker, task_id, req)
-    return {"task_id": task_id}
-
-@router.get("/task-status/{task_id}")
-async def task_status(task_id: str):
-    if task_id not in TASK_STORE:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return TASK_STORE[task_id]
-
-
-# Removed duplicate list_courses endpoint; using main.py implementation.

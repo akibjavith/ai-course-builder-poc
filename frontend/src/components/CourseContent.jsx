@@ -292,11 +292,13 @@ export default function CourseContent({ courseData, updateCourseData, contentGen
   const handleRegeneratePrompt = (lesson) => {
     const moduleTitle = modules[expandedLesson.mIdx]?.title || `Module ${expandedLesson.mIdx + 1}`;
     const prompt = `Please generate a high-quality, practical, and highly detailed AI content generation prompt ONLY for the lesson: "${lesson.title}" in the module: "${moduleTitle}". 
-    The course is about: "${courseData.details?.title}". 
-    Target Audience: "${courseData.details?.target_audience}".
+    The course is about: "${courseData.details?.courseName || courseData.details?.title || 'this course'}". 
+    Description: "${courseData.details?.description || ''}".
 
-    CRITICAL REQUIREMENT: 
-    The prompt you generate MUST be at least 200 words long, covering specific learning objectives, detailed content outlines, examples, and analogies. 
+    CRITICAL REQUIREMENTS: 
+    1. The prompt you generate MUST be at least 200 words long, covering specific learning objectives, detailed content outlines, examples, and analogies. 
+    2. DO NOT ask any questions. DO NOT ask for confirmation. Generate the prompt IMMEDIATELY.
+    3. This lesson is part of the CURRENT course - do NOT refuse or ask if the user wants relevant content.
 
     YOU MUST RETURN A [METADATA] BLOCK with the following JSON:
     { "module": "${moduleTitle}", "title": "${lesson.title}", "prompt": "..." }`;
@@ -304,11 +306,13 @@ export default function CourseContent({ courseData, updateCourseData, contentGen
     setSidebarRequest({ 
       text: prompt, 
       display: `Regenerate Prompt for ${moduleTitle}: ${lesson.title}`, 
-      fillInput: false 
+      fillInput: false,
+      clearHistory: true,
+      _ts: Date.now()
     });
     setShowSidebar(true);
     // Reset trigger after a short delay so it can be re-triggered
-    setTimeout(() => setSidebarRequest(null), 100);
+    setTimeout(() => setSidebarRequest(null), 200);
   };
 
   const modules = courseData.structure?.modules || [];

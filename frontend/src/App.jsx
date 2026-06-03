@@ -3,13 +3,13 @@ import { PlayCircle } from 'lucide-react';
 import Stepper from './components/Stepper';
 import SourceSelection from './components/SourceSelection';
 import CourseDetails from './components/CourseDetails';
-import InteractiveCourseCreator from './components/InteractiveCourseCreator';
 import PublishDashboard from './components/PublishDashboard';
 import CoursesDashboard from './pages/CoursesDashboard';
 import CourseViewer from './components/CourseViewer';
 import CourseStructure from './components/CourseStructure';
 import CourseContent from './components/CourseContent';
 import { getCourseById } from './api';
+
 
 function App() {
   const [view, setView] = useState('dashboard'); // 'dashboard' | 'builder' | 'viewer'

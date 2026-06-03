@@ -12,7 +12,6 @@ python-multipart
 pypdf
 docx2txt
 requests
-imageio-ffmpeg
 PyMuPDF
 python-docx
 python-pptx

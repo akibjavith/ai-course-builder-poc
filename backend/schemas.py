@@ -81,35 +81,6 @@ class MCQItem(BaseModel):
     
 class MCQResponse(BaseModel):
     mcqs: List[MCQItem]
-
-class GenerateContentRequest(BaseModel):
-    course_title: str
-    module_title: str
-    chapter_title: str
-    source_type: str
-    audience: str
-    difficulty: str
-    objectives: List[str]
-
-class GenerateQuizRequest(BaseModel):
-    course_title: str
-    modules: List[dict]
-    source_type: str
-    audience: str
-    difficulty: str
-    objectives: List[str]
-
-# For regenerating specific things
-class RegenerateRequest(BaseModel):
-    course_title: str
-    module_title: str
-    chapter_title: str
-    source_type: str
-    audience: str
-    difficulty: str
-    objectives: List[str]
-    regenerate_type: str # "full" or "quiz"
-
 # --- Online Course Generator schemas ---
 
 class OutlineRequest(BaseModel):
@@ -118,20 +89,12 @@ class OutlineRequest(BaseModel):
     level: str = Field(..., description="Difficulty (beginner|intermediate|advanced)")
     subject: str = Field(..., description="Subject of the course")
 
-class LessonContent(BaseModel):
-    explanation: str
-    examples: List[str]
-    key_points: List[str]
-
 class LessonRequest(BaseModel):
     title: str
     module_title: str
     prompt: str
     type: str = "html"
     course_details: Optional[CourseDetails] = None
-
-class VoiceScriptResponse(BaseModel):
-    voice_script: str
 
 class ImagePromptResponse(BaseModel):
     prompt: str
@@ -148,18 +111,6 @@ class QuizRequest(BaseModel):
     sourceType: Optional[str] = "external"
     course_details: Optional[CourseDetails] = None
 
-class PendingJob(BaseModel):
-    moduleIdx: int
-    lessonIdx: int
-    moduleTitle: str
-    chapterTitle: str
-
-class GenerateAsyncRequest(BaseModel):
-    jobs: List[PendingJob]
-    course_details: CourseDetails
-    course_format: str = "html"
-    source_type: str = "external"
-    modules: List[dict]
 
 class GenerateTitleRequest(BaseModel):
     description: str

@@ -32,15 +32,32 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
 
   useEffect(() => {
     if (initialInput) {
-      const inputKey = typeof initialInput === 'object' ? initialInput.text : initialInput;
+      // Use unique key (with timestamp if provided) to allow re-triggering same lesson
+      const inputKey = typeof initialInput === 'object' 
+        ? (initialInput._ts ? `${initialInput.text}_${initialInput._ts}` : initialInput.text) 
+        : initialInput;
       if (processedInputRef.current === inputKey) {
         return; // Already processed this initial input, skip!
       }
       processedInputRef.current = inputKey;
 
       if (typeof initialInput === 'object') {
+        // If clearHistory flag is set, reset chat before sending (prevents AI confusion from prior bulk context)
+        if (initialInput.clearHistory) {
+          setMessages([{
+            id: 1,
+            sender: 'ai',
+            text: "I'll regenerate the prompt for you right away.",
+            type: 'text'
+          }]);
+        }
         if (initialInput.fillInput) setInput(initialInput.text);
-        handleSend(initialInput.text, initialInput.display);
+        // Use setTimeout to ensure state update (messages reset) is applied before handleSend reads chat history
+        if (initialInput.clearHistory) {
+          setTimeout(() => handleSend(initialInput.text, initialInput.display), 50);
+        } else {
+          handleSend(initialInput.text, initialInput.display);
+        }
       } else {
         setInput(initialInput);
         handleSend(initialInput);

@@ -1,15 +1,16 @@
-from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from typing import Optional
 from schemas import (
-    CourseStructureRequest, GenerateContentRequest, RegenerateRequest, GenerateQuizRequest,
+    CourseStructureRequest,
     GenerateTitleRequest, GenerateTitleResponse, FetchWebRequest, FetchYouTubeRequest,
     GenerateOutlineBaseRequest, ExportChapterRequest, GenerateVoiceScriptReq, GenerateFlashcardsRequest,
     GenerateMCQRequest, GenerateAssessmentRequest, ChatRequest
 )
 from course_planner import generate_course_structure
 from content_generator import generate_chapter_content, generate_course_quiz
+
 from rag_pipeline import ingest_document
 from course_store import save_course, get_courses, get_course, update_course, delete_course
 from database import save_course_to_mysql
@@ -141,75 +142,7 @@ async def auto_generate_dalle_image(chapter_title: str, explanation: str) -> Opt
         logger.error(f"Failed to auto generate DALL-E visual for {chapter_title}: {e}")
         return None
 
-@app.post("/course/generate")
-async def generate_chapter(req: GenerateContentRequest):
-    content = generate_chapter_content(
-        req.course_title,
-        req.module_title,
-        req.chapter_title,
-        req.source_type,
-        req.audience,
-        req.difficulty,
-        req.objectives
-    )
-    # Auto-generate visual diagram if HTML or explanation is present and has none
-    if content and not content.get("image_url") and (content.get("html_content") or content.get("explanation")):
-        img_url = await auto_generate_dalle_image(req.chapter_title, content.get("explanation", ""))
-        if img_url:
-            content["image_url"] = img_url
-            image_html = f"""
-            <div class="lesson-image" style="margin: 25px 0; text-align: center;">
-                <img src="{img_url}" alt="{req.chapter_title}" style="max-width: 100%; max-height: 450px; object-fit: contain; border-radius: 12px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); border: 1px solid rgba(128,128,128,0.2);" />
-            </div>
-            """
-            
-            # Inject into html_content if available
-            if content.get("html_content"):
-                orig_html = content.get("html_content", "")
-                if orig_html.strip().startswith("<div"):
-                    parts = orig_html.split(">", 1)
-                    if len(parts) == 2:
-                        content["html_content"] = f"{parts[0]}>{image_html}{parts[1]}"
-                    else:
-                        content["html_content"] = f"{image_html}{orig_html}"
-                else:
-                    content["html_content"] = f"{image_html}{orig_html}"
-            
-            # Inject into explanation to ensure it displays in Plain Text editor mode
-            if content.get("explanation"):
-                content["explanation"] = f"{image_html}{content.get('explanation', '')}"
-                
-    return {"status": "success", "content": content}
 
-@app.post("/course/generate-quiz")
-async def generate_quiz(req: GenerateQuizRequest):
-    quiz = generate_course_quiz(
-        req.course_title,
-        req.modules,
-        req.source_type,
-        req.audience,
-        req.difficulty,
-        req.objectives
-    )
-    return {"status": "success", "quiz": quiz.get("questions", [])}
-
-@app.post("/course/regenerate")
-async def regenerate_chapter(req: RegenerateRequest):
-    content = generate_chapter_content(
-        req.course_title,
-        req.module_title,
-        req.chapter_title,
-        req.source_type,
-        req.audience,
-        req.difficulty,
-        req.objectives
-    )
-    # Auto-generate visual diagram if HTML and has none
-    if content and not content.get("image_url") and content.get("html_content"):
-        img_url = await auto_generate_dalle_image(req.chapter_title, content.get("explanation", ""))
-        if img_url:
-            content["image_url"] = img_url
-    return {"status": "success", "content": content}
 
 @app.post("/course/create")
 async def finalize_course(course: dict):
