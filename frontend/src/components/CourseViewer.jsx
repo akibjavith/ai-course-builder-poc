@@ -735,11 +735,212 @@ export default function CourseViewer({ course, onBack }) {
                 </h1>
                 <div className="h-1.5 w-20 bg-red-600 rounded-full" />
               </div>
-
               {/* Material Stack Rendering */}
               <div ref={containerRef} className="space-y-12">
                 {(Array.isArray(activeChapBlocks) ? activeChapBlocks : [activeChapBlocks]).map((block, bIdx) => (
                   <div key={bIdx} className="animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: `${bIdx * 100}ms` }}>
+                    {/* Lesson Blocks (New system) */}
+                    {(block.type === 'lesson-blocks' || block.content_type === 'lesson-blocks') && block.blocks && (
+                      <div className="space-y-6 text-left">
+                        {block.blocks.map((subBlock, sIdx) => {
+                          return (
+                            <div key={subBlock.id || sIdx} className="text-gray-300">
+                              {subBlock.type === 'heading' && (
+                                subBlock.level === 1 ? (
+                                  <h1 className="text-3xl font-black text-white tracking-tight mb-4 border-b border-gray-800 pb-2">{subBlock.text}</h1>
+                                ) : subBlock.level === 3 ? (
+                                  <h3 className="text-lg font-bold text-gray-200 mb-2">{subBlock.text}</h3>
+                                ) : (
+                                  <h2 className="text-xl font-bold text-red-400 mb-3 border-l-4 border-red-500 pl-3">{subBlock.text}</h2>
+                                )
+                              )}
+                              
+                              {subBlock.type === 'paragraph' && (
+                                <p className="text-gray-300 leading-relaxed text-base mb-4" dangerouslySetInnerHTML={{ __html: parseMarkdownBold(subBlock.text) }} />
+                              )}
+                              
+                              {subBlock.type === 'bullet_list' && (
+                                <ul className="list-disc pl-6 space-y-2 text-gray-300 mb-4">
+                                  {(subBlock.items || []).map((item, itemIdx) => (
+                                    <li key={itemIdx} dangerouslySetInnerHTML={{ __html: parseMarkdownBold(item) }} />
+                                  ))}
+                                </ul>
+                              )}
+                              
+                              {subBlock.type === 'numbered_list' && (
+                                <ol className="list-decimal pl-6 space-y-2 text-gray-300 mb-4">
+                                  {(subBlock.items || []).map((item, itemIdx) => (
+                                    <li key={itemIdx} dangerouslySetInnerHTML={{ __html: parseMarkdownBold(item) }} />
+                                  ))}
+                                </ol>
+                              )}
+                              
+                              {subBlock.type === 'image' && (
+                                <div className="my-6 text-center bg-gray-900/45 p-4 rounded-2xl border border-gray-800">
+                                  {subBlock.url ? (
+                                    <img src={subBlock.url} alt={subBlock.caption || ''} className="max-w-full max-h-[400px] object-contain rounded-xl mx-auto shadow-sm" />
+                                  ) : (
+                                    <div className="h-40 bg-gray-900 flex items-center justify-center rounded-xl border border-dashed border-gray-800 text-gray-500 text-xs">
+                                      [Visual: {subBlock.caption}]
+                                    </div>
+                                  )}
+                                  {subBlock.caption && <p className="text-xs text-gray-500 italic mt-2">{subBlock.caption}</p>}
+                                </div>
+                              )}
+                              
+                              {subBlock.type === 'video' && (
+                                <div className="my-6 text-center bg-gray-900/45 p-4 rounded-2xl border border-gray-800">
+                                  {subBlock.url ? (
+                                    <video src={subBlock.url} controls className="max-w-full rounded-xl mx-auto" />
+                                  ) : (
+                                    <div className="h-40 bg-gray-900 flex items-center justify-center rounded-xl border border-dashed border-gray-800 text-gray-500 text-xs">
+                                      [Video Segment: {subBlock.caption}]
+                                    </div>
+                                  )}
+                                  {subBlock.caption && <p className="text-xs text-gray-500 italic mt-2">{subBlock.caption}</p>}
+                                </div>
+                              )}
+                              
+                              {subBlock.type === 'table' && (
+                                <div className="overflow-x-auto my-6 border border-gray-800 rounded-2xl shadow-sm bg-gray-900/30">
+                                  <table className="min-w-full divide-y divide-gray-800">
+                                    <thead className="bg-gray-900/50">
+                                      <tr>
+                                        {(subBlock.headers || []).map((header, hIdx) => (
+                                          <th key={hIdx} scope="col" className="px-6 py-3.5 text-left text-xs font-bold text-gray-250 uppercase tracking-wider">
+                                            {header}
+                                          </th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody className="bg-transparent divide-y divide-gray-900">
+                                      {(subBlock.rows || []).map((row, rIdx) => (
+                                        <tr key={rIdx} className="hover:bg-gray-900/40 transition-colors">
+                                          {row.map((cell, cIdx) => (
+                                            <td key={cIdx} className="px-6 py-4 text-sm text-gray-300">
+                                              {cell}
+                                            </td>
+                                          ))}
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                              
+                              {subBlock.type === 'callout' && (
+                                (() => {
+                                  let styles = 'bg-blue-950/20 border-blue-500 text-blue-300';
+                                  if (subBlock.callout_type === 'warning') styles = 'bg-amber-950/20 border-amber-500 text-amber-300';
+                                  else if (subBlock.callout_type === 'tip') styles = 'bg-emerald-950/20 border-emerald-500 text-emerald-300';
+                                  else if (subBlock.callout_type === 'danger') styles = 'bg-rose-950/20 border-rose-500 text-rose-300';
+                                  return (
+                                    <div className={`border-l-4 p-5 rounded-xl flex gap-3 my-4 ${styles}`}>
+                                      <span className="font-bold">💡</span>
+                                      <div className="text-sm font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: parseMarkdownBold(subBlock.text) }} />
+                                    </div>
+                                  );
+                                })()
+                              )}
+                              
+                              {subBlock.type === 'code' && (
+                                <div className="my-6">
+                                  <div className="relative">
+                                    <pre className="bg-slate-900 text-sky-400 p-6 pt-12 rounded-2xl overflow-x-auto font-mono text-sm leading-relaxed border border-gray-800">
+                                      <code>{subBlock.code}</code>
+                                    </pre>
+                                  </div>
+                                  {subBlock.explanation && (
+                                    <div className="mt-3 p-4 bg-gray-900/40 border border-gray-800 rounded-xl text-sm text-gray-400 leading-relaxed font-medium">
+                                      {subBlock.explanation}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              
+                              {subBlock.type === 'example' && (
+                                <div className="bg-emerald-950/10 border-l-4 border-emerald-500 p-6 rounded-2xl my-6">
+                                  <h4 className="text-emerald-400 text-xs font-black uppercase tracking-widest mb-2">
+                                    💡 Real-World Example: {subBlock.scenario}
+                                  </h4>
+                                  <p className="text-gray-300 text-sm leading-relaxed font-medium">{subBlock.detail}</p>
+                                </div>
+                              )}
+                              
+                              {(subBlock.type === 'quiz' || subBlock.type === 'knowledge_check') && (
+                                <div className="mt-6 bg-gray-900 border border-gray-800 rounded-3xl p-6 sm:p-8 shadow-inner border-t-4 border-t-purple-500/50">
+                                  <QuizViewer 
+                                    questions={[{
+                                      question: subBlock.question,
+                                      options: subBlock.options,
+                                      answer: subBlock.correctAnswer || subBlock.answer,
+                                      explanation: subBlock.explanation
+                                    }]} 
+                                    title="Quick Concept Check"
+                                    lightMode={false} 
+                                  />
+                                </div>
+                              )}
+                              
+                              {subBlock.type === 'assignment' && (
+                                <div className="bg-violet-950/10 border border-violet-850/50 rounded-3xl p-6 sm:p-8 space-y-4 my-6">
+                                  <h4 className="text-violet-400 text-xs font-black uppercase tracking-widest">
+                                    📝 Practical Assignment: {subBlock.task}
+                                  </h4>
+                                  <p className="text-gray-300 text-sm leading-relaxed font-medium">{subBlock.instructions}</p>
+                                  {subBlock.grading_criteria?.length > 0 && (
+                                    <div className="space-y-2 pt-2 border-t border-violet-900/40">
+                                      <span className="text-[10px] font-bold text-violet-400 uppercase tracking-widest block font-sans">Grading Checklist</span>
+                                      <ul className="space-y-1.5 list-none pl-0">
+                                        {subBlock.grading_criteria.map((item, cIdx) => (
+                                          <li key={cIdx} className="flex items-start gap-2 text-xs text-gray-400 font-medium">
+                                            <span className="text-violet-400 font-bold">✓</span>
+                                            <span>{item}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              
+                              {subBlock.type === 'summary' && (
+                                <div className="bg-sky-950/10 border border-sky-850/50 rounded-3xl p-6 sm:p-8 space-y-4 my-6">
+                                  <h4 className="text-sky-400 text-xs font-black uppercase tracking-widest">
+                                    📌 Lesson Summary
+                                  </h4>
+                                  <ul className="space-y-2 pl-4 list-disc text-gray-300 text-sm font-medium">
+                                    {subBlock.points?.map((pt, ptIdx) => (
+                                      <li key={ptIdx}>{pt}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              
+                              {subBlock.type === 'reference' && (
+                                <div className="flex items-center justify-between p-4 bg-gray-900 border border-gray-800 rounded-2xl hover:bg-gray-900/70 transition-all gap-2 my-3">
+                                  <div>
+                                    <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
+                                      📖 {subBlock.title}
+                                    </h4>
+                                  </div>
+                                  <a 
+                                    href={subBlock.url} 
+                                    target="_blank" 
+                                    rel="noreferrer" 
+                                    className="inline-flex items-center gap-1.5 text-xs font-bold text-sky-400 hover:text-sky-300 bg-gray-800 border border-gray-700 px-3 py-1.5 rounded-xl shadow-sm transition whitespace-nowrap"
+                                  >
+                                    Visit Resource ↗
+                                  </a>
+                                </div>
+                              )}
+                              
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
                     {/* HTML / AI Text Block */}
                     {(block.content_type === 'html' || block.html_content || block.type === 'html' || block.content) && (
                       <div className="rich-content prose prose-invert prose-red max-w-none">

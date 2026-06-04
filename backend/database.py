@@ -134,7 +134,11 @@ def save_course_to_mysql(course_data: Dict[str, Any]):
             
             for chap_idx, chap in enumerate(mod.get("chapters", [])):
                 contents = chap.get("contents", [])
-                combined_html = "".join([b.get("content", "") + "<br/>" for b in contents]) if isinstance(contents, list) else ""
+                block_based_item = next((b for b in contents if b.get("type") == "lesson-blocks"), None) if isinstance(contents, list) else None
+                if block_based_item:
+                    combined_html = json.dumps(block_based_item)
+                else:
+                    combined_html = "".join([b.get("content", "") + "<br/>" for b in contents]) if isinstance(contents, list) else ""
                 file_path = next((b.get("file_url") for b in contents if b.get("file_url")), "") if isinstance(contents, list) else ""
                 code_snippet = next((b.get("code") for b in contents if b.get("code")), "") if isinstance(contents, list) else ""
                 code_result = next((b.get("expected_output") for b in contents if b.get("expected_output")), "") if isinstance(contents, list) else ""
@@ -314,14 +318,27 @@ def get_course_details_from_mysql(course_id: int):
                 # Reconstruct contents blocks
                 contents = []
                 if l_row["page_content"]:
-                    # CRITICAL: Match frontend expectations (type 'html', source 'ai', completed true)
-                    contents.append({
-                        "type": "html", 
-                        "content": l_row["page_content"],
-                        "source": "ai",
-                        "completed": True,
-                        "timestamp": l_row.get("created_at") # Optional
-                    })
+                    page_content_str = l_row["page_content"].strip()
+                    if (page_content_str.startswith("{") and page_content_str.endswith("}")) or (page_content_str.startswith("[") and page_content_str.endswith("]")):
+                        try:
+                            block_data = json.loads(page_content_str)
+                            contents.append(block_data)
+                        except Exception:
+                            contents.append({
+                                "type": "html", 
+                                "content": l_row["page_content"],
+                                "source": "ai",
+                                "completed": True,
+                                "timestamp": l_row.get("created_at")
+                            })
+                    else:
+                        contents.append({
+                            "type": "html", 
+                            "content": l_row["page_content"],
+                            "source": "ai",
+                            "completed": True,
+                            "timestamp": l_row.get("created_at")
+                        })
                 
                 if l_row["content_path"]:
                     ctype = "video" if l_row["content_type"] == 2 else "document"
@@ -336,7 +353,7 @@ def get_course_details_from_mysql(course_id: int):
                 if l_row["code_area"]:
                     contents.append({
                         "type": "code", 
-                        "content": l_row["code_area"], # In viewer, 'code' might be expected, but 'content' is standard for blocks
+                        "content": l_row["code_area"],
                         "code": l_row["code_area"], 
                         "expected_output": l_row["code_area_result"],
                         "source": "ai",

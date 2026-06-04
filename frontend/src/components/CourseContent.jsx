@@ -935,7 +935,7 @@ function ContentBlock({ block, onDelete, onPreview, onEdit }) {
           >
             <Eye className="w-3.5 h-3.5" />
           </button>
-          {block.type === 'html' && (
+          {(block.type === 'html' || block.type === 'lesson-blocks') && (
             <button
               onClick={onEdit}
               className="p-1.5 rounded-lg transition text-slate-400 hover:bg-white hover:text-sky-600"

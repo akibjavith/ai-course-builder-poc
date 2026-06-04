@@ -50,7 +50,7 @@ export const generateCourseOutline = async (details) => {
 };
 
 export const generateLessonContent = async (payload) => {
-  const response = await axios.post(`${API_URL}/course/lesson`, payload);
+  const response = await axios.post(`${API_URL}/course/lesson-blocks`, payload);
   return response.data;
 };
 

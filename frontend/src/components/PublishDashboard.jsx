@@ -23,11 +23,13 @@ export default function PublishDashboard({ courseData, updateCourseData, onBack,
     (structure?.modules || []).forEach((mod, mIdx) => {
       (mod?.chapters || []).forEach((chap, cIdx) => {
         if (!chap) return;
-        const validContents = (chap?.contents || []).filter(c => c?.completed && c?.content);
-        if (validContents.length === 0 && chap?.content?.completed && chap?.content?.content) {
+        const validContents = (chap?.contents || []).filter(c => 
+          c?.completed && (c?.content || c?.blocks || c?.file_url)
+        );
+        if (validContents.length === 0 && chap?.content?.completed && (chap?.content?.content || chap?.content?.blocks || chap?.content?.file_url)) {
             validContents.push(chap.content);
         }
-        if (validContents.length === 0 && !chap?.content?.file_url && !(chap?.contents || []).some(c => c?.file_url)) {
+        if (validContents.length === 0) {
           missingLessons.push(`${mod?.title || 'Unknown Module'} - ${chap?.title || 'Unknown Chapter'}`);
         }
       });
@@ -144,8 +146,10 @@ export default function PublishDashboard({ courseData, updateCourseData, onBack,
                            {(mod?.chapters || []).map((chap, j) => {
                               // Filter out draft/empty content blocks.
                               if (!chap) return null;
-                              const validContents = (chap?.contents || []).filter(c => c?.completed && c?.content);
-                              if (validContents.length === 0 && chap?.content?.completed && chap?.content?.content) {
+                              const validContents = (chap?.contents || []).filter(c => 
+                                c?.completed && (c?.content || c?.blocks || c?.file_url)
+                              );
+                              if (validContents.length === 0 && chap?.content?.completed && (chap?.content?.content || chap?.content?.blocks || chap?.content?.file_url)) {
                                   validContents.push(chap.content);
                               }
                               

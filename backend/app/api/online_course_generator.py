@@ -14,7 +14,7 @@ from openai import OpenAI
 from schemas import ImagePromptResponse, ImageResponse
 from schemas import (
     OutlineRequest, ChapterContent, CourseQuiz, CourseDetails,
-    LessonRequest, QuizRequest, StoreCourseRequest
+    LessonRequest, QuizRequest, StoreCourseRequest, LessonBlocksResponse
 )
 
 
@@ -48,243 +48,81 @@ async def generate_outline(req: OutlineRequest):
 
 @router.post("/lesson")
 async def generate_lesson(req: LessonRequest):
+    raise HTTPException(
+        status_code=404,
+        detail="This endpoint has been deprecated and disabled. Please use /course/lesson-blocks instead."
+    )
+
+@router.post("/lesson-blocks", response_model=LessonBlocksResponse)
+async def generate_lesson_blocks(req: LessonRequest):
     try:
-        from content_generator import generate_chapter_content
-        
         course_title = req.course_details.courseName if req.course_details else "the course"
         course_desc = req.course_details.description if req.course_details else ""
         subject = req.course_details.subject if req.course_details else "General"
         difficulty = req.course_details.level if req.course_details else "beginner"
         objectives = req.course_details.requirements if req.course_details else ""
-        
-        # We pass the prompt via the context or just update generate_chapter_content to handle it directly.
-        # But we can just format our new dynamic prompt here!
+
         prompt_str = f"""
-        Generate a COMPLETE, deep-dive lesson for '{req.title}' in the module '{req.module_title}' for the course '{course_title}'.
+        Generate structured block-based educational content for the lesson '{req.title}' in the module '{req.module_title}' for the course '{course_title}'.
         Course Description: {course_desc}
         Subject: {subject}
         Difficulty: {difficulty}
         Audience: {objectives}
         
-        CRITICAL INSTRUCTION:
-        - Never output anything except a single JSON object.
-        - The `code` value must contain ONLY the raw code snippet. Do NOT include any HTML buttons, copy code labels, markdown code block fences (like ```python), or surrounding HTML tags. The system will wrap it and generate the copy button automatically.
-        - You MUST include a "tables" array. For topics that contain comparisons, classification vs regression, or algorithms comparison, generate a comparison table. Each table object must have:
-          * "header": list of column names (e.g. ["Feature", "Supervised", "Unsupervised"])
-          * "rows": list of rows, where each row is a list of strings matching the header length.
-        - You MUST include a "references" array. Add 2-3 high-quality external resources/links with "title" and "url". To avoid 404 errors, do NOT hallucinate deep pages; instead, provide the official homepages of major trusted platforms or documentation (e.g., https://wikipedia.org, https://www.w3schools.com, https://scikit-learn.org, https://docs.python.org, https://developer.mozilla.org).
+        Additional prompt instructions / focus areas: {req.prompt or 'None'}
+
+        You MUST structure your response as a list of distinct content blocks. Choose the best dynamic sequence of blocks that fits this topic. Do not just use one block type; create a rich learning flow.
         
-        CONTENT DEPTH REQUIREMENTS:
-        - "concept": Write at least 4-5 detailed paragraphs explaining the topic in depth. Cover the WHY, HOW, and WHEN. Do NOT give just 2-3 sentences.
-        - "example": Provide a comprehensive real-world scenario with specific details (names, numbers, context). At least 3-4 paragraphs.
-        - "common_mistakes": List at least 5 common mistakes. Format each on its own line starting with a number like "1. mistake here\n2. mistake here".
-        - "best_practices": List at least 5 best practices. Format each on its own line starting with a number like "1. practice here\n2. practice here".
-        - "exercises": Provide at least 3 exercises. Format each on its own line starting with a number like "1. exercise here\n2. exercise here\n3. exercise here".
-        - ALL list fields MUST use newline (\n) to separate each numbered item. Do NOT put multiple items on the same line.
-        
-        Return ONLY a JSON object:
+        The allowed block types and their exact structure/rules are:
+        1. "heading": level (1, 2, or 3), text. Use this for outline and sub-topics.
+        2. "paragraph": text. CRITICAL: Every paragraph block MUST be a deep-dive, comprehensive, and highly detailed explanation containing between 150 to 250 words. Do not write short paragraphs.
+        3. "bullet_list": items (list of strings). Must contain at least 3-5 distinct points.
+        4. "numbered_list": items (list of strings). Must contain at least 3-5 sequential steps or items.
+        5. "image": url (always output "" for now), caption (describe what the visual should represent).
+        6. "video": url (always output "" for now), caption (describe what the video/narration should show).
+        7. "table": headers (list of strings), rows (list of lists of strings). Used for comparisons, classifications, etc.
+        8. "callout": text, callout_type (one of: "info", "warning", "tip", "danger").
+        9. "code": language, code, explanation. Write actual functional code without markdown backticks inside the code field.
+        10. "example": scenario, detail. Real-world scenario case study.
+        11. "quiz": question, options (list of strings), correctAnswer (the exact string from options), explanation.
+        12. "assignment": task, instructions, grading_criteria (list of strings).
+        13. "knowledge_check": question, options (list of strings), answer (the exact string from options), explanation.
+        14. "summary": points (list of strings summarizing key takeaways).
+        15. "reference": title, url (trusted educational platforms/documentation, no hallucinated URLs).
+
+        Ensure to output ONLY valid JSON matching this schema:
         {{
             "title": "{req.title}",
-            "concept": "...",
-            "example": "...",
-            "code": "...", 
-            "code_explanation": "...",
-            "tables": [
+            "blocks": [
                 {{
-                    "header": ["Col1", "Col2"],
-                    "rows": [
-                        ["Val1", "Val2"]
-                    ]
-                }}
-            ],
-            "references": [
-                {{"title": "...", "url": "..."}}
-            ],
-            "common_mistakes": "1. ...\n2. ...\n3. ...\n4. ...\n5. ...",
-            "best_practices": "1. ...\n2. ...\n3. ...\n4. ...\n5. ...",
-            "exercises": "1. ...\n2. ...\n3. ..."
+                    "type": "heading",
+                    "level": 1,
+                    "text": "..."
+                }},
+                {{
+                    "type": "paragraph",
+                    "text": "..."
+                }},
+                ...
+            ]
         }}
         """
-        
+
         response = get_openai_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are a senior AI architect and instructional designer."},
+                {"role": "system", "content": "You are a professional educational content architect. Output JSON only."},
                 {"role": "user", "content": prompt_str}
             ],
             temperature=0.7,
             response_format={"type": "json_object"}
         )
-        lesson_data = json.loads(response.choices[0].message.content)
         
-        def parse_markdown_bold_py(text: str) -> str:
-            if not text:
-                return ""
-            import re
-            text = str(text)
-            text = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', text)
-            text = re.sub(r'\*([^*]+)\*', r'<em>\1</em>', text)
-            # First, split inline numbered items like "blah 2. blah 3. blah" onto separate lines
-            text = re.sub(r'(?<!\n)(\d+)\.\s+', r'\n\1. ', text)
-            # Also split inline bullets
-            text = re.sub(r'(?<!\n)[-•]\s+', r'\n- ', text)
-            # Convert numbered lines (1. xxx) into ordered list
-            lines = text.split('\n')
-            in_ol = False
-            in_ul = False
-            result_lines = []
-            for line in lines:
-                stripped = line.strip()
-                if not stripped:
-                    continue
-                numbered = re.match(r'^(\d+)\.\s+(.*)', stripped)
-                bulleted = re.match(r'^[-•]\s+(.*)', stripped)
-                if numbered:
-                    if not in_ol:
-                        if in_ul:
-                            result_lines.append('</ul>')
-                            in_ul = False
-                        result_lines.append('<ol style="padding-left:20px;margin:10px 0;">')
-                        in_ol = True
-                    result_lines.append(f'<li style="margin-bottom:6px;">{numbered.group(2)}</li>')
-                elif bulleted:
-                    if not in_ul:
-                        if in_ol:
-                            result_lines.append('</ol>')
-                            in_ol = False
-                        result_lines.append('<ul style="list-style-type:disc;padding-left:20px;margin:10px 0;">')
-                        in_ul = True
-                    result_lines.append(f'<li style="margin-bottom:6px;">{bulleted.group(1)}</li>')
-                else:
-                    if in_ol:
-                        result_lines.append('</ol>')
-                        in_ol = False
-                    if in_ul:
-                        result_lines.append('</ul>')
-                        in_ul = False
-                    result_lines.append(f'<p style="margin:8px 0;">{stripped}</p>')
-            if in_ol:
-                result_lines.append('</ol>')
-            if in_ul:
-                result_lines.append('</ul>')
-            return '\n'.join(result_lines)
-
-        # Quick inline assembler
-        def md_html(t):
-            if isinstance(t, list):
-                if len(t) > 0 and isinstance(t[0], dict):
-                    res = "<ul style='padding-left: 20px;'>"
-                    for item in t:
-                        res += "<li style='margin-bottom: 12px;'>"
-                        for k, v in item.items():
-                            res += f"<strong>{k.replace('_', ' ').title()}:</strong> {parse_markdown_bold_py(str(v))}<br/>"
-                        res += "</li>"
-                    res += "</ul>"
-                    return res
-                else:
-                    res = "<ol style='padding-left: 20px;'>"
-                    for item in t:
-                        res += f"<li style='margin-bottom: 8px;'>{parse_markdown_bold_py(str(item))}</li>"
-                    res += "</ol>"
-                    return res
-            elif isinstance(t, dict):
-                res = "<ul style='padding-left: 20px;'>"
-                for k, v in t.items():
-                    res += f"<li style='margin-bottom: 8px;'><strong>{k.replace('_', ' ').title()}:</strong> {parse_markdown_bold_py(str(v))}</li>"
-                res += "</ul>"
-                return res
-            return parse_markdown_bold_py(str(t))
-
-        # Build tables HTML
-        tables_html = ""
-        for tbl in (lesson_data.get('tables') or []):
-            header = tbl.get("header", [])
-            rows = tbl.get("rows", [])
-            tables_html += "<div style='margin:30px 0;overflow-x:auto;'>"
-            tables_html += "<h4 style='color:#0ea5e9;text-transform:uppercase;font-size:0.85rem;margin-bottom:10px;font-weight:bold;'>Comparison Table</h4>"
-            tables_html += "<table style='width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;'>"
-            if header:
-                tables_html += "<thead><tr>" + "".join([f"<th style='border:1px solid rgba(128,128,128,0.3);padding:12px 15px;background:rgba(59,130,246,0.15);font-weight:bold;text-align:left;'>{h}</th>" for h in header]) + "</tr></thead>"
-            tables_html += "<tbody>"
-            for ri, row in enumerate(rows):
-                bg = "rgba(128,128,128,0.05)" if ri % 2 == 0 else "transparent"
-                tables_html += f"<tr style='background:{bg};'>" + "".join([f"<td style='border:1px solid rgba(128,128,128,0.2);padding:10px 15px;'>{c}</td>" for c in row]) + "</tr>"
-            tables_html += "</tbody></table></div>"
-
-        # Build references HTML
-        refs_html = ""
-        refs_list = lesson_data.get('references') or []
-        if refs_list:
-            refs_html = "<div style='margin:30px 0;padding:20px;background:rgba(37,99,235,0.05);border-radius:12px;border:1px solid rgba(37,99,235,0.2);'>"
-            refs_html += "<h4 style='color:#2563eb;text-transform:uppercase;font-size:0.85rem;margin-bottom:10px;font-weight:bold;'>References & Further Reading</h4><ul style='padding-left:20px;'>"
-            for ref in refs_list:
-                refs_html += f"<li style='margin-bottom:8px;'><a href='{ref.get('url','#')}' target='_blank' rel='noopener noreferrer' style='color:#2563eb;text-decoration:underline;'>{ref.get('title','Reference')}</a></li>"
-            refs_html += "</ul></div>"
-
-        # Generate image first
-        image_url = None
-        try:
-            prompt_resp = await generate_image_prompt({"lesson_text": str(lesson_data.get('concept', ''))})
-            image_resp = await generate_image({"prompt": prompt_resp["prompt"]})
-            image_url = image_resp["image_url"]
-        except Exception as img_err:
-            print("Generate lesson auto-image failed", img_err)
-
-        image_html = ""
-        if image_url:
-            image_html = f"""
-            <div class="lesson-image" style="margin: 25px 0; text-align: center;">
-                <img src="{image_url}" alt="{req.title}" style="max-width: 100%; max-height: 450px; object-fit: contain; border-radius: 12px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); border: 1px solid rgba(128,128,128,0.2);" />
-            </div>
-            """
-
-        # Copy button JS embedded in HTML
-        copy_btn_style = "position:absolute;top:10px;right:10px;background:rgba(30,41,59,0.95);color:#94a3b8;border:1px solid rgba(148,163,184,0.3);padding:6px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;z-index:10;"
-        copy_btn_script = "onclick=\"(function(btn){var code=btn.parentElement.querySelector('code');if(code){navigator.clipboard.writeText(code.innerText).then(function(){btn.innerText='Copied!';btn.style.color='#22c55e';setTimeout(function(){btn.innerText='Copy Code';btn.style.color='#94a3b8';},2000);})};})(this)\""
-
-        html_snippet = f"""
-        <div class="lesson-snippet" style="font-family: 'Inter', sans-serif; line-height: 1.6; color: inherit;">
-            <div style="margin-bottom: 35px; border-left: 4px solid #3b82f6; padding-left: 20px;">
-                <h4 style="color: #3b82f6; text-transform: uppercase; font-size: 0.85rem; margin-bottom: 10px; font-weight: bold;">The Core Concept</h4>
-                <div style="font-size: 1.05rem;">{md_html(lesson_data.get('concept', ''))}</div>
-                {image_html}
-            </div>
-            <div class="example" style="background: rgba(34, 197, 94, 0.1); border-left: 6px solid #22c55e; padding: 25px; border-radius: 12px; margin-bottom: 30px;">
-                <h4 style="margin-top: 0; color: #22c55e; text-transform: uppercase; font-size: 0.85rem; font-weight: bold;">Professional Example</h4>
-                <div style="color: inherit;">{md_html(lesson_data.get('example', ''))}</div>
-            </div>
-            {tables_html}
-            <div style="margin: 30px 0;">
-                <h4 style="color: #6366f1; text-transform: uppercase; font-size: 0.85rem; margin-bottom: 10px; font-weight: bold;">Practical Implementation</h4>
-                <div style="position:relative;">
-                    <button {copy_btn_script} style="{copy_btn_style}">Copy Code</button>
-                    <pre style="background: rgba(15, 23, 42, 0.8); color: #38bdf8; padding: 20px; padding-top: 45px; border-radius: 12px; overflow-x: auto;"><code>{lesson_data.get('code', '')}</code></pre>
-                </div>
-                <div style="margin-top: 15px; font-size: 0.95rem; opacity: 0.9; padding: 15px; background: rgba(128,128,128,0.1); border-radius: 8px;">{md_html(lesson_data.get('code_explanation', ''))}</div>
-            </div>
-            <div class="note" style="border-left: 6px solid #f97316; background: rgba(249, 115, 22, 0.1); padding: 25px; border-radius: 12px; margin-bottom: 30px;">
-                <h4 style="margin-top: 0; color: #f97316; text-transform: uppercase; font-size: 0.85rem; font-weight: bold;">Critical Pitfalls</h4>
-                <div style="color: inherit;">{md_html(lesson_data.get('common_mistakes', ''))}</div>
-            </div>
-            <div style="margin: 30px 0; background: rgba(128,128,128,0.05); padding: 25px; border-radius: 12px; border: 1px solid rgba(128,128,128,0.2);">
-                <h4 style="color: #8b5cf6; text-transform: uppercase; font-size: 0.85rem; margin-bottom: 10px; font-weight: bold;">Best Practices</h4>
-                <div style="color: inherit;">{md_html(lesson_data.get('best_practices', ''))}</div>
-            </div>
-            <div style="margin: 30px 0; background: rgba(45, 212, 191, 0.05); padding: 25px; border-radius: 12px; border: 1px dashed rgba(45, 212, 191, 0.5);">
-                <h4 style="color: #2dd4bf; text-transform: uppercase; font-size: 0.85rem; margin-bottom: 10px; font-weight: bold;">Practice Exercises</h4>
-                <div style="color: inherit;">{md_html(lesson_data.get('exercises', ''))}</div>
-            </div>
-            {refs_html}
-        </div>
-        """
-
-        return {
-            "content": html_snippet,
-            "type": "html",
-            "image_url": image_url,
-            "tables": lesson_data.get('tables', []),
-            "references": lesson_data.get('references', [])
-        }
+        lesson_data = json.loads(response.choices[0].message.content)
+        # Validate using Pydantic model
+        validated_data = LessonBlocksResponse(**lesson_data)
+        return validated_data
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

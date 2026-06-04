@@ -25,7 +25,7 @@ def save_course(course_id: str, course_data: dict):
             for c in m.get("chapters", []):
                 # New schema checks
                 contents = c.get("contents", [])
-                has_blocks = isinstance(contents, list) and len(contents) > 0 and any(b.get("content") or b.get("file_url") for b in contents)
+                has_blocks = isinstance(contents, list) and len(contents) > 0 and any(b.get("content") or b.get("blocks") or b.get("file_url") for b in contents)
                 
                 # Old schema checks
                 content = c.get("content", {})
@@ -64,7 +64,7 @@ def update_course(course_id: str, course_data: dict):
             for c in m.get("chapters", []):
                 # New schema checks
                 contents = c.get("contents", [])
-                has_blocks = isinstance(contents, list) and len(contents) > 0 and any(b.get("content") or b.get("file_url") for b in contents)
+                has_blocks = isinstance(contents, list) and len(contents) > 0 and any(b.get("content") or b.get("blocks") or b.get("file_url") for b in contents)
                 
                 # Old schema checks
                 content = c.get("content", {})

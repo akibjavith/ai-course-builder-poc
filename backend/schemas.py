@@ -147,3 +147,129 @@ class ChatRequest(BaseModel):
     courseData: Optional[dict] = {}
     availableSubjects: Optional[list] = []
 
+
+# --- Block-Based Lesson Content Schemas ---
+import uuid
+from typing import Union, Literal
+
+class HeadingBlock(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: Literal["heading"] = "heading"
+    level: int
+    text: str
+
+class ParagraphBlock(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: Literal["paragraph"] = "paragraph"
+    text: str
+
+class BulletListBlock(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: Literal["bullet_list"] = "bullet_list"
+    items: List[str]
+
+class NumberedListBlock(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: Literal["numbered_list"] = "numbered_list"
+    items: List[str]
+
+class ImageBlock(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: Literal["image"] = "image"
+    url: str
+    caption: str
+
+class VideoBlock(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: Literal["video"] = "video"
+    url: str
+    caption: str
+
+class TableBlock(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: Literal["table"] = "table"
+    headers: List[str]
+    rows: List[List[str]]
+
+class CalloutBlock(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: Literal["callout"] = "callout"
+    text: str
+    callout_type: str  # e.g., info, warning, tip, danger
+
+class CodeBlock(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: Literal["code"] = "code"
+    language: str
+    code: str
+    explanation: str
+
+class ExampleBlock(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: Literal["example"] = "example"
+    scenario: str
+    detail: str
+
+class QuizBlock(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: Literal["quiz"] = "quiz"
+    question: str
+    options: List[str]
+    correctAnswer: str
+    explanation: str
+
+class AssignmentBlock(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: Literal["assignment"] = "assignment"
+    task: str
+    instructions: str
+    grading_criteria: List[str]
+
+class KnowledgeCheckBlock(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: Literal["knowledge_check"] = "knowledge_check"
+    question: str
+    options: List[str]
+    answer: str
+    explanation: str
+
+class SummaryBlock(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: Literal["summary"] = "summary"
+    points: List[str]
+
+class ReferenceBlock(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: Literal["reference"] = "reference"
+    title: str
+    url: str
+
+from typing import Annotated
+
+LessonBlock = Annotated[
+    Union[
+        HeadingBlock,
+        ParagraphBlock,
+        BulletListBlock,
+        NumberedListBlock,
+        ImageBlock,
+        VideoBlock,
+        TableBlock,
+        CalloutBlock,
+        CodeBlock,
+        ExampleBlock,
+        QuizBlock,
+        AssignmentBlock,
+        KnowledgeCheckBlock,
+        SummaryBlock,
+        ReferenceBlock
+    ],
+    Field(discriminator="type")
+]
+
+class LessonBlocksResponse(BaseModel):
+    title: str
+    blocks: List[LessonBlock]
+
+
+
