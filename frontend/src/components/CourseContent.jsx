@@ -246,10 +246,17 @@ export default function CourseContent({ courseData, updateCourseData, contentGen
       chapter.contents.push({ 
         ...res, 
         source: 'ai', 
-        type: lesson.content?.type || 'html',
+        type: 'lesson-blocks',
         completed: true,
         timestamp: new Date().toISOString()
       });
+      
+      chapter.content = {
+        ...(chapter.content || {}),
+        content_type: 'lesson-blocks',
+        html_content: '',
+        completed: true
+      };
 
       updateCourseData('structure', { ...courseData.structure, modules: currentModules });
     } catch (err) {
@@ -395,10 +402,17 @@ export default function CourseContent({ courseData, updateCourseData, contentGen
         currentModules[mIdx].chapters[cIdx].contents.push({
           ...res,
           source: 'ai',
-          type: chap.content.type || 'html',
+          type: 'lesson-blocks',
           completed: true,
           timestamp: new Date().toISOString()
         });
+        
+        currentModules[mIdx].chapters[cIdx].content = {
+          ...(currentModules[mIdx].chapters[cIdx].content || {}),
+          content_type: 'lesson-blocks',
+          html_content: '',
+          completed: true
+        };
 
         // Update the React state immediately so this lesson's content renders right away!
         updateCourseData('structure', { 

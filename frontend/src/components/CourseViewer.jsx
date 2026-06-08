@@ -485,6 +485,7 @@ export default function CourseViewer({ course, onBack }) {
     (c.module_title || "").trim().toLowerCase() === (activeModule?.title || "").trim().toLowerCase() && 
     (c.title || "").trim().toLowerCase() === (activeChapData?.title || "").trim().toLowerCase()
   );
+  console.log("activeChapBlocks debug:", activeChapBlocks, "activeChapData debug:", activeChapData);
 
   useCopyCode(containerRef, activeChapBlocks);
 
@@ -740,7 +741,7 @@ export default function CourseViewer({ course, onBack }) {
                 {(Array.isArray(activeChapBlocks) ? activeChapBlocks : [activeChapBlocks]).map((block, bIdx) => (
                   <div key={bIdx} className="animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: `${bIdx * 100}ms` }}>
                     {/* Lesson Blocks (New system) */}
-                    {(block.type === 'lesson-blocks' || block.content_type === 'lesson-blocks') && block.blocks && (
+                    {(block.type === 'lesson-blocks' || block.content_type === 'lesson-blocks' || block.blocks) && block.blocks && (
                       <div className="space-y-6 text-left">
                         {block.blocks.map((subBlock, sIdx) => {
                           return (
