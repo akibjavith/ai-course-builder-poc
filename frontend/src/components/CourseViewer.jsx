@@ -3,7 +3,7 @@ import {
   ChevronLeft, ChevronDown, ChevronRight, BookOpen,
   CheckCircle, Video, PlayCircle, ClipboardList, Send,
   ThumbsUp, Play, Pause, Volume2, VolumeX, Maximize,
-  X, Star, RotateCcw, Bot, Link
+  X, Star, RotateCcw, Bot, Link, Paperclip
 } from 'lucide-react';
 import QuizViewer from './QuizViewer';
 import FlashcardViewer from './FlashcardViewer';
@@ -933,6 +933,32 @@ export default function CourseViewer({ course, onBack }) {
                                   >
                                     Visit Resource ↗
                                   </a>
+                                </div>
+                              )}
+
+                              {subBlock.type === 'attachment' && (
+                                <div className="flex items-center justify-between p-4 bg-gray-900 border border-gray-800 rounded-2xl hover:bg-gray-900/70 transition-all gap-2 my-3">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-9 h-9 rounded-xl bg-orange-950/30 border border-orange-900/50 flex items-center justify-center flex-shrink-0">
+                                      <Paperclip className="w-4 h-4 text-orange-400" />
+                                    </div>
+                                    <div>
+                                      <h4 className="text-sm font-bold text-white">{subBlock.title || subBlock.file_name || 'Attached File'}</h4>
+                                      <p className="text-[10px] text-gray-400 font-medium">{subBlock.file_name || 'File Attachment'}</p>
+                                    </div>
+                                  </div>
+                                  {subBlock.file_url ? (
+                                    <a 
+                                      href={subBlock.file_url.startsWith('/uploads/') ? `http://localhost:8000${subBlock.file_url}` : subBlock.file_url} 
+                                      target="_blank" 
+                                      rel="noreferrer" 
+                                      className="inline-flex items-center gap-1.5 text-xs font-bold text-orange-400 hover:text-orange-350 bg-gray-800 border border-gray-700 px-3 py-1.5 rounded-xl shadow-sm transition active:scale-95 whitespace-nowrap"
+                                    >
+                                      Open File ↗
+                                    </a>
+                                  ) : (
+                                    <span className="text-xs text-gray-500 italic">No file uploaded</span>
+                                  )}
                                 </div>
                               )}
                               

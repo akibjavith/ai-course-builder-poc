@@ -424,6 +424,31 @@ async def upload_media(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/course/list-media")
+async def list_media():
+    try:
+        uploads_dir = "uploads"
+        if not os.path.exists(uploads_dir):
+            return {"status": "success", "files": []}
+        
+        base_url = os.getenv("PUBLIC_ASSET_URL", "http://localhost:8000")
+        files_list = []
+        for filename in os.listdir(uploads_dir):
+            file_path = os.path.join(uploads_dir, filename)
+            if os.path.isfile(file_path):
+                stat = os.stat(file_path)
+                files_list.append({
+                    "filename": filename,
+                    "url": f"{base_url}/uploads/{filename}",
+                    "size": stat.st_size,
+                    "created_at": stat.st_mtime
+                })
+        
+        files_list.sort(key=lambda x: x["created_at"], reverse=True)
+        return {"status": "success", "files": files_list}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/course/mcq")
 async def generate_mcqs(req: GenerateMCQRequest):
     try:

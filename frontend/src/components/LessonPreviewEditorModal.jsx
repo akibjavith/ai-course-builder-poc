@@ -2,8 +2,10 @@ import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { 
   ChevronLeft, ChevronRight, Edit3, Save, Trash2, X, Plus, Trash, 
   HelpCircle, FileCode, AlertTriangle, AlertCircle, FileText, Info, 
-  BookOpen, ExternalLink, Lightbulb, CheckSquare, ListOrdered, List, Check
+  BookOpen, ExternalLink, Lightbulb, CheckSquare, ListOrdered, List, Check,
+  Paperclip, Upload, Loader2
 } from 'lucide-react';
+import { uploadChapterMedia, listMediaFiles } from '../api';
 
 // Generates a local short ID if uuid isn't available
 const generateLocalId = () => Math.random().toString(36).substr(2, 9);
@@ -24,7 +26,8 @@ const BLOCK_INFO = {
   assignment: { label: 'Assignment', icon: CheckSquare, color: 'text-violet-500', bg: 'bg-violet-50' },
   knowledge_check: { label: 'Knowledge Check', icon: HelpCircle, color: 'text-fuchsia-500', bg: 'bg-fuchsia-50' },
   summary: { label: 'Summary', icon: BookOpen, color: 'text-sky-500', bg: 'bg-sky-50' },
-  reference: { label: 'Reference', icon: ExternalLink, color: 'text-blue-500', bg: 'bg-blue-50' }
+  reference: { label: 'Reference', icon: ExternalLink, color: 'text-blue-500', bg: 'bg-blue-50' },
+  attachment: { label: 'File Attachment', icon: Paperclip, color: 'text-orange-500', bg: 'bg-orange-50' },
 };
 
 // Custom hook to automatically add copy buttons to <pre> tags with MutationObserver
@@ -261,9 +264,31 @@ export default function LessonPreviewEditorModal({
   const [blocksDraft, setBlocksDraft] = useState(previewContent?.lessonBlocks || null);
   const [htmlDraft, setHtmlDraft] = useState(previewContent?.html_content || chapter?.content?.html_content || '');
   const containerRef = useRef(null);
+  // Track uploading state for attachment blocks
+  const [uploadingBlockIdx, setUploadingBlockIdx] = useState(null);
 
   // Simple active insertion menu index
   const [activeInsertMenuIdx, setActiveInsertMenuIdx] = useState(null);
+
+  // States for internal media library list picker
+  const [mediaFiles, setMediaFiles] = useState([]);
+  const [loadingMedia, setLoadingMedia] = useState(false);
+  const [attachmentTabs, setAttachmentTabs] = useState({}); // { [blockIdx]: 'upload' | 'internal' }
+  const [mediaSearch, setMediaSearch] = useState('');
+
+  const fetchMedia = async () => {
+    setLoadingMedia(true);
+    try {
+      const res = await listMediaFiles();
+      if (res && res.status === 'success') {
+        setMediaFiles(res.files || []);
+      }
+    } catch (err) {
+      console.error('Failed to load media files:', err);
+    } finally {
+      setLoadingMedia(false);
+    }
+  };
 
   useCopyCode(containerRef, blocksDraft || htmlDraft);
 
@@ -320,11 +345,30 @@ export default function LessonPreviewEditorModal({
     else if (type === 'knowledge_check') { newBlock.question = 'Question?'; newBlock.options = ['Option A', 'Option B']; newBlock.answer = 'Option A'; newBlock.explanation = 'Explanation'; }
     else if (type === 'summary') { newBlock.points = ['Point 1', 'Point 2']; }
     else if (type === 'reference') { newBlock.title = 'Resource Link'; newBlock.url = 'https://example.com'; }
+    else if (type === 'attachment') { newBlock.title = 'Attached File'; newBlock.file_url = ''; newBlock.file_name = ''; }
 
     const updated = [...blocksDraft];
     updated.splice(idx + 1, 0, newBlock);
     setBlocksDraft(updated);
     setActiveInsertMenuIdx(null);
+  };
+
+  // Handle file upload for attachment blocks
+  const handleAttachmentUpload = async (idx, file) => {
+    if (!file) return;
+    setUploadingBlockIdx(idx);
+    try {
+      const res = await uploadChapterMedia(file);
+      handleUpdateBlock(idx, {
+        file_url: res.url,
+        file_name: file.name,
+        title: file.name,
+      });
+    } catch (e) {
+      alert('File upload failed. Please try again.');
+    } finally {
+      setUploadingBlockIdx(null);
+    }
   };
 
   const handleSaveDraft = () => {
@@ -380,23 +424,34 @@ export default function LessonPreviewEditorModal({
     setEditMode(false);
   };
 
+  // Fix: deleteLesson now only clears lesson CONTENT (not the chapter itself)
   const deleteLesson = () => {
     if (readOnly) return;
     const newModules = (courseData.structure?.modules || []).map((mod, m) => {
       if (m !== active.mIdx) return mod;
-      const newChapters = [...(mod.chapters || [])];
-      newChapters.splice(active.cIdx, 1);
-      return { ...mod, chapters: newChapters };
+      return {
+        ...mod,
+        chapters: (mod.chapters || []).map((chap, c) => {
+          if (c !== active.cIdx) return chap;
+          // Clear content only — keep the chapter (submodule) intact
+          return {
+            ...chap,
+            contents: [],
+            content: {
+              ...(chap.content || {}),
+              completed: false,
+              html_content: '',
+              content_type: '',
+            },
+          };
+        }),
+      };
     });
     updateCourseData('structure', { ...courseData.structure, modules: newModules });
-    const nextLessons = flattenLessons({ ...courseData.structure, modules: newModules });
-    if (nextLessons.length === 0) {
-      onClose?.();
-      return;
-    }
-    const nextIdx = Math.min(activeLessonIndex, nextLessons.length - 1);
-    const next = nextLessons[nextIdx];
-    setActive({ mIdx: next.mIdx, cIdx: next.cIdx });
+    // Reset local draft state so empty state is shown
+    setBlocksDraft(null);
+    setHtmlDraft('');
+    setEditMode(false);
   };
 
   return (
@@ -1045,6 +1100,150 @@ export default function LessonPreviewEditorModal({
                           )
                         )}
 
+                        {/* ─── ATTACHMENT BLOCK ─── */}
+                        {block.type === 'attachment' && (
+                          editMode ? (
+                            <div className="space-y-3 p-4 bg-orange-50/30 border border-orange-100 rounded-xl">
+                              <span className="text-[10px] font-bold text-orange-600 uppercase tracking-widest flex items-center gap-1.5">
+                                <Paperclip className="w-3.5 h-3.5" /> File Attachment Block
+                              </span>
+                              <input 
+                                type="text"
+                                placeholder="Display Title (auto-filled on upload)"
+                                value={block.title || ''}
+                                onChange={(e) => handleUpdateBlock(idx, { title: e.target.value })}
+                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs"
+                              />
+                              {block.file_url ? (
+                                <div className="flex items-center gap-3 p-3 bg-white border border-green-200 rounded-xl">
+                                  <Paperclip className="w-4 h-4 text-green-600 flex-shrink-0" />
+                                  <span className="text-xs font-bold text-green-700 truncate flex-1">{block.file_name || block.file_url}</span>
+                                  <button
+                                    onClick={() => handleUpdateBlock(idx, { file_url: '', file_name: '' })}
+                                    className="text-red-400 hover:text-red-600 flex-shrink-0"
+                                    title="Remove file"
+                                  >
+                                    <Trash className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="space-y-3">
+                                  <div className="flex border-b border-orange-100 text-xs">
+                                    <button
+                                      type="button"
+                                      className={`px-3 py-1.5 font-bold transition-all border-b-2 ${(!attachmentTabs[idx] || attachmentTabs[idx] === 'upload') ? 'border-orange-500 text-orange-600' : 'border-transparent text-slate-400 hover:text-slate-650'}`}
+                                      onClick={() => setAttachmentTabs(prev => ({ ...prev, [idx]: 'upload' }))}
+                                    >
+                                      Upload New
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={`px-3 py-1.5 font-bold transition-all border-b-2 ${(attachmentTabs[idx] === 'internal') ? 'border-orange-500 text-orange-600' : 'border-transparent text-slate-400 hover:text-slate-650'}`}
+                                      onClick={() => {
+                                        setAttachmentTabs(prev => ({ ...prev, [idx]: 'internal' }));
+                                        fetchMedia();
+                                      }}
+                                    >
+                                      Internal Attachment
+                                    </button>
+                                  </div>
+
+                                  {(!attachmentTabs[idx] || attachmentTabs[idx] === 'upload') ? (
+                                    <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-orange-200 rounded-xl cursor-pointer hover:bg-orange-50/50 transition">
+                                      {uploadingBlockIdx === idx ? (
+                                        <div className="flex items-center gap-2 text-orange-600">
+                                          <Loader2 className="w-5 h-5 animate-spin" />
+                                          <span className="text-xs font-bold">Uploading...</span>
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <Upload className="w-6 h-6 text-orange-400 mb-1" />
+                                          <span className="text-xs font-bold text-orange-600">Click to upload file</span>
+                                          <span className="text-[10px] text-slate-400 mt-0.5">PDF, DOCX, XLSX, PPT, etc.</span>
+                                        </>
+                                      )}
+                                      <input
+                                        type="file"
+                                        className="hidden"
+                                        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
+                                        onChange={(e) => handleAttachmentUpload(idx, e.target.files[0])}
+                                        disabled={uploadingBlockIdx === idx}
+                                      />
+                                    </label>
+                                  ) : (
+                                    <div className="space-y-2">
+                                      <input
+                                        type="text"
+                                        placeholder="Search files..."
+                                        value={mediaSearch}
+                                        onChange={(e) => setMediaSearch(e.target.value)}
+                                        className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs"
+                                      />
+                                      {loadingMedia ? (
+                                        <div className="flex items-center justify-center p-4 text-xs text-orange-600 gap-2">
+                                          <Loader2 className="w-4 h-4 animate-spin" /> Loading files...
+                                        </div>
+                                      ) : (
+                                        <div className="max-h-40 overflow-y-auto border border-orange-100 rounded-xl bg-white divide-y divide-slate-100">
+                                          {mediaFiles.filter(f => f.filename.toLowerCase().includes(mediaSearch.toLowerCase())).length === 0 ? (
+                                            <div className="p-3 text-xs text-slate-400 text-center">No files found.</div>
+                                          ) : (
+                                            mediaFiles
+                                              .filter(f => f.filename.toLowerCase().includes(mediaSearch.toLowerCase()))
+                                              .map((file, fIdx) => (
+                                                <button
+                                                  key={fIdx}
+                                                  type="button"
+                                                  className="w-full text-left p-2 hover:bg-orange-50/50 transition-colors text-xs flex justify-between items-center"
+                                                  onClick={() => {
+                                                    handleUpdateBlock(idx, {
+                                                      file_url: file.url,
+                                                      file_name: file.filename,
+                                                      title: file.filename
+                                                    });
+                                                  }}
+                                                >
+                                                  <span className="font-semibold text-slate-700 truncate max-w-[200px]">{file.filename}</span>
+                                                  <span className="text-[10px] text-slate-400 flex-shrink-0">{(file.size / 1024).toFixed(1)} KB</span>
+                                                </button>
+                                              ))
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            block.file_url ? (
+                              <div className="flex items-center justify-between p-4 bg-orange-50/30 hover:bg-orange-50/60 rounded-2xl border border-orange-100 transition-all gap-2 my-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0">
+                                    <Paperclip className="w-4 h-4 text-orange-600" />
+                                  </div>
+                                  <div>
+                                    <h4 className="text-sm font-bold text-slate-900">{block.title || block.file_name || 'Attached File'}</h4>
+                                    <p className="text-[10px] text-slate-400 font-medium">{block.file_name || 'File Attachment'}</p>
+                                  </div>
+                                </div>
+                                <a 
+                                  href={block.file_url} 
+                                  target="_blank" 
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-800 bg-white border border-orange-200 px-3 py-1.5 rounded-xl shadow-sm transition active:scale-95 whitespace-nowrap"
+                                >
+                                  Open File ↗
+                                </a>
+                              </div>
+                            ) : (
+                              <div className="p-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center">
+                                <p className="text-xs text-slate-400">No file attached yet. Click Edit to upload.</p>
+                              </div>
+                            )
+                          )
+                        )}
+
                       </div>
 
                       {/* Add Hover-Add UI bar below the block when in edit mode */}
@@ -1086,7 +1285,7 @@ export default function LessonPreviewEditorModal({
 
               </div>
             ) : (
-              // Fallback to legacy HTML rendering/editing
+              // Fallback to legacy HTML rendering/editing OR empty state
               <div>
                 {editMode ? (
                   <div 
@@ -1102,8 +1301,17 @@ export default function LessonPreviewEditorModal({
                     <div dangerouslySetInnerHTML={{ __html: formatRichText(htmlDraft) }} className="animate-fade-in" />
                   </div>
                 ) : (
-                  <div className="text-slate-500 text-sm">
-                    No HTML content yet for this lesson. Click edit to add content.
+                  // ── Empty state after deletion or before generation ──
+                  <div className="flex flex-col items-center justify-center py-24 text-center space-y-4">
+                    <div className="w-16 h-16 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center">
+                      <FileText className="w-7 h-7 text-slate-300" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No Content Yet</p>
+                      <p className="text-xs text-slate-300 font-medium max-w-xs leading-relaxed">
+                        This lesson doesn't have any content. Close this preview and use the <span className="text-sky-500 font-bold">Generate Content</span> button to add content.
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>
