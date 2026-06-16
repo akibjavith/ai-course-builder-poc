@@ -6,6 +6,7 @@ import {
   Paperclip, Upload, Loader2
 } from 'lucide-react';
 import { uploadChapterMedia, listMediaFiles } from '../api';
+import SecureDocViewer from './SecureDocViewer';
 
 // Generates a local short ID if uuid isn't available
 const generateLocalId = () => Math.random().toString(36).substr(2, 9);
@@ -276,6 +277,9 @@ export default function LessonPreviewEditorModal({
   const [attachmentTabs, setAttachmentTabs] = useState({}); // { [blockIdx]: 'upload' | 'internal' }
   const [mediaSearch, setMediaSearch] = useState('');
 
+  // State for secure document viewer
+  const [secureViewerUrl, setSecureViewerUrl] = useState(null);
+
   const fetchMedia = async () => {
     setLoadingMedia(true);
     try {
@@ -456,6 +460,15 @@ export default function LessonPreviewEditorModal({
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-md animate-fade-in">
+
+      {/* ── Secure Document Viewer Modal ── */}
+      {secureViewerUrl && (
+        <SecureDocViewer
+          url={secureViewerUrl}
+          onClose={() => setSecureViewerUrl(null)}
+        />
+      )}
+
       <div className="bg-white w-full max-w-5xl h-[90vh] rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col relative animate-scale-in">
         
         {/* Header toolbar */}
@@ -1227,14 +1240,15 @@ export default function LessonPreviewEditorModal({
                                     <p className="text-[10px] text-slate-400 font-medium">{block.file_name || 'File Attachment'}</p>
                                   </div>
                                 </div>
-                                <a 
-                                  href={block.file_url} 
-                                  target="_blank" 
-                                  rel="noreferrer"
+                                <button
+                                  onClick={() => {
+                                    const url = block.file_url.startsWith('/uploads/') ? `http://localhost:8000${block.file_url}` : block.file_url;
+                                    setSecureViewerUrl(url);
+                                  }}
                                   className="inline-flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-800 bg-white border border-orange-200 px-3 py-1.5 rounded-xl shadow-sm transition active:scale-95 whitespace-nowrap"
                                 >
-                                  Open File ↗
-                                </a>
+                                  Open Securely
+                                </button>
                               </div>
                             ) : (
                               <div className="p-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center">

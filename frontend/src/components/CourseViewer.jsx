@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import QuizViewer from './QuizViewer';
 import FlashcardViewer from './FlashcardViewer';
+import SecureDocViewer from './SecureDocViewer';
 
 // Beautiful Tablespec component
 function BeautifulTablesList({ tables }) {
@@ -467,6 +468,7 @@ export default function CourseViewer({ course, onBack }) {
   const [quizOpen, setQuizOpen] = useState(false);
   const [surveyMode, setSurveyMode] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [secureViewerUrl, setSecureViewerUrl] = useState(null);
   const containerRef = useRef(null);
 
   // Count totals
@@ -542,35 +544,19 @@ export default function CourseViewer({ course, onBack }) {
       );
     }
 
-    // PDF Files
+    // PDF Files (open in secure viewer)
     if (lowerUrl.includes('.pdf')) {
       return (
-        <div className="w-full h-[70vh] bg-gray-200">
-           <object data={finalUrl} type="application/pdf" className="w-full h-full">
-               <embed src={finalUrl} type="application/pdf" className="w-full h-full" />
-               <div className="flex flex-col items-center justify-center h-full p-10 bg-gray-900 border border-gray-700 text-white text-center">
-                  <BookOpen className="w-16 h-16 text-red-500 mb-4" />
-                  <span className="font-bold text-lg mb-2">PDF Viewing Not Supported</span>
-                  <span className="text-sm text-gray-400 mb-4">Your browser doesn't natively support embedded PDFs.</span>
-                  <a href={finalUrl} target="_blank" rel="noreferrer" className="bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-6 rounded-lg transition">
-                     Download PDF
-                  </a>
-               </div>
-           </object>
-        </div>
-      );
-    }
-
-    // Office Documents (PPT, DOC, etc)
-    if (lowerUrl.includes('.ppt') || lowerUrl.includes('.pptx') || lowerUrl.includes('.doc') || lowerUrl.includes('.docx')) {
-      return (
-        <div className="flex flex-col items-center justify-center py-24 bg-gray-900 border-b border-gray-800 text-white text-center">
-          <BookOpen className="w-16 h-16 text-blue-400 mb-4" />
-          <h3 className="text-2xl font-bold text-white mb-2">Office Document</h3>
-          <p className="text-gray-400 max-w-md mx-auto mb-6">This document format cannot be previewed natively in the browser. Please download it to view.</p>
-          <a href={finalUrl} target="_blank" rel="noreferrer" className="inline-block bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-xl shadow-lg transition hover:-translate-y-0.5">
-             Download to View 
-          </a>
+        <div className="flex flex-col items-center justify-center py-16 bg-gray-900 border border-gray-800 rounded-2xl">
+          <BookOpen className="w-12 h-12 text-orange-400 mb-4" />
+          <h3 className="text-lg font-bold text-white mb-1">PDF Document</h3>
+          <p className="text-gray-400 text-sm mb-5">Opens in secure, protected viewer inside the application.</p>
+          <button
+            onClick={() => setSecureViewerUrl(finalUrl)}
+            className="inline-flex items-center gap-2 bg-orange-600 hover:bg-orange-500 text-white font-bold py-2.5 px-7 rounded-xl shadow-lg transition hover:-translate-y-0.5"
+          >
+            <Paperclip className="w-4 h-4" /> Open Securely
+          </button>
         </div>
       );
     }
@@ -603,6 +589,14 @@ export default function CourseViewer({ course, onBack }) {
           quiz={quiz}
           onClose={() => setQuizOpen(false)}
           onFinish={handleQuizFinish}
+        />
+      )}
+
+      {/* ── Secure Document Viewer Modal ── */}
+      {secureViewerUrl && (
+        <SecureDocViewer
+          url={secureViewerUrl}
+          onClose={() => setSecureViewerUrl(null)}
         />
       )}
 
@@ -948,14 +942,15 @@ export default function CourseViewer({ course, onBack }) {
                                     </div>
                                   </div>
                                   {subBlock.file_url ? (
-                                    <a 
-                                      href={subBlock.file_url.startsWith('/uploads/') ? `http://localhost:8000${subBlock.file_url}` : subBlock.file_url} 
-                                      target="_blank" 
-                                      rel="noreferrer" 
-                                      className="inline-flex items-center gap-1.5 text-xs font-bold text-orange-400 hover:text-orange-350 bg-gray-800 border border-gray-700 px-3 py-1.5 rounded-xl shadow-sm transition active:scale-95 whitespace-nowrap"
+                                    <button
+                                      onClick={() => {
+                                        const url = subBlock.file_url.startsWith('/uploads/') ? `http://localhost:8000${subBlock.file_url}` : subBlock.file_url;
+                                        setSecureViewerUrl(url);
+                                      }}
+                                      className="inline-flex items-center gap-1.5 text-xs font-bold text-orange-400 hover:text-orange-300 bg-gray-800 border border-gray-700 px-3 py-1.5 rounded-xl shadow-sm transition active:scale-95 whitespace-nowrap"
                                     >
-                                      Open File ↗
-                                    </a>
+                                      Open Securely
+                                    </button>
                                   ) : (
                                     <span className="text-xs text-gray-500 italic">No file uploaded</span>
                                   )}

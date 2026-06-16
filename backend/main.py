@@ -405,9 +405,52 @@ async def generate_flashcards(req: GenerateFlashcardsRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def convert_to_pdf_if_needed(file_path: str) -> str:
+    import platform
+    import subprocess
+    
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext in ['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt']:
+        # Find LibreOffice binary
+        libreoffice_bin = "soffice"  # Default in Linux/AWS PATH
+        if platform.system() == "Windows":
+            # Common Windows paths for LibreOffice
+            possible_paths = [
+                r"C:\Program Files\LibreOffice\program\soffice.exe",
+                r"C:\Program Files (x86)\LibreOffice\program\soffice.exe"
+            ]
+            for p in possible_paths:
+                if os.path.exists(p):
+                    libreoffice_bin = p
+                    break
+        
+        # Output directory is 'uploads'
+        out_dir = "uploads"
+        
+        # Execute headless LibreOffice conversion
+        cmd = [libreoffice_bin, "--headless", "--convert-to", "pdf", "--outdir", out_dir, file_path]
+        try:
+            logger.info(f"Converting {file_path} to PDF using command: {' '.join(cmd)}")
+            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            
+            # The converted file has the same name but with .pdf extension
+            pdf_filename = os.path.splitext(os.path.basename(file_path))[0] + ".pdf"
+            pdf_path = os.path.join(out_dir, pdf_filename)
+            
+            if os.path.exists(pdf_path):
+                # Delete original file
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                return pdf_path
+        except Exception as err:
+            logger.error(f"LibreOffice conversion failed: {err}")
+            # If conversion fails, keep original file
+            
+    return file_path
+
 @app.post("/course/upload-media")
 async def upload_media(file: UploadFile = File(...)):
-    validate_uploaded_file(file, 10.0, ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.mp3', '.wav', '.pdf', '.docx', '.txt', '.pptx'])
+    validate_uploaded_file(file, 10.0, ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.mp3', '.wav', '.pdf', '.docx', '.txt', '.pptx', '.xlsx', '.xls', '.ppt', '.doc'])
     import uuid
     import shutil
     
@@ -419,8 +462,12 @@ async def upload_media(file: UploadFile = File(...)):
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
+        # Convert Office documents to PDF so they can open securely in SecureDocViewer
+        final_file_path = convert_to_pdf_if_needed(file_path)
+        final_filename = os.path.basename(final_file_path)
+        
         base_url = os.getenv("PUBLIC_ASSET_URL", "http://localhost:8000")
-        return {"status": "success", "url": f"{base_url}/uploads/{unique_filename}"}
+        return {"status": "success", "url": f"{base_url}/uploads/{final_filename}"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
