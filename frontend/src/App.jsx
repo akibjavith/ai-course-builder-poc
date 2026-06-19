@@ -68,7 +68,10 @@ function App() {
   };
 
   const updateCourseData = (key, value) => {
-    setCourseData(prev => ({ ...prev, [key]: value }));
+    setCourseData(prev => {
+      const resolvedValue = typeof value === 'function' ? value(prev[key]) : value;
+      return { ...prev, [key]: resolvedValue };
+    });
   };
 
   const handleEditCourse = async (course) => {

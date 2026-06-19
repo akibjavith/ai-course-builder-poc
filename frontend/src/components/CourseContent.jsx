@@ -220,50 +220,81 @@ export default function CourseContent({ courseData, updateCourseData, contentGen
     }
   };
 
+  // Ref to hold the queue of lesson content generations
+  const generationQueueRef = useRef([]);
+  const isProcessingQueueRef = useRef(false);
+
+  const processGenerationQueue = async () => {
+    if (isProcessingQueueRef.current || generationQueueRef.current.length === 0) return;
+    isProcessingQueueRef.current = true;
+
+    while (generationQueueRef.current.length > 0) {
+      const task = generationQueueRef.current[0];
+      const { mIdx, cIdx, lesson } = task;
+      const key = `${mIdx}-${cIdx}`;
+
+      try {
+        const prompt = lesson.content?.prompt || '';
+        const payload = {
+          title: lesson.title,
+          module_title: courseData.structure.modules[mIdx].title,
+          prompt: prompt,
+          type: lesson.content?.type || 'html',
+          course_details: courseData.details
+        };
+
+        const res = await generateLessonContent(payload);
+
+        // Fetch the ABSOLUTE LATEST modules from state dynamically via functional update to prevent race conditions
+        updateCourseData('structure', (prevStructure) => {
+          const latestModules = JSON.parse(JSON.stringify(prevStructure?.modules || []));
+          const chapter = latestModules[mIdx]?.chapters?.[cIdx];
+          if (chapter) {
+            if (!chapter.contents) {
+              chapter.contents = (chapter.content && chapter.content.completed) ? [chapter.content] : [];
+            }
+            chapter.contents.push({ 
+              ...res, 
+              source: 'ai', 
+              type: 'lesson-blocks',
+              completed: true,
+              timestamp: new Date().toISOString()
+            });
+            chapter.content = {
+              ...(chapter.content || {}),
+              content_type: 'lesson-blocks',
+              html_content: '',
+              completed: true
+            };
+          }
+          return { ...prevStructure, modules: latestModules };
+        });
+
+      } catch (err) {
+        console.error("Queue task generation failed:", err);
+        setError(`Failed to generate content for ${lesson.title}`);
+      } finally {
+        // Remove completed/failed task from queue
+        generationQueueRef.current.shift();
+        setLoadingMap(prev => ({ ...prev, [key]: false }));
+      }
+    }
+
+    isProcessingQueueRef.current = false;
+  };
+
   const handleGenerateContent = async (mIdx, cIdx, lesson) => {
     const prompt = lesson.content?.prompt || '';
     if (!prompt.trim()) return setError('Please provide a prompt first.');
     
     const key = `${mIdx}-${cIdx}`;
     setLoadingMap(prev => ({ ...prev, [key]: true }));
-    try {
-      const payload = {
-        title: lesson.title,
-        module_title: courseData.structure.modules[mIdx].title,
-        prompt: prompt,
-        type: lesson.content?.type || 'html',
-        course_details: courseData.details
-      };
-      const res = await generateLessonContent(payload);
-      
-      // Deep clone modules to avoid direct state mutation and ensure React detects change
-      const currentModules = JSON.parse(JSON.stringify(courseData.structure?.modules || []));
-      const chapter = currentModules[mIdx].chapters[cIdx];
-      if (!chapter.contents) {
-        chapter.contents = (chapter.content && chapter.content.completed) ? [chapter.content] : [];
-      }
-      
-      chapter.contents.push({ 
-        ...res, 
-        source: 'ai', 
-        type: 'lesson-blocks',
-        completed: true,
-        timestamp: new Date().toISOString()
-      });
-      
-      chapter.content = {
-        ...(chapter.content || {}),
-        content_type: 'lesson-blocks',
-        html_content: '',
-        completed: true
-      };
 
-      updateCourseData('structure', { ...courseData.structure, modules: currentModules });
-    } catch (err) {
-      setError(`Failed to generate content for ${lesson.title}`);
-    } finally {
-      setLoadingMap(prev => ({ ...prev, [key]: false }));
-    }
+    // Queue the task
+    generationQueueRef.current.push({ mIdx, cIdx, lesson });
+
+    // Try processing the queue
+    processGenerationQueue();
   };
 
   const handleFileUpload = async (event, mIdx, cIdx) => {
@@ -647,10 +678,24 @@ export default function CourseContent({ courseData, updateCourseData, contentGen
                                 </div>
                                 {/* Loading Spinner or Normal Content Type Icons */}
                                 {loadingMap[`${mIdx}-${cIdx}`] ? (
-                                  <div className="flex items-center gap-1.5 bg-sky-50 border border-sky-100 px-2 py-0.5 rounded-full shadow-sm animate-pulse z-20">
-                                    <Loader2 className="w-2.5 h-2.5 text-sky-600 animate-spin" />
-                                    <span className="text-[8px] font-black text-sky-600 uppercase tracking-wider">Generating...</span>
-                                  </div>
+                                  (() => {
+                                    // Check if it is currently at the front of the queue (actively processing) or waiting in queue
+                                    const queueIndex = generationQueueRef.current.findIndex(task => task.mIdx === mIdx && task.cIdx === cIdx);
+                                    if (queueIndex > 0) {
+                                      return (
+                                        <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-100/60 px-2 py-0.5 rounded-full shadow-sm z-20 animate-pulse">
+                                          <Loader2 className="w-2.5 h-2.5 text-amber-500 animate-spin" style={{ animationDuration: '3s' }} />
+                                          <span className="text-[8px] font-black text-amber-600 uppercase tracking-wider">In Queue</span>
+                                        </div>
+                                      );
+                                    }
+                                    return (
+                                      <div className="flex items-center gap-1.5 bg-sky-50 border border-sky-100 px-2 py-0.5 rounded-full shadow-sm animate-pulse z-20">
+                                        <Loader2 className="w-2.5 h-2.5 text-sky-600 animate-spin" />
+                                        <span className="text-[8px] font-black text-sky-600 uppercase tracking-wider">Generating...</span>
+                                      </div>
+                                    );
+                                  })()
                                 ) : (
                                   <>
                                     {((chap.contents || (chap.content?.completed ? [chap.content] : []))).map((c, i) => {
