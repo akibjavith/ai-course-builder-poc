@@ -685,7 +685,7 @@ export default function CourseContent({ courseData, updateCourseData, contentGen
                                       return (
                                         <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-100/60 px-2 py-0.5 rounded-full shadow-sm z-20 animate-pulse">
                                           <Loader2 className="w-2.5 h-2.5 text-amber-500 animate-spin" style={{ animationDuration: '3s' }} />
-                                          <span className="text-[8px] font-black text-amber-600 uppercase tracking-wider">In Queue</span>
+                                          <span className="text-[8px] font-black text-amber-600 uppercase tracking-wider">In Progress</span>
                                         </div>
                                       );
                                     }

@@ -31,6 +31,28 @@ const BLOCK_INFO = {
   attachment: { label: 'File Attachment', icon: Paperclip, color: 'text-orange-500', bg: 'bg-orange-50' },
 };
 
+// Fallback clipboard copying helper
+function fallbackCopyText(text, callback) {
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+  textArea.style.position = "fixed";
+  textArea.style.top = "0";
+  textArea.style.left = "0";
+  textArea.style.opacity = "0";
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  try {
+    const successful = document.execCommand('copy');
+    if (successful && callback) {
+      callback();
+    }
+  } catch (err) {
+    console.error('Fallback copy failed', err);
+  }
+  document.body.removeChild(textArea);
+}
+
 // Custom hook to automatically add copy buttons to <pre> tags with MutationObserver
 function useCopyCode(containerRef, dependency) {
   useEffect(() => {
@@ -51,7 +73,8 @@ function useCopyCode(containerRef, dependency) {
           e.stopPropagation();
           const codeElement = pre.querySelector('code');
           const textToCopy = codeElement ? codeElement.innerText : pre.innerText.replace('Copy Code', '');
-          navigator.clipboard.writeText(textToCopy).then(() => {
+          
+          const onSuccess = () => {
             button.innerHTML = `
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="check-icon text-green-400"><path d="M20 6 9 17l-5-5"/></svg>
               <span class="text-green-400">Copied!</span>
@@ -62,7 +85,15 @@ function useCopyCode(containerRef, dependency) {
                 <span>Copy Code</span>
               `;
             }, 2000);
-          });
+          };
+
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(textToCopy).then(onSuccess).catch(err => {
+              fallbackCopyText(textToCopy, onSuccess);
+            });
+          } else {
+            fallbackCopyText(textToCopy, onSuccess);
+          }
         });
         pre.appendChild(button);
       });
@@ -280,6 +311,9 @@ export default function LessonPreviewEditorModal({
   // State for secure document viewer
   const [secureViewerUrl, setSecureViewerUrl] = useState(null);
 
+  // State for dynamic content theme switching ('light' | 'dark' | 'sepia')
+  const [theme, setTheme] = useState('light');
+
   const fetchMedia = async () => {
     setLoadingMedia(true);
     try {
@@ -299,10 +333,10 @@ export default function LessonPreviewEditorModal({
   useEffect(() => {
     const nextPreview = buildPreviewContent(getChapter(courseData?.structure, active.mIdx, active.cIdx));
     setBlocksDraft(nextPreview?.lessonBlocks || null);
-    setHtmlDraft(nextPreview?.html_content || '');
+    setHtmlDraft(nextPreview?.html_content || getChapter(courseData?.structure, active.mIdx, active.cIdx)?.content?.html_content || '');
     setEditMode(!readOnly && !!startInEdit);
     setActiveInsertMenuIdx(null);
-  }, [active.mIdx, active.cIdx]);
+  }, [active.mIdx, active.cIdx, courseData, readOnly, startInEdit]);
 
   const hasPrev = activeLessonIndex > 0;
   const hasNext = activeLessonIndex >= 0 && activeLessonIndex < lessons.length - 1;
@@ -469,37 +503,56 @@ export default function LessonPreviewEditorModal({
         />
       )}
 
-      <div className="bg-white w-full max-w-5xl h-[90vh] rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col relative animate-scale-in">
+      <div className={`theme-${theme} theme-container w-full max-w-5xl h-[90vh] rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col relative animate-scale-in border`} style={{ borderColor: 'var(--border-color)', backgroundColor: 'var(--bg-primary)' }}>
         
         {/* Header toolbar */}
-        <div className="p-6 sm:px-10 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-20">
+        <div className="p-6 sm:px-10 flex items-center justify-between sticky top-0 z-20 border-b" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="bg-sky-50 text-sky-600 px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border border-sky-100">
+              <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border" style={{ backgroundColor: 'var(--accent-bg)', color: 'var(--accent-color)', borderColor: 'var(--border-color)' }}>
                 {editMode ? 'Edit Lesson' : 'Live Preview'}
               </span>
-              <h2 className="text-xl font-bold text-slate-900 tracking-tight truncate max-w-md">
+              <h2 className="text-xl font-bold tracking-tight truncate max-w-md" style={{ color: 'var(--text-main)' }}>
                 {chapter?.title || 'Lesson'}
               </h2>
             </div>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+            <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
               {blocksDraft ? 'Block-based Interactive Lesson Outline' : 'HTML-based legacy content'}
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 mr-2 border-r border-slate-100 pr-3">
+          <div className="flex items-center gap-4">
+            {/* Dynamic Premium Theme Switcher Selector */}
+            <div className="flex items-center gap-1 bg-opacity-40 rounded-xl p-1 border" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
+              {['light', 'dark', 'sepia'].map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTheme(t)}
+                  className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition ${theme === t ? 'shadow-sm' : 'opacity-60 hover:opacity-100'}`}
+                  style={{
+                    backgroundColor: theme === t ? 'var(--bg-primary)' : 'transparent',
+                    color: theme === t ? 'var(--accent-color)' : 'var(--text-secondary)'
+                  }}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-1 border-r pr-3" style={{ borderColor: 'var(--border-color)' }}>
               <button
                 onClick={goPrev}
                 disabled={!hasPrev}
-                className="p-2.5 bg-slate-50 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-xl transition-all disabled:opacity-30 active:scale-95"
+                className="p-2.5 rounded-xl transition-all disabled:opacity-30 active:scale-95"
+                style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
               <button
                 onClick={goNext}
                 disabled={!hasNext}
-                className="p-2.5 bg-slate-50 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-xl transition-all disabled:opacity-30 active:scale-95"
+                className="p-2.5 rounded-xl transition-all disabled:opacity-30 active:scale-95"
+                style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}
               >
                 <ChevronRight className="w-5 h-5" />
               </button>
@@ -508,7 +561,8 @@ export default function LessonPreviewEditorModal({
             {!readOnly && !editMode ? (
               <button
                 onClick={() => setEditMode(true)}
-                className="p-3 bg-slate-50 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-2xl transition-all active:scale-95"
+                className="p-3 rounded-2xl transition-all active:scale-95"
+                style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}
                 title="Edit Content"
               >
                 <Edit3 className="w-5 h-5" />
@@ -526,7 +580,8 @@ export default function LessonPreviewEditorModal({
             {!readOnly && (
               <button
                 onClick={deleteLesson}
-                className="p-3 bg-red-50 text-red-500 hover:bg-red-100 rounded-2xl transition-all active:scale-95"
+                className="p-3 rounded-2xl transition-all active:scale-95"
+                style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}
                 title="Delete lesson"
               >
                 <Trash2 className="w-5 h-5" />
@@ -535,7 +590,8 @@ export default function LessonPreviewEditorModal({
 
             <button
               onClick={onClose}
-              className="p-3 bg-slate-50 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-2xl transition-all active:scale-95"
+              className="p-3 rounded-2xl transition-all active:scale-95 border"
+              style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)', borderColor: 'var(--border-color)' }}
             >
               <X className="w-6 h-6" />
             </button>
@@ -543,8 +599,8 @@ export default function LessonPreviewEditorModal({
         </div>
 
         {/* Content Viewer / Editor Body */}
-        <div className="flex-1 overflow-y-auto no-scrollbar bg-slate-50/30">
-          <div className="max-w-4xl mx-auto px-6 py-12 sm:px-12 space-y-8 bg-white shadow-sm my-10 rounded-[2.5rem] border border-slate-100">
+        <div className="flex-1 overflow-y-auto no-scrollbar" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+          <div className="max-w-4xl mx-auto px-6 py-12 sm:px-12 space-y-8 shadow-sm my-10 rounded-[2.5rem] border" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
             {blocksDraft ? (
               <div ref={containerRef} className="space-y-6">
                 
@@ -570,7 +626,7 @@ export default function LessonPreviewEditorModal({
 
                       {/* Render block types */}
                       <div className={`p-1 rounded-xl transition-all duration-200 ${editMode ? 'border border-dashed border-slate-200 hover:border-sky-300 hover:shadow-sm p-4' : ''}`}>
-                        {block.type === 'heading' && (
+                         {block.type === 'heading' && (
                           editMode ? (
                             <div className="flex gap-2 items-center">
                               <select 
@@ -591,11 +647,11 @@ export default function LessonPreviewEditorModal({
                             </div>
                           ) : (
                             block.level === 1 ? (
-                              <h1 className="text-3xl font-black text-slate-900 tracking-tight mb-4 border-b border-slate-100 pb-2">{block.text}</h1>
+                              <h1 className="text-3xl font-black tracking-tight mb-4 border-b pb-2" style={{ color: 'var(--text-main)', borderColor: 'var(--border-color)' }}>{block.text}</h1>
                             ) : block.level === 3 ? (
-                              <h3 className="text-lg font-bold text-slate-800 mb-2">{block.text}</h3>
+                              <h3 className="text-lg font-bold mb-2" style={{ color: 'var(--text-main)' }}>{block.text}</h3>
                             ) : (
-                              <h2 className="text-xl font-bold text-sky-600 mb-3 border-l-4 border-sky-500 pl-3">{block.text}</h2>
+                              <h2 className="text-xl font-bold mb-3 border-l-4 pl-3" style={{ color: 'var(--accent-color)', borderColor: 'var(--accent-color)' }}>{block.text}</h2>
                             )
                           )
                         )}
@@ -611,7 +667,8 @@ export default function LessonPreviewEditorModal({
                             />
                           ) : (
                             <p 
-                              className="text-slate-700 leading-relaxed text-base mb-4"
+                              className="leading-relaxed text-base mb-4"
+                              style={{ color: 'var(--text-secondary)' }}
                               dangerouslySetInnerHTML={{ __html: formatRichText(block.text) }}
                             />
                           )
@@ -655,13 +712,13 @@ export default function LessonPreviewEditorModal({
                             </div>
                           ) : (
                             block.type === 'bullet_list' ? (
-                              <ul className="list-disc pl-6 space-y-2 text-slate-700 mb-4">
+                              <ul className="list-disc pl-6 space-y-2 mb-4" style={{ color: 'var(--text-secondary)' }}>
                                 {(block.items || []).map((item, itemIdx) => (
                                   <li key={itemIdx} dangerouslySetInnerHTML={{ __html: formatRichText(item) }} />
                                 ))}
                               </ul>
                             ) : (
-                              <ol className="list-decimal pl-6 space-y-2 text-slate-700 mb-4">
+                              <ol className="list-decimal pl-6 space-y-2 mb-4" style={{ color: 'var(--text-secondary)' }}>
                                 {(block.items || []).map((item, itemIdx) => (
                                   <li key={itemIdx} dangerouslySetInnerHTML={{ __html: formatRichText(item) }} />
                                 ))}
@@ -806,22 +863,22 @@ export default function LessonPreviewEditorModal({
                               </div>
                             </div>
                           ) : (
-                            <div className="overflow-x-auto my-6 border border-slate-200 rounded-2xl shadow-sm bg-white">
-                              <table className="min-w-full divide-y divide-slate-200">
-                                <thead className="bg-slate-50/50">
+                            <div className="overflow-x-auto my-6 border rounded-2xl shadow-sm" style={{ borderColor: 'var(--border-color)', backgroundColor: 'var(--bg-primary)' }}>
+                              <table className="min-w-full divide-y" style={{ divideColor: 'var(--border-color)' }}>
+                                <thead style={{ backgroundColor: 'var(--bg-secondary)' }}>
                                   <tr>
                                     {(block.headers || []).map((header, hIdx) => (
-                                      <th key={hIdx} scope="col" className="px-6 py-3.5 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">
+                                      <th key={hIdx} scope="col" className="px-6 py-3.5 text-left text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-main)' }}>
                                         {header}
                                       </th>
                                     ))}
                                   </tr>
                                 </thead>
-                                <tbody className="bg-white divide-y divide-slate-100">
+                                <tbody className="divide-y" style={{ backgroundColor: 'var(--bg-primary)', divideColor: 'var(--border-color)' }}>
                                   {(block.rows || []).map((row, rIdx) => (
-                                    <tr key={rIdx} className="hover:bg-slate-50/50 transition-colors">
+                                    <tr key={rIdx} className="transition-colors hover:opacity-90">
                                       {row.map((cell, cIdx) => (
-                                        <td key={cIdx} className="px-6 py-4 text-sm text-slate-700 font-medium">
+                                        <td key={cIdx} className="px-6 py-4 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
                                           {cell}
                                         </td>
                                       ))}
@@ -860,12 +917,18 @@ export default function LessonPreviewEditorModal({
                             (() => {
                               let styles = 'bg-sky-50 border-sky-400 text-sky-800';
                               let CalloutIcon = Info;
-                              if (block.callout_type === 'warning') { styles = 'bg-amber-50/50 border-amber-400 text-amber-800'; CalloutIcon = AlertTriangle; }
-                              else if (block.callout_type === 'tip') { styles = 'bg-emerald-50/50 border-emerald-400 text-emerald-800'; CalloutIcon = Lightbulb; }
-                              else if (block.callout_type === 'danger') { styles = 'bg-rose-50/50 border-rose-400 text-rose-800'; CalloutIcon = AlertCircle; }
+                              if (block.callout_type === 'warning') { styles = 'bg-amber-50/50 border-amber-450 text-amber-850'; CalloutIcon = AlertTriangle; }
+                              else if (block.callout_type === 'tip') { styles = 'bg-emerald-50/50 border-emerald-450 text-emerald-850'; CalloutIcon = Lightbulb; }
+                              else if (block.callout_type === 'danger') { styles = 'bg-rose-50/50 border-rose-450 text-rose-850'; CalloutIcon = AlertCircle; }
+                              
+                              // Use central variables if they override, otherwise fallback
                               return (
-                                <div className={`border-l-6 p-5 rounded-2xl flex gap-3 my-4 ${styles}`}>
-                                  <CalloutIcon className="w-5 h-5 flex-shrink-0" />
+                                <div className="border-l-6 p-5 rounded-2xl flex gap-3 my-4" style={{ 
+                                  backgroundColor: 'var(--accent-bg)', 
+                                  borderColor: 'var(--accent-color)',
+                                  color: 'var(--text-secondary)'
+                                }}>
+                                  <CalloutIcon className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--accent-color)' }} />
                                   <div className="text-sm font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: formatRichText(block.text) }} />
                                 </div>
                               );
@@ -902,12 +965,12 @@ export default function LessonPreviewEditorModal({
                           ) : (
                             <div className="my-6">
                               <div className="position-relative">
-                                <pre className="bg-slate-900 text-sky-400 p-6 pt-12 rounded-2xl overflow-x-auto font-mono text-sm leading-relaxed">
+                                <pre className="p-6 pt-12 rounded-2xl overflow-x-auto font-mono text-sm leading-relaxed" style={{ backgroundColor: 'var(--code-bg)', color: 'var(--code-text)' }}>
                                   <code>{block.code}</code>
                                 </pre>
                               </div>
                               {block.explanation && (
-                                <div className="mt-3 p-4 bg-slate-50 border border-slate-100 rounded-xl text-sm text-slate-650 leading-relaxed font-medium">
+                                <div className="mt-3 p-4 border rounded-xl text-sm leading-relaxed font-medium" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)', color: 'var(--text-secondary)' }}>
                                   {block.explanation}
                                 </div>
                               )}
@@ -934,11 +997,11 @@ export default function LessonPreviewEditorModal({
                               />
                             </div>
                           ) : (
-                            <div className="bg-emerald-50/20 border-l-6 border-emerald-500 p-6 rounded-2xl my-6">
-                              <h4 className="text-emerald-700 text-xs font-black uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                            <div className="border-l-6 p-6 rounded-2xl my-6" style={{ backgroundColor: 'var(--accent-bg)', borderColor: 'var(--accent-color)' }}>
+                              <h4 className="text-xs font-black uppercase tracking-widest mb-2 flex items-center gap-1.5" style={{ color: 'var(--accent-color)' }}>
                                 <Lightbulb className="w-4 h-4" /> Real-World Example: {block.scenario}
                               </h4>
-                              <p className="text-slate-700 text-sm leading-relaxed font-medium">{block.detail}</p>
+                              <p className="text-sm leading-relaxed font-medium" style={{ color: 'var(--text-secondary)' }}>{block.detail}</p>
                             </div>
                           )
                         )}
@@ -1004,18 +1067,18 @@ export default function LessonPreviewEditorModal({
                               </div>
                             </div>
                           ) : (
-                            <div className="bg-violet-50/20 border border-violet-100 rounded-3xl p-6 sm:p-8 space-y-4 my-6">
-                              <h4 className="text-violet-700 text-xs font-black uppercase tracking-widest flex items-center gap-1.5">
+                            <div className="border rounded-3xl p-6 sm:p-8 space-y-4 my-6" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
+                              <h4 className="text-xs font-black uppercase tracking-widest flex items-center gap-1.5" style={{ color: 'var(--accent-color)' }}>
                                 <CheckSquare className="w-4 h-4" /> Practical Assignment: {block.task}
                               </h4>
-                              <p className="text-slate-700 text-sm leading-relaxed font-medium">{block.instructions}</p>
+                              <p className="text-sm leading-relaxed font-medium" style={{ color: 'var(--text-secondary)' }}>{block.instructions}</p>
                               {block.grading_criteria && block.grading_criteria.length > 0 && (
-                                <div className="space-y-2 pt-2 border-t border-violet-100">
-                                  <span className="text-[10px] font-bold text-violet-500 uppercase tracking-widest block">Grading Checklist</span>
+                                <div className="space-y-2 pt-2 border-t" style={{ borderColor: 'var(--border-color)' }}>
+                                  <span className="text-[10px] font-bold uppercase tracking-widest block" style={{ color: 'var(--accent-color)' }}>Grading Checklist</span>
                                   <ul className="space-y-1.5 list-none pl-0">
                                     {block.grading_criteria.map((item, cIdx) => (
-                                      <li key={cIdx} className="flex items-start gap-2 text-xs text-slate-650 font-medium">
-                                        <Check className="w-3.5 h-3.5 text-violet-500 mt-0.5 flex-shrink-0" />
+                                      <li key={cIdx} className="flex items-start gap-2 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                                        <Check className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" style={{ color: 'var(--accent-color)' }} />
                                         <span>{item}</span>
                                       </li>
                                     ))}
@@ -1062,11 +1125,11 @@ export default function LessonPreviewEditorModal({
                               </button>
                             </div>
                           ) : (
-                            <div className="bg-sky-50/20 border border-sky-100 rounded-3xl p-6 sm:p-8 space-y-4 my-6">
-                              <h4 className="text-sky-700 text-xs font-black uppercase tracking-widest flex items-center gap-1.5">
+                            <div className="border rounded-3xl p-6 sm:p-8 space-y-4 my-6" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
+                              <h4 className="text-xs font-black uppercase tracking-widest flex items-center gap-1.5" style={{ color: 'var(--accent-color)' }}>
                                 <BookOpen className="w-4 h-4" /> Lesson Summary
                               </h4>
-                              <ul className="space-y-2 pl-4 list-disc text-slate-700 text-sm font-medium">
+                              <ul className="space-y-2 pl-4 list-disc text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
                                 {(block.points || []).map((pt, ptIdx) => (
                                   <li key={ptIdx}>{pt}</li>
                                 ))}
@@ -1095,17 +1158,18 @@ export default function LessonPreviewEditorModal({
                               />
                             </div>
                           ) : (
-                            <div className="flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100/50 rounded-2xl border border-slate-150 transition-all gap-2 my-3">
+                            <div className="flex items-center justify-between p-4 rounded-2xl border transition-all gap-2 my-3" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
                               <div>
-                                <h4 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
-                                  <BookOpen className="w-4 h-4 text-sky-500" /> {block.title}
+                                <h4 className="text-sm font-bold flex items-center gap-1.5" style={{ color: 'var(--text-main)' }}>
+                                  <BookOpen className="w-4 h-4" style={{ color: 'var(--accent-color)' }} /> {block.title}
                                 </h4>
                               </div>
                               <a 
                                 href={block.url} 
                                 target="_blank" 
                                 rel="noreferrer" 
-                                className="inline-flex items-center gap-1.5 text-xs font-bold text-sky-600 hover:text-sky-800 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-sm transition active:scale-95 whitespace-nowrap"
+                                className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl shadow-sm transition active:scale-95 whitespace-nowrap border"
+                                style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--accent-color)', borderColor: 'var(--border-color)' }}
                               >
                                 Visit Resource ↗
                               </a>
@@ -1230,14 +1294,14 @@ export default function LessonPreviewEditorModal({
                             </div>
                           ) : (
                             block.file_url ? (
-                              <div className="flex items-center justify-between p-4 bg-orange-50/30 hover:bg-orange-50/60 rounded-2xl border border-orange-100 transition-all gap-2 my-3">
+                              <div className="flex items-center justify-between p-4 rounded-2xl border transition-all gap-2 my-3" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
                                 <div className="flex items-center gap-3">
-                                  <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0">
-                                    <Paperclip className="w-4 h-4 text-orange-600" />
+                                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'var(--accent-bg)', borderColor: 'var(--border-color)' }}>
+                                    <Paperclip className="w-4 h-4" style={{ color: 'var(--accent-color)' }} />
                                   </div>
                                   <div>
-                                    <h4 className="text-sm font-bold text-slate-900">{block.title || block.file_name || 'Attached File'}</h4>
-                                    <p className="text-[10px] text-slate-400 font-medium">{block.file_name || 'File Attachment'}</p>
+                                    <h4 className="text-sm font-bold animate-fade-in" style={{ color: 'var(--text-main)' }}>{block.title || block.file_name || 'Attached File'}</h4>
+                                    <p className="text-[10px] font-medium" style={{ color: 'var(--text-muted)' }}>{block.file_name || 'File Attachment'}</p>
                                   </div>
                                 </div>
                                 <button
@@ -1245,14 +1309,15 @@ export default function LessonPreviewEditorModal({
                                     const url = block.file_url.startsWith('/uploads/') ? `http://localhost:8000${block.file_url}` : block.file_url;
                                     setSecureViewerUrl(url);
                                   }}
-                                  className="inline-flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-800 bg-white border border-orange-200 px-3 py-1.5 rounded-xl shadow-sm transition active:scale-95 whitespace-nowrap"
+                                  className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl shadow-sm transition active:scale-95 whitespace-nowrap border"
+                                  style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--accent-color)', borderColor: 'var(--border-color)' }}
                                 >
                                   Open Securely
                                 </button>
                               </div>
                             ) : (
-                              <div className="p-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center">
-                                <p className="text-xs text-slate-400">No file attached yet. Click Edit to upload.</p>
+                              <div className="p-4 rounded-2xl border border-dashed text-center" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
+                                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No file attached yet. Click Edit to upload.</p>
                               </div>
                             )
                           )

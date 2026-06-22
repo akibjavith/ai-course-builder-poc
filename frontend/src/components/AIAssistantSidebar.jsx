@@ -252,7 +252,7 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
                       </div>
                       <div className="pt-2 flex gap-2 border-t border-slate-50 mt-4">
                          <button onClick={() => handleApplyAISuggestion(msg.data)} className="flex-1 bg-sky-600 text-white px-4 py-2.5 rounded-xl text-[11px] font-bold hover:bg-sky-700 transition flex items-center justify-center gap-2"><CheckCircle2 className="w-3.5 h-3.5" /> Apply Details</button>
-                         <button onClick={() => handleSend("Refine these details to be more professional.", "Refine Details")} className="flex-1 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-[11px] font-bold hover:bg-slate-50 transition">Refine Details</button>
+                         <button onClick={() => handleSend("Refine these course details to be more professional. YOU MUST RETURN THE [METADATA] BLOCK WITH THE UPDATED DETAILS OBJECT.", "Refine Details")} className="flex-1 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-[11px] font-bold hover:bg-slate-50 transition">Refine Details</button>
                       </div>
                     </div>
                   )}
@@ -378,7 +378,7 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
                      
                      return (
                        <>
-                         <button onClick={() => handleSend("Refine the requirements and description.", "Refine Details")} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Refine Details</button>
+                         <button onClick={() => handleSend("Refine the course details requirements and description. YOU MUST RETURN THE [METADATA] BLOCK WITH THE UPDATED DETAILS OBJECT.", "Refine Details")} className="text-[10px] font-bold text-slate-400 hover:text-sky-600 bg-slate-50 px-2 py-1 rounded-lg transition-colors border border-slate-100">Refine Details</button>
                        </>
                      );
                    })()}

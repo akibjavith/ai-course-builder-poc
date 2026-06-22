@@ -3,7 +3,6 @@ import { storeCourse } from '../api';
 import { Loader2, CheckCircle2, Database, ChevronLeft, Sparkles, AlertCircle, Rocket, Eye } from 'lucide-react';
 import LessonPreviewEditorModal from './LessonPreviewEditorModal';
 import ActionModal from './ActionModal';
-import CourseViewer from './CourseViewer';
 
 export default function PublishDashboard({ courseData, updateCourseData, onBack, onComplete }) {
   const [saving, setSaving] = useState(false);
@@ -11,7 +10,6 @@ export default function PublishDashboard({ courseData, updateCourseData, onBack,
   const [errorMsg, setErrorMsg] = useState(null);
   const [previewData, setPreviewData] = useState(null); // { mIdx, cIdx, startInEdit }
   const [modalConfig, setModalConfig] = useState(null);
-  const [showFullPreview, setShowFullPreview] = useState(false);
 
   const { details, structure, content } = courseData;
 
@@ -62,10 +60,6 @@ export default function PublishDashboard({ courseData, updateCourseData, onBack,
       setSaving(false);
     }
   };
-
-  if (showFullPreview) {
-    return <CourseViewer course={courseData} onBack={() => setShowFullPreview(false)} />;
-  }
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -195,7 +189,7 @@ export default function PublishDashboard({ courseData, updateCourseData, onBack,
                 </button>
                 
                 <button 
-                  onClick={() => setShowFullPreview(true)} 
+                  onClick={() => openPreview(0, 0)} 
                   disabled={saving}
                   className="px-6 py-3.5 bg-sky-50 text-sky-600 rounded-2xl font-bold uppercase text-[10px] tracking-widest flex items-center gap-2 hover:bg-sky-100 transition-all active:scale-95 disabled:opacity-50 border border-sky-100 shadow-sm"
                 >
