@@ -507,21 +507,21 @@ export default function LessonPreviewEditorModal({
         
         {/* Header toolbar */}
         <div className="p-6 sm:px-10 flex items-center justify-between sticky top-0 z-20 border-b" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border" style={{ backgroundColor: 'var(--accent-bg)', color: 'var(--accent-color)', borderColor: 'var(--border-color)' }}>
+          <div className="space-y-1 min-w-0 flex-shrink mr-4">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border flex-shrink-0" style={{ backgroundColor: 'var(--accent-bg)', color: 'var(--accent-color)', borderColor: 'var(--border-color)' }}>
                 {editMode ? 'Edit Lesson' : 'Live Preview'}
               </span>
-              <h2 className="text-xl font-bold tracking-tight truncate max-w-md" style={{ color: 'var(--text-main)' }}>
+              <h2 className="text-xl font-bold tracking-tight truncate" style={{ color: 'var(--text-main)' }}>
                 {chapter?.title || 'Lesson'}
               </h2>
             </div>
-            <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
+            <p className="text-[10px] font-bold uppercase tracking-widest truncate" style={{ color: 'var(--text-muted)' }}>
               {blocksDraft ? 'Block-based Interactive Lesson Outline' : 'HTML-based legacy content'}
             </p>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
             {/* Dynamic Premium Theme Switcher Selector */}
             <div className="flex items-center gap-1 bg-opacity-40 rounded-xl p-1 border" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
               {['light', 'dark', 'sepia'].map((t) => (

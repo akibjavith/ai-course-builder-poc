@@ -67,6 +67,7 @@ def build_system_prompt(scope: str, details: dict, course_data: dict, available_
         f"- If the user simply greets you (e.g., \"hi\", \"hello\"), respond conversationally FIRST and ask how you can help them with the {scope}. DO NOT generate an empty JSON card for a simple greeting.\n"
         "- NEVER ASK THE USER FOR DETAILS THEY ALREADY PROVIDED in the chat or in the \"CURRENT CONTEXT\".\n"
         "- PROACTIVE GENERATION: If the user gives you a topic (e.g., \"Java\" or \"I want to create a course on Java\"), DO NOT just ask them for more details. Immediately invent and generate a COMPLETE, highly detailed [METADATA] suggestion card (filling in a catchy title, full description, audience, and objectives yourself) to save them time. Add a conversational note like: \"I've drafted some details for you! You can apply these, or let me know if you want to provide your own specifics.\"\n"
+        "- PROACTIVE DETAILS REFINEMENT: If the user asks you to \"Refine Details\", \"Refine these course details\", or \"Suggest Details\", DO NOT ask them for specific changes, requirements, descriptions, or parameters. You MUST immediately and proactively invent, enhance, and optimize the details yourself (making the requirements more professional, the description more engaging, etc.) and output the complete updated Course Details JSON wrapped in a [METADATA]...[/METADATA] block.\n"
         "- If the user explicitly asks you to generate something but has provided absolutely NO topic in the chat or context, only then ask them: 'What topic would you like to create a course about?'\n"
         "- If the user asks you to \"create a structure\", \"Refine Structure\", \"Add Modules\", or \"Refine Topics\", DO NOT ask them for the title, description, or objectives. Immediately build, update, and output the full [METADATA] Course Structure suggestion card. If the existing structure is empty, invent a comprehensive curriculum with at least 3-4 modules and 3-4 lessons each.\n"
         "- Whenever modifying or refining a structure, you MUST return the entire updated Course Structure JSON wrapped inside a [METADATA]...[/METADATA] block.\n"
@@ -83,6 +84,7 @@ def build_system_prompt(scope: str, details: dict, course_data: dict, available_
         "- ALWAYS RETURN THE FULL AND COMPLETE OBJECT IN [METADATA].\n"
         "- IF A FIELD IS ALREADY PROVIDED IN \"CURRENT CONTEXT\" AND YOU ARE NOT CHANGING IT, YOU MUST STILL INCLUDE IT EXACTLY AS IS.\n"
         "- YOU ARE STRICTLY FORBIDDEN FROM RETURNING EMPTY STRINGS (\"\") OR PLACEHOLDERS FOR FIELDS THAT ALREADY HAVE CONTENT.\n"
+        "- YOU ARE STRICTLY FORBIDDEN from outputting any raw JSON, curly braces, or markdown code blocks (like ```json) in your conversational reply text. Any structured data must reside ONLY inside the [METADATA]...[/METADATA] wrapper. Do not repeat the JSON inside markdown code blocks or in the text reply.\n"
         f"{subject_restriction}\n\n"
         f"CURRENT CONTEXT: {json.dumps(details)}.\n"
         f"{structure_context}\n"
@@ -94,13 +96,14 @@ def build_system_prompt(scope: str, details: dict, course_data: dict, available_
         "1. When generating a prompt for a single lesson, you MUST include the \"module\" and \"title\" (lesson title) in the JSON so the application knows exactly where to apply it.\n"
         "2. EVERY SINGLE PROMPT YOU GENERATE (whether for one lesson or bulk generation) MUST BE EXTREMELY COMPREHENSIVE AND TARGETED.\n"
         "3. Each individual prompt MUST be highly comprehensive, detailed, and extremely actionable. It should be between 100 and 150 words in length to cover all requirements. NEVER generate a single-line summary, and NEVER mention any word count limits or complain about prompt length restrictions in your chat replies.\n"
-        "4. CRITICAL FORMATTING INSTRUCTION: If you are returning any structured metadata (Details, Structure, or Content prompts), you MUST ALWAYS wrap the raw JSON object inside EXACTLY '[METADATA]' and '[/METADATA]' tags. NEVER return raw JSON outside these tags! For example: [METADATA]{\"prompts\": [...]}[/METADATA].\n\n"
+        "4. CRITICAL FORMATTING INSTRUCTION: If you are returning any structured metadata (Details, Structure, or Content prompts), you MUST ALWAYS wrap the raw JSON object inside EXACTLY '[METADATA]' and '[/METADATA]' tags. NEVER return raw JSON outside these tags! For example: [METADATA]{\"prompts\": [...]}[/METADATA].\n"
+        "5. YOU ARE STRICTLY FORBIDDEN from repeating the JSON block or displaying raw JSON/code blocks in the conversational reply text. Keep the conversational reply text purely conversational.\n\n"
         "VALID DROPDOWN OPTIONS (YOU MUST USE ONLY THESE):\n"
         "- courseType: Must be \"Custom Course\" or \"SCORM Course\"\n"
         "- subject: Must be EXACTLY one of: \"English\", \"Maths\", \"Science\", \"Social\", \"Physics\", \"Chemistry\", \"Biology\", \"History\", \"Geography\", \"Economics\", \"Computer Science\", \"Data Science\", \"Machine Learning\", \"AI\", \"Python Programming\", \"Digital Marketing\", \"Business Management\".\n"
         "- duration: Must be a NUMERIC string (e.g., \"14\" for 14 days). Do NOT include \"days\" or \"weeks\".\n"
         "- level: Must be \"beginner\", \"intermediate\", or \"advanced\".\n"
-        "- scriptingLanguage: Must be EXACTLY one of: \"NA\", \"Python\", \"SQL\", \"C++\", \"C\", \"MySQL\", \"PostgreSQL\", \"Java\", \"JavaScript\".\n"
+        "- scriptingLanguage: Must be EXACTLY one of: \"NA\", \"Python\", \"SQL\", \"C++\", \"C\", \"MySQL\", \"PostgreSQL\", \"Java\", \"JavaScript\". CRITICAL: If the course topic, name, description, or subject is related to one of these programming/database options (e.g. Python, SQL, C++, C, MySQL, PostgreSQL, Java, JavaScript), you MUST set \"scriptingLanguage\" to that specific language (e.g. \"Java\" for Java programming, \"Python\" for Python/Data Science, etc.) instead of defaulting to \"NA\".\n"
         "- evaluator: Choose one from: \"Sarah Johnson\", \"Michael Chen\", \"Dr. Emily Smith\", \"Alex Rivera\"."
     )
     return system_prompt
@@ -140,6 +143,56 @@ def try_repair_truncated_json(s: str) -> str:
             pass
             
     return s
+
+def clean_reply_text(text: str) -> str:
+    """
+    Cleans the conversational reply text by removing leaked JSON blocks, 
+    markdown code block wrappers, and any orphaned formatting.
+    """
+    if not text:
+        return ""
+        
+    # Remove markdown code blocks labeled as json
+    text = re.sub(r'```json[\s\S]*?```', '', text)
+    
+    # Remove any markdown code blocks containing JSON-like characters (curly braces/brackets)
+    text = re.sub(r'```[\s\S]*?```', lambda m: '' if '{' in m.group(0) or '[' in m.group(0) else m.group(0), text)
+    
+    # Remove any raw JSON-like structures that might be left in the text
+    def remove_json_structures(t: str) -> str:
+        out = []
+        i = 0
+        n = len(t)
+        while i < n:
+            if t[i] == '{' or t[i] == '[':
+                start_char = t[i]
+                end_char = '}' if start_char == '{' else ']'
+                stack = 1
+                j = i + 1
+                while j < n and stack > 0:
+                    if t[j] == start_char:
+                        stack += 1
+                    elif t[j] == end_char:
+                        stack -= 1
+                    j += 1
+                if stack == 0:
+                    candidate = t[i:j]
+                    if (start_char == '{' and ':' in candidate) or (start_char == '[' and ('{' in candidate or ',' in candidate)):
+                        i = j
+                        continue
+            out.append(t[i])
+            i += 1
+        return "".join(out)
+
+    text = remove_json_structures(text)
+
+    # Clean up any remaining/orphaned markdown code block markers
+    text = re.sub(r'```json\s*', '', text)
+    text = re.sub(r'```\s*', '', text)
+    
+    # Clean up duplicate empty lines or whitespace
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
 
 def parse_metadata(ai_reply: str, scope: str, details: dict) -> tuple:
     """
@@ -224,5 +277,8 @@ def parse_metadata(ai_reply: str, scope: str, details: dict) -> tuple:
             metadata = None
             type_val = None
             reply_text = ai_reply.replace('[METADATA]', '').replace('[/METADATA]', '').strip()
+
+    if reply_text:
+        reply_text = clean_reply_text(reply_text)
 
     return reply_text, metadata, type_val
