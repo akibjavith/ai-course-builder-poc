@@ -430,20 +430,45 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
                   <div className="flex flex-wrap gap-2">
                     <button 
                        onClick={() => {
-                          const prompt = `Please generate high-quality, practical, and EXTREMELY detailed AI content generation prompts for ALL lessons in this course. 
+                          const level = details?.level || 'beginner';
+                          const subject = details?.subject || 'General';
+                          const audience = details?.requirements || 'General learners';
+                          const prompt = `Please generate high-quality, practical, and EXTREMELY detailed AI content-generation prompts (Stage 1) for ALL lessons in this course. 
 
-                          QUALITY STANDARD:
-                          For every single lesson, the prompt must be a comprehensive guide that is exactly 100 to 150 words long. 
-                          Example of quality: "Write a comprehensive chapter on the fundamentals of Python variables. You must cover naming conventions, dynamic typing, and memory allocation in deep detail. Use a 'Storage Box' analogy to make it easy for beginners to understand. Include exactly 3 hands-on coding exercises where the user has to declare different types of variables, and provide a 5-question multiple choice quiz on Python naming rules at the end. Ensure the tone is encouraging and professional."
+                           QUALITY STANDARD:
+                           For every single lesson, the prompt must be a comprehensive standalone guide (150-250 words) that instructs another AI model (Stage 2) how to generate the lesson. Do NOT generate the lesson content, teacher notes, summaries, or teacher instructions itself.
 
-                          CRITICAL RULE: Do NOT provide short or generic single-line summaries. If a course has 10 lessons, you must provide 10 long, highly detailed prompts, each being 100-150 words.
+                            Each generated prompt MUST instruct the Stage 2 AI to map content into these 15 allowed blocks:
+                            - Introduction / Core Concepts -> heading and paragraph blocks.
+                            - Learning Objectives -> bullet_list block.
+                            - Vocabulary / Terminology / Key Terms -> table block containing columns [Word/Term, Definition/Meaning, Example Sentence].
+                            - Worked Examples / Dialogue transcripts / Case Studies -> example block (scenario, detail) or code block.
+                            - Step-by-step guidance -> numbered_list block.
+                            - Code Snippets (if programming) -> code block (language, code, explanation).
+                            - Quizzes & Knowledge Checks -> quiz and knowledge_check blocks (question, options, correctAnswer/answer, explanation).
+                            - Assignments / Practical Tasks -> assignment block (task, instructions, grading_criteria).
+                            - Summaries -> summary block (points).
+                            - References -> reference block (title, url).
 
-                          Course Context:
-                          - Title: "${details?.courseName || details?.title}"
-                          - Description: "${details?.description}"
+                            Subject-Specific Block Rules for "${subject}":
+                            - Language lessons: MUST instruct to use table blocks for vocabulary, paragraph blocks for dialogue/reading transcripts, and quiz blocks for comprehension.
+                            - Programming lessons (Python, C, C++, Java, JavaScript, SQL, C#): MUST instruct to use code blocks for all syntax and implementation examples, assignment blocks for code debug tasks/projects, and paragraph blocks for code analysis.
+                            - Mathematics/Physics lessons: MUST instruct to use paragraph blocks with LaTeX math notation \\( ... \\) or \\[ ... \\] for formulas, and example blocks for worked calculations/problems.
+                            - Science lessons: MUST instruct to use numbered_list blocks for experiments, callout blocks for warnings/tips, and table blocks for observation data.
+                            - Cybersecurity lessons: MUST instruct to use example blocks for threat scenarios and assignment blocks for security configurations.
+                            - Business lessons: MUST instruct to use example blocks for case study details and table blocks for strategic analysis comparisons.
 
-                          RETURN THE FULL LIST:
-                          Format: { "prompts": [ { "module": "...", "title": "...", "prompt": "..." } ] }`;
+                           CRITICAL RULE: Do NOT provide short or generic single-line summaries. If a course has 10 lessons, you must provide 10 long, highly detailed prompts, each being 150-250 words.
+
+                           Course Context:
+                           - Title: "${details?.courseName || details?.title}"
+                           - Description: "${details?.description}"
+                           - Subject: "${subject}"
+                           - Level: "${level}"
+                           - Audience: "${audience}"
+
+                           RETURN THE FULL LIST:
+                           Format: { "prompts": [ { "module": "...", "title": "...", "prompt": "..." } ] }`;
                           handleSend(prompt, "Generate All Prompts");
                        }} 
                        className="text-[10px] font-bold text-slate-500 hover:text-sky-600 hover:bg-sky-50 active:scale-95 active:bg-sky-100 transition-all border border-slate-200 bg-white px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm cursor-pointer hover:shadow"

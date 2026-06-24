@@ -566,7 +566,7 @@ async def api_chat(req: ChatRequest):
             model=LLM_MODEL,
             messages=messages,
             temperature=0.7,
-            max_tokens=2000
+            max_tokens=6000
         )
         
         # Log token usage

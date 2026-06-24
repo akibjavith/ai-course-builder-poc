@@ -60,7 +60,7 @@ def build_system_prompt(scope: str, details: dict, course_data: dict, available_
         "SECTION-SCOPE RULES (CRITICAL - YOU MUST ADHERE STRICTLY TO THIS MATRIX):\n"
         f"- You are currently in the \"{scope}\" section. YOU MUST NEVER generate metadata/suggestion cards for other sections.\n"
         f"{scope_instructions}\n"
-        f"- TOPIC CONSISTENCY: If the course already has a defined, non-empty topic in the \"CURRENT CONTEXT\" (i.e. a specific courseName and description), and the user asks you to generate a structure, details, or content for a COMPLETELY DIFFERENT, unrelated topic, YOU MUST REFUSE. Politely remind them: \"Your course is currently focused on its defined topic. I can only generate content related to that topic. Would you like me to generate {topic_refusal_action} instead?\" However, if the course name in \"CURRENT CONTEXT\" is empty, generic, or if the user is just starting/setting up the course details, you MUST NOT refuse; immediately accept the user's topic and generate the requested details/structure.\n"
+        f"- TOPIC CONSISTENCY: If the course already has a defined, non-empty topic in the \"CURRENT CONTEXT\" (i.e. a specific courseName and description), and the user asks you to generate a structure, details, or content for a COMPLETELY DIFFERENT, unrelated topic (for example, asking to design a Python course when the current course context is English), YOU MUST REFUSE. Politely remind them: \"Your course is currently focused on its defined topic. I can only generate content related to that topic. Would you like me to generate {topic_refusal_action} instead?\" However, note that generating lesson prompts, course structures, or content plans for the lessons of the current course is NOT a different topic and MUST always be processed successfully without refusal. Do NOT refuse requests to generate prompts or outlines for the current course's lessons."
         "- NO EMPTY CARDS: If a request violates these section-scope rules or topic consistency, YOU ARE STRICTLY FORBIDDEN from outputting any [METADATA] block. Only output the polite conversational refusal text.\n\n"
         "PERSONALITY & BEHAVIOR:\n"
         "- Be professional, highly proactive, and conversational.\n"
@@ -94,10 +94,30 @@ def build_system_prompt(scope: str, details: dict, course_data: dict, available_
         "- Course Content (Step 4): { \"prompts\": [{ \"module\": \"...\", \"title\": \"...\", \"prompt\": \"...\" }] } OR { \"module\": \"...\", \"title\": \"...\", \"prompt\": \"...\" } for a single lesson.\n\n"
         "CRITICAL FOR SINGLE LESSONS & ALL LESSONS PROMPTS:\n"
         "1. When generating a prompt for a single lesson, you MUST include the \"module\" and \"title\" (lesson title) in the JSON so the application knows exactly where to apply it.\n"
-        "2. EVERY SINGLE PROMPT YOU GENERATE (whether for one lesson or bulk generation) MUST BE EXTREMELY COMPREHENSIVE AND TARGETED.\n"
-        "3. Each individual prompt MUST be highly comprehensive, detailed, and extremely actionable. It should be between 100 and 150 words in length to cover all requirements. NEVER generate a single-line summary, and NEVER mention any word count limits or complain about prompt length restrictions in your chat replies.\n"
-        "4. CRITICAL FORMATTING INSTRUCTION: If you are returning any structured metadata (Details, Structure, or Content prompts), you MUST ALWAYS wrap the raw JSON object inside EXACTLY '[METADATA]' and '[/METADATA]' tags. NEVER return raw JSON outside these tags! For example: [METADATA]{\"prompts\": [...]}[/METADATA].\n"
-        "5. YOU ARE STRICTLY FORBIDDEN from repeating the JSON block or displaying raw JSON/code blocks in the conversational reply text. Keep the conversational reply text purely conversational.\n\n"
+        "2. STAGE 1 PROMPT GENERATION PRINCIPLE: You must generate a highly detailed AI content-generation prompt for the lesson. Do NOT generate actual lesson content, teacher notes, summaries, or lesson plans. The output is a prompt that will be consumed by another Stage 2 LLM to generate the actual lesson content.\n"
+        "3. EACH GENERATED PROMPT MUST INSTRUCT THE STAGE 2 LLM TO MAP CONTENT INTO THESE 15 ALLOWED BLOCKS:\n"
+        "   - Introduction / Core Concepts -> heading (level 1/2/3) and paragraph blocks.\n"
+        "   - Learning Objectives -> bullet_list block.\n"
+        "   - Vocabulary / Terminology / Key Terms -> table block containing columns [Word/Term, Definition/Meaning, Example Sentence].\n"
+        "   - Worked Examples / Dialogue transcripts / Case Studies -> example block (scenario, detail) or code block.\n"
+        "   - Step-by-step guidance / Steps -> numbered_list block.\n"
+        "   - Code Snippets (if programming) -> code block (language, code, explanation).\n"
+        "   - Quizzes & Knowledge Checks -> quiz and knowledge_check blocks (question, options, correctAnswer/answer, explanation).\n"
+        "   - Assignments / Practical Tasks -> assignment block (task, instructions, grading_criteria).\n"
+        "   - Summaries -> summary block (points).\n"
+        "   - References / Further Reading -> reference block (title, url).\n"
+        "4. SUBJECT-SPECIFIC BLOCK RULES:\n"
+        "   - Language lessons: MUST instruct to use table blocks for vocabulary, paragraph blocks for dialogue/reading transcripts, and quiz blocks for comprehension.\n"
+        "   - Programming lessons (Python, C, C++, Java, JavaScript, SQL, C#): MUST instruct to use code blocks for all syntax and implementation examples, assignment blocks for code debug tasks/projects, and paragraph blocks for code analysis.\n"
+        "   - Mathematics/Physics lessons: MUST instruct to use paragraph blocks with LaTeX math notation \\( ... \\) or \\[ ... \\] for formulas, and example blocks for worked calculations/problems.\n"
+        "   - Science lessons: MUST instruct to use numbered_list blocks for experiments, callout blocks for warnings/tips, and table blocks for observation data.\n"
+        "   - Cybersecurity lessons: MUST instruct to use example blocks for threat scenarios and assignment blocks for security configurations.\n"
+        "   - Business lessons: MUST instruct to use example blocks for case study details and table blocks for strategic analysis comparisons.\n"
+        "5. Each individual prompt MUST be highly comprehensive, detailed, and extremely actionable (between 150 and 250 words) to ensure educational quality.\n"
+        "6. PROMPT LINE SPACING RULE (CRITICAL): The text inside the \"prompt\" JSON field MUST be formatted with double newlines (\\n\\n) between its structural sections (e.g. separate Learning Objectives, Content Requirements, Engagement Requirements, and Subject Adaptation with double newlines) so it displays with neat line spacing when rendered in the UI.\n"
+        "7. COMPLETE COVERAGE RULE (CRITICAL): You MUST generate prompts for EVERY SINGLE module and lesson present in the course structure. Never skip or omit any module or lesson, and do not truncate the output list before completion.\n"
+        "8. CRITICAL FORMATTING INSTRUCTION: If you are returning any structured metadata (Details, Structure, or Content prompts), you MUST ALWAYS wrap the raw JSON object inside EXACTLY '[METADATA]' and '[/METADATA]' tags. NEVER return raw JSON outside these tags! For example: [METADATA]{\"prompts\": [...]}[/METADATA].\n"
+        "9. YOU ARE STRICTLY FORBIDDEN from repeating the JSON block or displaying raw JSON/code blocks in the conversational reply text. Keep the conversational reply text purely conversational.\n\n"
         "VALID DROPDOWN OPTIONS (YOU MUST USE ONLY THESE):\n"
         "- courseType: Must be \"Custom Course\" or \"SCORM Course\"\n"
         "- subject: Must be EXACTLY one of: \"English\", \"Maths\", \"Science\", \"Social\", \"Physics\", \"Chemistry\", \"Biology\", \"History\", \"Geography\", \"Economics\", \"Computer Science\", \"Data Science\", \"Machine Learning\", \"AI\", \"Python Programming\", \"Digital Marketing\", \"Business Management\".\n"
@@ -110,8 +130,8 @@ def build_system_prompt(scope: str, details: dict, course_data: dict, available_
 
 def try_repair_truncated_json(s: str) -> str:
     """
-    Attempts to repair a truncated JSON string by finding the last complete object boundary
-    and closing open brackets and braces.
+    Attempts to repair a truncated JSON string by tracking unclosed container elements
+    and closing them in the correct LIFO order.
     """
     s = s.strip()
     try:
@@ -119,30 +139,103 @@ def try_repair_truncated_json(s: str) -> str:
         return s
     except json.JSONDecodeError:
         pass
-
-    # Find the last complete dictionary brace boundary
-    last_brace = s.rfind('}')
-    if last_brace != -1:
-        candidate = s[:last_brace + 1].strip()
-        if candidate.endswith(','):
-            candidate = candidate[:-1].strip()
         
-        open_brackets = candidate.count('[') - candidate.count(']')
-        open_braces = candidate.count('{') - candidate.count('}')
+    stack = []
+    in_string = False
+    escaped = False
+    clean_chars = []
+    
+    for i, char in enumerate(s):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == '\\':
+                escaped = True
+            elif char == '"':
+                in_string = False
+            clean_chars.append(char)
+        else:
+            if char == '"':
+                in_string = True
+                clean_chars.append(char)
+            elif char == '{':
+                stack.append('{')
+                clean_chars.append(char)
+            elif char == '[':
+                stack.append('[')
+                clean_chars.append(char)
+            elif char == '}':
+                if stack and stack[-1] == '{':
+                    stack.pop()
+                    clean_chars.append(char)
+                else:
+                    break
+            elif char == ']':
+                if stack and stack[-1] == '[':
+                    stack.pop()
+                    clean_chars.append(char)
+                else:
+                    break
+            else:
+                clean_chars.append(char)
+                
+    prefix = "".join(clean_chars).strip()
+    
+    while prefix.endswith(',') or prefix.endswith(':'):
+        prefix = prefix[:-1].strip()
         
-        repaired = candidate
-        if open_brackets > 0:
-            repaired += ']' * open_brackets
-        if open_braces > 0:
-            repaired += '}' * open_braces
+    if in_string:
+        prefix += '"'
+        
+    for container in reversed(stack):
+        if container == '{':
+            prefix += '}'
+        elif container == '[':
+            prefix += ']'
             
-        try:
-            json.loads(repaired)
-            return repaired
-        except json.JSONDecodeError:
-            pass
-            
+    try:
+        json.loads(prefix)
+        return prefix
+    except json.JSONDecodeError:
+        pass
+        
     return s
+
+def clean_metadata_string(s: str) -> str:
+    """
+    Strips markdown code block wraps and extracts the JSON block starting from 
+    the first brace/bracket to the last brace/bracket.
+    """
+    if not s:
+        return ""
+    s = s.strip()
+    
+    # Remove markdown code block wraps like ```json and ```
+    s = re.sub(r'^```[a-zA-Z]*\s*', '', s)
+    s = re.sub(r'\s*```$', '', s)
+    s = s.strip()
+    
+    # Additional cleanup for internal markdown fences
+    s = re.sub(r'```json', '', s, flags=re.IGNORECASE)
+    s = re.sub(r'```', '', s)
+    s = s.strip()
+    
+    first_brace = s.find('{')
+    first_bracket = s.find('[')
+    
+    if first_brace == -1 and first_bracket == -1:
+        return s
+        
+    start_idx = min(first_brace, first_bracket) if (first_brace != -1 and first_bracket != -1) else (first_brace if first_brace != -1 else first_bracket)
+    
+    last_brace = s.rfind('}')
+    last_bracket = s.rfind(']')
+    
+    end_idx = max(last_brace, last_bracket)
+    if end_idx != -1 and end_idx > start_idx:
+        return s[start_idx:end_idx + 1]
+    else:
+        return s[start_idx:]
 
 def clean_reply_text(text: str) -> str:
     """
@@ -199,37 +292,43 @@ def parse_metadata(ai_reply: str, scope: str, details: dict) -> tuple:
     Parses and extracts metadata from the raw AI response, applying fallback defaults where needed.
     Returns (reply_text, metadata, type_val)
     """
-    metadata_match = re.search(r'\[METADATA\]([\s\S]*?)\[/METADATA\]', ai_reply)
+    lower_reply = ai_reply.lower()
+    start_tag = "[metadata]"
+    end_tag = "[/metadata]"
+    
     metadata_str = None
     text_part = ""
-
-    if metadata_match:
-        metadata_str = metadata_match.group(1)
-        text_part = re.sub(r'\[METADATA\][\s\S]*?\[/METADATA\]', '', ai_reply).strip()
-    else:
-        prefix_match = re.search(r'\[METADATA\]\s*(\{[\s\S]*\}|\[[\s\S]*\])', ai_reply)
-        if prefix_match:
-            metadata_str = prefix_match.group(1)
-            last_brace = max(metadata_str.rfind('}'), metadata_str.rfind(']'))
-            if last_brace != -1:
-                metadata_str = metadata_str[:last_brace + 1]
-                text_part = re.sub(r'\[METADATA\][\s\S]*', '', ai_reply).strip()
+    
+    start_idx = lower_reply.find(start_tag)
+    if start_idx != -1:
+        content_start = start_idx + len(start_tag)
+        end_idx = lower_reply.find(end_tag, content_start)
+        if end_idx != -1:
+            metadata_str = ai_reply[content_start:end_idx]
+            text_part = ai_reply[:start_idx] + ai_reply[end_idx + len(end_tag):]
         else:
-            json_match = re.search(r'(\{[\s\S]*\}|\[[\s\S]*\])', ai_reply)
-            if json_match:
-                metadata_str = json_match.group(0)
-                text_part = ai_reply.replace(metadata_str, '').strip()
-
-    reply_text = text_part.replace('[METADATA]', '').replace('[/METADATA]', '').strip()
+            metadata_str = ai_reply[content_start:]
+            text_part = ai_reply[:start_idx]
+    else:
+        # Fallback: search for first JSON curly brace or bracket
+        first_brace = ai_reply.find('{')
+        first_bracket = ai_reply.find('[')
+        if first_brace != -1 or first_bracket != -1:
+            start_idx = min(first_brace, first_bracket) if (first_brace != -1 and first_bracket != -1) else (first_brace if first_brace != -1 else first_bracket)
+            metadata_str = ai_reply[start_idx:]
+            text_part = ai_reply[:start_idx]
+            
+    reply_text = text_part.replace('[METADATA]', '').replace('[/METADATA]', '').replace('[metadata]', '').replace('[/metadata]', '').strip()
     if not metadata_str and not reply_text:
-        reply_text = ai_reply.replace('[METADATA]', '').replace('[/METADATA]', '').strip()
+        reply_text = ai_reply.replace('[METADATA]', '').replace('[/METADATA]', '').replace('[metadata]', '').replace('[/metadata]', '').strip()
 
     metadata = None
     type_val = None
 
     if metadata_str:
         try:
-            repaired_str = try_repair_truncated_json(metadata_str.strip())
+            cleaned_str = clean_metadata_string(metadata_str)
+            repaired_str = try_repair_truncated_json(cleaned_str)
             metadata = json.loads(repaired_str)
             
             if "Details" in scope:
