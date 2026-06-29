@@ -6,7 +6,7 @@ from schemas import (
     CourseStructureRequest,
     GenerateTitleRequest, GenerateTitleResponse, FetchWebRequest, FetchYouTubeRequest,
     GenerateOutlineBaseRequest, ExportChapterRequest, GenerateVoiceScriptReq, GenerateFlashcardsRequest,
-    GenerateMCQRequest, GenerateAssessmentRequest, ChatRequest
+    GenerateMCQRequest, GenerateAssessmentRequest, ChatRequest, ThemeUploadRequest
 )
 from course_planner import generate_course_structure
 from content_generator import generate_chapter_content, generate_course_quiz
@@ -219,6 +219,67 @@ async def list_subjects():
         return {"status": "success", "subjects": subjects}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/course/themes")
+def get_themes():
+    themes_file = "themes.json"
+    if not os.path.exists(themes_file):
+        return []
+    try:
+        with open(themes_file, "r", encoding="utf-8") as f:
+            import json
+            return json.load(f)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading themes: {str(e)}")
+
+@app.post("/course/theme")
+def save_theme(req: ThemeUploadRequest):
+    themes_file = "themes.json"
+    
+    allowed_keys = {
+        "--bg-primary", "--bg-secondary", "--text-main", "--text-secondary", 
+        "--text-muted", "--border-color", "--accent-color", "--accent-bg", 
+        "--code-bg", "--code-text", "--theme-shadow",
+        "--font-family", "--font-size-base", "--font-size-h1", "--font-size-h2",
+        "--font-size-h3", "--line-height", "--block-spacing"
+    }
+    
+    if not req.variables:
+        raise HTTPException(status_code=400, detail="Variables mapping cannot be empty.")
+        
+    for k, v in req.variables.items():
+        if k not in allowed_keys:
+            raise HTTPException(status_code=400, detail=f"Invalid variable key '{k}'. Allowed keys: {', '.join(allowed_keys)}")
+            
+        v_str = str(v).strip()
+        if ";" in v_str or "}" in v_str or "<" in v_str or ">" in v_str:
+             raise HTTPException(status_code=400, detail=f"Invalid characters in value for key '{k}'.")
+    
+    themes_list = []
+    if os.path.exists(themes_file):
+        try:
+            with open(themes_file, "r", encoding="utf-8") as f:
+                import json
+                themes_list = json.load(f)
+        except Exception:
+            themes_list = []
+            
+    themes_list = [t for t in themes_list if t.get("id") != req.id]
+    
+    new_theme = {
+        "id": req.id,
+        "name": req.name,
+        "variables": req.variables
+    }
+    themes_list.append(new_theme)
+    
+    try:
+        with open(themes_file, "w", encoding="utf-8") as f:
+            import json
+            json.dump(themes_list, f, indent=2)
+        return {"status": "success", "theme_id": req.id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error saving theme: {str(e)}")
 
 @app.get("/course/{course_id}")
 async def get_single_course(course_id: str):
@@ -590,3 +651,6 @@ async def api_chat(req: ChatRequest):
     except Exception as e:
         logger.error(f"Error in chat completion API: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+

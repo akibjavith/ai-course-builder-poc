@@ -1,0 +1,39 @@
+/* ==========================================================================
+   LIGHT MODE STYLESHEET (light.css)
+   ========================================================================== */
+
+.theme-light {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --text-main: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --border-color: #f1f5f9;
+  --accent-color: #0ea5e9;
+  --accent-bg: #f0f9ff;
+  --code-bg: #0f172a;
+  --code-text: #38bdf8;
+  --theme-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --font-family: "Outfit", sans-serif;
+  --font-size-base: 1rem;
+  --font-size-h1: 2.5rem;
+  --font-size-h2: 2rem;
+  --font-size-h3: 1.5rem;
+  --line-height: 1.8;
+  --block-spacing: 1.25rem;
+}
+
+/* Hover effects for Light Mode */
+.theme-light a:hover {
+  text-decoration: underline;
+  color: #0284c7;
+}
+
+.theme-light .lesson-paragraph {
+  transition: color 0.15s ease;
+}
+
+.theme-light .quiz-option-button:hover {
+  background-color: var(--accent-bg);
+  border-color: var(--accent-color);
+}

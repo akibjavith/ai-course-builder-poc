@@ -170,4 +170,15 @@ export const getSubjects = async () => {
   return response.data;
 };
 
+export const getThemes = async () => {
+  const response = await axios.get(`${API_URL}/course/themes`);
+  return response.data;
+};
+
+export const uploadTheme = async (themeData) => {
+  const response = await axios.post(`${API_URL}/course/theme`, themeData);
+  return response.data;
+};
+
+
 

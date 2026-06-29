@@ -1,0 +1,149 @@
+/* ==========================================================================
+   SPIDER-MAN THEME STYLESHEET (spider-man.css)
+   ========================================================================== */
+
+.theme-spider-man-theme {
+  --bg-primary: #0b1f3a;
+  --bg-secondary: #13315c;
+  --text-main: #ffffff;
+  --text-secondary: #dbeafe;
+  --text-muted: #93c5fd;
+  --border-color: #dc2626;
+  --accent-color: #ef4444;
+  --accent-bg: #991b1b;
+  --code-bg: #111827;
+  --code-text: #60a5fa;
+  --theme-shadow: 0 8px 20px rgba(220, 38, 38, 0.35);
+  --font-family: "Poppins", sans-serif;
+  --font-size-base: 1rem;
+  --font-size-h1: 3rem;
+  --font-size-h2: 2.4rem;
+  --font-size-h3: 1.8rem;
+  --line-height: 1.7;
+  --block-spacing: 1.6rem;
+}
+
+/* Spider-Man Specific Design Overrides */
+
+/* Paragraph slide-out border-left web */
+.theme-spider-man-theme .lesson-paragraph {
+  transition: all 0.2s ease;
+  border-left: 0px solid transparent;
+}
+.theme-spider-man-theme .lesson-paragraph:hover {
+  border-left: 4px solid var(--accent-color);
+  padding-left: 0.5rem;
+  color: var(--text-main);
+}
+
+/* Links web-lifting action */
+.theme-spider-man-theme a {
+  transition: all 0.2s ease;
+}
+.theme-spider-man-theme a:hover {
+  color: var(--accent-color);
+  transform: translateY(-1px);
+  text-decoration: underline;
+}
+
+/* Alternating red/blue table cells */
+.theme-spider-man-theme table {
+  border-collapse: collapse;
+}
+.theme-spider-man-theme th {
+  border: 1px solid var(--border-color);
+  background-color: var(--accent-bg);
+  color: var(--text-main);
+}
+.theme-spider-man-theme td {
+  border: 1px solid var(--border-color);
+  transition: all 0.15s ease;
+}
+.theme-spider-man-theme tr:nth-child(even) td {
+  background-color: rgba(96, 165, 250, 0.05); /* very soft web blue tint */
+}
+.theme-spider-man-theme tr:nth-child(odd) td {
+  background-color: rgba(239, 68, 68, 0.03); /* very soft web red tint */
+}
+
+/* Table cell hover bold weight + border glow */
+.theme-spider-man-theme td:hover {
+  background-color: rgba(220, 38, 38, 0.1) !important;
+  color: var(--accent-color) !important;
+  font-weight: 700;
+  box-shadow: inset 0 0 4px rgba(220, 38, 38, 0.3);
+}
+
+/* Quiz Option web highlight */
+.theme-spider-man-theme .quiz-option-button {
+  transition: all 0.15s ease;
+}
+.theme-spider-man-theme .quiz-option-button:enabled:hover {
+  border-color: var(--accent-color);
+  background-color: var(--accent-bg);
+  color: var(--text-main);
+}
+
+/* Headings Web overrides */
+.theme-spider-man-theme .lesson-h1 {
+  border-bottom: 2px dashed var(--accent-color);
+  position: relative;
+}
+
+.theme-spider-man-theme .lesson-h2 {
+  border-left: 4px dashed var(--accent-color);
+}
+
+/* Bullet Lists - Spider Markers */
+.theme-spider-man-theme .lesson-list-bullet {
+  list-style-type: none;
+  padding-left: 0.5rem;
+}
+
+.theme-spider-man-theme .lesson-list-bullet li::before {
+  content: "🕷";
+  font-size: 0.75rem;
+  margin-right: 0.625rem;
+  color: var(--accent-color);
+  display: inline-block;
+  transition: transform 0.25s ease-out;
+}
+
+.theme-spider-man-theme .lesson-list-bullet li:hover::before {
+  transform: rotate(360deg) scale(1.3);
+}
+
+.theme-spider-man-theme .lesson-list-item {
+  transition: color 0.2s ease;
+}
+
+.theme-spider-man-theme .lesson-list-item:hover {
+  color: var(--accent-color);
+}
+
+/* Web Console Code Blocks */
+.theme-spider-man-theme .code-block-pre {
+  position: relative;
+  background-color: #050b14;
+  border: 1.5px solid var(--accent-color);
+  box-shadow: 0 0 12px rgba(220, 38, 38, 0.2);
+  transition: all 0.25s ease;
+}
+
+.theme-spider-man-theme .code-block-pre::before {
+  content: "[WEB_SHELL // CONSOLE]";
+  position: absolute;
+  top: 0.5rem;
+  left: 1rem;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--accent-color);
+  letter-spacing: 0.05em;
+  opacity: 0.8;
+}
+
+.theme-spider-man-theme .code-block-pre:hover {
+  box-shadow: 0 0 20px rgba(96, 165, 250, 0.3);
+  border-color: #3b82f6; /* Web blue */
+}
+

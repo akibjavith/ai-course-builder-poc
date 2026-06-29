@@ -1,0 +1,175 @@
+/* ==========================================================================
+   IRON MAN THEME STYLESHEET (iron-man.css)
+   ========================================================================== */
+
+.theme-iron-man-theme {
+  --bg-primary: #2b0a0a;
+  --bg-secondary: #4a1414;
+  --text-main: #fff7ed;
+  --text-secondary: #fed7aa;
+  --text-muted: #fdba74;
+  --border-color: #f59e0b;
+  --accent-color: #fbbf24;
+  --accent-bg: #78350f;
+  --code-bg: #1c1917;
+  --code-text: #fcd34d;
+  --theme-shadow: 0 10px 24px rgba(251, 191, 36, 0.4);
+  --font-family: "Orbitron", sans-serif;
+  --font-size-base: 1.05rem;
+  --font-size-h1: 3.2rem;
+  --font-size-h2: 2.5rem;
+  --font-size-h3: 1.9rem;
+  --line-height: 1.85;
+  --block-spacing: 1.8rem;
+}
+
+/* Iron Man Specific Design Overrides */
+
+/* Paragraph Hover scaling */
+.theme-iron-man-theme .lesson-paragraph {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.theme-iron-man-theme .lesson-paragraph:hover {
+  transform: scale(1.015);
+  color: var(--accent-color);
+  text-shadow: 0 0 4px rgba(251, 191, 36, 0.3);
+}
+
+/* Glowing golden link hovers */
+.theme-iron-man-theme a {
+  transition: all 0.2s ease;
+  color: var(--accent-color);
+}
+.theme-iron-man-theme a:hover {
+  text-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
+  font-size: 1.05em;
+  text-decoration: underline;
+}
+
+/* Alternate metallic table formatting */
+.theme-iron-man-theme table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.theme-iron-man-theme th {
+  border: 2px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  color: var(--accent-color);
+  font-weight: 700;
+}
+.theme-iron-man-theme td {
+  border: 1px solid var(--border-color);
+  transition: all 0.15s ease;
+}
+
+/* Alternating columns */
+.theme-iron-man-theme td:nth-child(even) {
+  background-color: rgba(251, 191, 36, 0.04);
+}
+
+/* Cell hover gold highlight */
+.theme-iron-man-theme td:hover {
+  background-color: var(--accent-bg) !important;
+  color: var(--accent-color) !important;
+  font-weight: 700;
+  box-shadow: inset 0 0 6px rgba(251, 191, 36, 0.2);
+}
+
+/* Quiz Options metallic hovers */
+.theme-iron-man-theme .quiz-option-button {
+  transition: all 0.2s ease;
+}
+.theme-iron-man-theme .quiz-option-button:enabled:hover {
+  border-color: var(--accent-color);
+  background-color: var(--accent-bg);
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.25);
+}
+
+/* Headings Stark HUD overrides */
+.theme-iron-man-theme .lesson-h1 {
+  border-bottom: 2px solid var(--accent-color);
+  background: linear-gradient(90deg, rgba(251, 191, 36, 0.08) 0%, transparent 100%);
+  padding-left: 0.5rem;
+}
+
+.theme-iron-man-theme .lesson-h2 {
+  position: relative;
+  padding-left: 1.5rem;
+  border-left: none; /* remove base border */
+}
+
+.theme-iron-man-theme .lesson-h2::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--accent-color);
+  box-shadow: 0 0 8px var(--accent-color);
+  animation: stark-pulse 1.5s infinite ease-in-out;
+}
+
+@keyframes stark-pulse {
+  0% { opacity: 0.3; transform: translateY(-50%) scale(0.8); }
+  50% { opacity: 1; transform: translateY(-50%) scale(1.2); }
+  100% { opacity: 0.3; transform: translateY(-50%) scale(0.8); }
+}
+
+/* Bullet Lists - High Tech Pointers */
+.theme-iron-man-theme .lesson-list-bullet {
+  list-style-type: none;
+  padding-left: 0.5rem;
+}
+
+.theme-iron-man-theme .lesson-list-bullet li::before {
+  content: "▶";
+  color: var(--accent-color);
+  font-size: 0.7rem;
+  margin-right: 0.625rem;
+  display: inline-block;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.theme-iron-man-theme .lesson-list-bullet li:hover::before {
+  transform: scale(1.3) translateX(2px);
+  color: #ef4444; /* Stark hot-rod red */
+}
+
+.theme-iron-man-theme .lesson-list-item {
+  transition: all 0.2s ease;
+}
+
+.theme-iron-man-theme .lesson-list-item:hover {
+  transform: translateX(4px);
+  color: var(--text-main);
+}
+
+/* Jarvis Diagnostics Console Code Blocks */
+.theme-iron-man-theme .code-block-pre {
+  position: relative;
+  background: linear-gradient(135deg, #1c1917 0%, #0c0a09 100%);
+  border: 1.5px solid var(--accent-color);
+  box-shadow: 0 0 15px rgba(251, 191, 36, 0.15);
+  transition: all 0.25s ease;
+}
+
+.theme-iron-man-theme .code-block-pre::before {
+  content: "[JARVIS // SYSTEM_DIAGNOSTICS]";
+  position: absolute;
+  top: 0.5rem;
+  left: 1rem;
+  font-size: 9px;
+  font-weight: 900;
+  color: var(--accent-color);
+  letter-spacing: 0.1em;
+  opacity: 0.7;
+}
+
+.theme-iron-man-theme .code-block-pre:hover {
+  box-shadow: 0 0 25px rgba(239, 68, 68, 0.25);
+  border-color: #ef4444; /* Stark red */
+}
+

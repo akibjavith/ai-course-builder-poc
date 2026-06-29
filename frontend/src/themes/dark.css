@@ -1,0 +1,51 @@
+/* ==========================================================================
+   DARK MIDNIGHT STYLESHEET (dark.css)
+   ========================================================================== */
+
+.theme-dark {
+  --bg-primary: #090d16;
+  --bg-secondary: #111827;
+  --text-main: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #64748b;
+  --border-color: #1f2937;
+  --accent-color: #f97316;
+  --accent-bg: #2c1a0f;
+  --code-bg: #030712;
+  --code-text: #fb923c;
+  --theme-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+  --font-family: "Outfit", sans-serif;
+  --font-size-base: 1rem;
+  --font-size-h1: 2.5rem;
+  --font-size-h2: 2rem;
+  --font-size-h3: 1.5rem;
+  --line-height: 1.8;
+  --block-spacing: 1.25rem;
+}
+
+/* Glowing Neon Hover effects for Dark Midnight */
+.theme-dark a {
+  transition: all 0.2s ease;
+}
+.theme-dark a:hover {
+  text-decoration: underline;
+  color: var(--accent-color);
+  text-shadow: 0 0 6px var(--accent-color);
+}
+
+.theme-dark .lesson-paragraph {
+  transition: all 0.2s ease;
+}
+.theme-dark .lesson-paragraph:hover {
+  color: var(--text-main);
+  text-shadow: 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.theme-dark .quiz-option-button {
+  transition: all 0.2s ease;
+}
+.theme-dark .quiz-option-button:enabled:hover {
+  background-color: var(--accent-bg);
+  border-color: var(--accent-color);
+  box-shadow: 0 0 8px rgba(249, 115, 22, 0.2);
+}

@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { 
-  ChevronLeft, ChevronRight, Edit3, Save, Trash2, X, Plus, Trash, 
+  ChevronLeft, ChevronRight, ChevronDown, Edit3, Save, Trash2, X, Plus, Trash, 
   HelpCircle, FileCode, AlertTriangle, AlertCircle, FileText, Info, 
   BookOpen, ExternalLink, Lightbulb, CheckSquare, ListOrdered, List, Check,
-  Paperclip, Upload, Loader2
+  Paperclip, Upload, Loader2, Palette, Paintbrush
 } from 'lucide-react';
-import { uploadChapterMedia, listMediaFiles } from '../api';
+import { uploadChapterMedia, listMediaFiles, getThemes, uploadTheme } from '../api';
 import SecureDocViewer from './SecureDocViewer';
+import ActionModal from './ActionModal';
 
 // Generates a local short ID if uuid isn't available
 const generateLocalId = () => Math.random().toString(36).substr(2, 9);
@@ -166,8 +167,8 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
 
   if (editMode) {
     return (
-      <div className="bg-purple-50/30 border border-purple-100 rounded-2xl p-6 space-y-4">
-        <div className="flex items-center gap-2">
+      <div className="interactive-quiz-container">
+        <div className="flex items-center gap-2 mb-4">
           <HelpCircle className="w-5 h-5 text-purple-500" />
           <span className="text-xs font-bold text-purple-600 uppercase tracking-widest">Interactive Quiz Block</span>
         </div>
@@ -178,7 +179,7 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
               type="text" 
               value={block.question || ''}
               onChange={(e) => onUpdateBlock({ question: e.target.value })}
-              className="w-full bg-white border border-slate-200 rounded-xl p-3 text-sm text-slate-700 font-medium focus:ring-2 focus:ring-purple-200 outline-none"
+              className="editor-text-input"
             />
           </div>
           <div>
@@ -187,7 +188,7 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
               value={(block.options || []).join('\n')}
               onChange={(e) => onUpdateBlock({ options: e.target.value.split('\n') })}
               rows={4}
-              className="w-full bg-white border border-slate-200 rounded-xl p-3 text-sm text-slate-700 font-medium focus:ring-2 focus:ring-purple-200 outline-none resize-none"
+              className="editor-textarea-field resize-none"
             />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -196,7 +197,7 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
               <select
                 value={block.correctAnswer || ''}
                 onChange={(e) => onUpdateBlock({ correctAnswer: e.target.value })}
-                className="w-full bg-white border border-slate-200 rounded-xl p-3 text-sm text-slate-700 font-medium focus:ring-2 focus:ring-purple-200 outline-none"
+                className="editor-select-field"
               >
                 <option value="">Select Correct Option</option>
                 {(block.options || []).map((opt, idx) => (
@@ -210,7 +211,7 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
                 type="text" 
                 value={block.explanation || ''}
                 onChange={(e) => onUpdateBlock({ explanation: e.target.value })}
-                className="w-full bg-white border border-slate-200 rounded-xl p-3 text-sm text-slate-700 font-medium focus:ring-2 focus:ring-purple-200 outline-none"
+                className="editor-text-input"
               />
             </div>
           </div>
@@ -222,35 +223,37 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
   const isCorrect = selected === block.correctAnswer;
 
   return (
-    <div className="bg-purple-50/20 border border-purple-100 rounded-3xl p-6 sm:p-8 space-y-6 shadow-sm my-6">
-      <div className="flex items-center gap-2">
+    <div className="interactive-quiz-container">
+      <div className="flex items-center gap-2 mb-4">
         <HelpCircle className="w-5 h-5 text-purple-500" />
         <span className="text-xs font-black text-purple-600 uppercase tracking-widest">Knowledge Challenge</span>
       </div>
-      <h3 className="text-lg font-bold text-slate-900 leading-snug">{block.question}</h3>
-      <div className="grid grid-cols-1 gap-3">
+      <h3 className="quiz-question-title">{block.question}</h3>
+      <div className="grid grid-cols-1 gap-3 my-4">
         {(block.options || []).map((opt, idx) => {
-          let btnClass = "border border-slate-200 bg-white hover:border-purple-300 hover:bg-purple-50/30 text-slate-700";
+          let btnClass = "quiz-option-button";
           if (submitted) {
             if (opt === block.correctAnswer) {
-              btnClass = "border-green-500 bg-green-50 text-green-700 font-bold ring-2 ring-green-100";
+              btnClass += " quiz-option-correct";
             } else if (selected === opt) {
-              btnClass = "border-red-500 bg-red-50 text-red-700 ring-2 ring-red-100";
+              btnClass += " quiz-option-incorrect";
             } else {
-              btnClass = "border-slate-100 bg-slate-50/50 text-slate-400 opacity-60";
+              btnClass += " quiz-option-dimmed";
             }
           } else if (selected === opt) {
-            btnClass = "border-purple-500 bg-purple-50 text-purple-700 ring-2 ring-purple-100 font-bold";
+            btnClass += " quiz-option-active";
           }
           return (
             <button
               key={idx}
               disabled={submitted}
               onClick={() => setSelected(opt)}
-              className={`p-4 rounded-2xl text-left text-sm font-medium transition-all duration-200 flex items-center justify-between active:scale-[0.99] ${btnClass}`}
+              className={btnClass}
             >
-              <span>{opt}</span>
-              {submitted && opt === block.correctAnswer && <Check className="w-4 h-4 text-green-600" />}
+              <span className="flex items-center justify-between w-full">
+                <span>{opt}</span>
+                {submitted && opt === block.correctAnswer && <Check className="w-4 h-4 text-green-600" />}
+              </span>
             </button>
           );
         })}
@@ -258,13 +261,13 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
       {!submitted && selected && (
         <button
           onClick={() => setSubmitted(true)}
-          className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs uppercase tracking-widest px-6 py-3 rounded-xl transition shadow-md active:scale-95"
+          className="quiz-submit-button"
         >
           Submit Answer
         </button>
       )}
       {submitted && (
-        <div className={`p-4 rounded-2xl border transition-all ${isCorrect ? 'bg-green-50/30 border-green-100 text-green-800' : 'bg-red-50/30 border-red-100 text-red-800'}`}>
+        <div className={`quiz-explanation-box ${isCorrect ? 'quiz-option-correct' : 'quiz-option-incorrect'}`}>
           <p className="text-xs font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5">
             {isCorrect ? '✨ Correct!' : '❌ Incorrect'}
           </p>
@@ -274,6 +277,12 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
     </div>
   );
 }
+
+const DEFAULT_THEMES = [
+  { id: "light", name: "Light Mode", variables: {} },
+  { id: "dark", name: "Dark Midnight", variables: {} },
+  { id: "sepia", name: "Sepia Cream", variables: {} }
+];
 
 // Main Dialog Component
 export default function LessonPreviewEditorModal({
@@ -311,8 +320,131 @@ export default function LessonPreviewEditorModal({
   // State for secure document viewer
   const [secureViewerUrl, setSecureViewerUrl] = useState(null);
 
-  // State for dynamic content theme switching ('light' | 'dark' | 'sepia')
+  // State for dynamic content theme switching
   const [theme, setTheme] = useState('light');
+  const [themes, setThemes] = useState(DEFAULT_THEMES);
+  const themeFileInputRef = useRef(null);
+  const dropdownRef = useRef(null);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState(null);
+
+  const fetchThemes = async () => {
+    try {
+      const data = await getThemes();
+      if (data && Array.isArray(data) && data.length > 0) {
+        setThemes(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch themes:', err);
+    }
+  };
+
+  const handleThemeUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const isCss = file.name.endsWith('.css');
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        let themeJson;
+        if (isCss) {
+          const cssText = e.target.result;
+          const variables = {};
+          const regex = /(--[a-zA-Z0-9_-]+)\s*:\s*([^;}\n]+)/g;
+          let match;
+          while ((match = regex.exec(cssText)) !== null) {
+            const key = match[1].trim();
+            const value = match[2].trim().replace(/^['"]|['"]$/g, '');
+            variables[key] = value;
+          }
+          
+          const allowedKeys = [
+            "--bg-primary", "--bg-secondary", "--text-main", "--text-secondary", 
+            "--text-muted", "--border-color", "--accent-color", "--accent-bg", 
+            "--code-bg", "--code-text", "--theme-shadow",
+            "--font-family", "--font-size-base", "--font-size-h1", "--font-size-h2",
+            "--font-size-h3", "--line-height", "--block-spacing"
+          ];
+          
+          const filteredVars = {};
+          let hasVars = false;
+          for (const key of allowedKeys) {
+            if (variables[key]) {
+              filteredVars[key] = variables[key];
+              hasVars = true;
+            }
+          }
+          
+          if (!hasVars) {
+            setModalConfig({
+              title: "Invalid CSS Theme",
+              message: "No valid theme CSS variables (e.g., --bg-primary) found in the file.",
+              type: "warning",
+              confirmText: "Got It"
+            });
+            return;
+          }
+          
+          const themeId = file.name.replace(/\.[^/.]+$/, "").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+          const themeName = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]+/g, " ");
+          
+          themeJson = {
+            id: themeId,
+            name: themeName,
+            variables: filteredVars
+          };
+        } else {
+          themeJson = JSON.parse(e.target.result);
+          if (!themeJson.id || !themeJson.name || !themeJson.variables) {
+            setModalConfig({
+              title: "Invalid Theme File",
+              message: "Invalid theme JSON file. Must contain 'id', 'name', and 'variables'.",
+              type: "warning",
+              confirmText: "Got It"
+            });
+            return;
+          }
+        }
+        
+        const res = await uploadTheme(themeJson);
+        if (res && res.status === 'success') {
+          await fetchThemes();
+          setTheme(themeJson.id);
+          setModalConfig({
+            title: "Theme Applied",
+            message: `Theme "${themeJson.name}" has been uploaded and applied successfully!`,
+            type: "success",
+            confirmText: "Excellent"
+          });
+        }
+      } catch (err) {
+        console.error("Failed to parse theme file", err);
+        setModalConfig({
+          title: "Error Parsing Theme",
+          message: "Failed to parse theme file: " + err.message,
+          type: "warning",
+          confirmText: "Got It"
+        });
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const activeThemeObj = useMemo(() => {
+    return themes.find(t => t.id === theme) || themes[0] || DEFAULT_THEMES[0];
+  }, [theme, themes]);
+
+  useEffect(() => {
+    fetchThemes();
+    
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const fetchMedia = async () => {
     setLoadingMedia(true);
@@ -330,13 +462,18 @@ export default function LessonPreviewEditorModal({
 
   useCopyCode(containerRef, blocksDraft || htmlDraft);
 
+  // Sync blocksDraft and htmlDraft when active lesson or courseData changes (e.g., on generation or save)
   useEffect(() => {
     const nextPreview = buildPreviewContent(getChapter(courseData?.structure, active.mIdx, active.cIdx));
     setBlocksDraft(nextPreview?.lessonBlocks || null);
     setHtmlDraft(nextPreview?.html_content || getChapter(courseData?.structure, active.mIdx, active.cIdx)?.content?.html_content || '');
+  }, [active.mIdx, active.cIdx, courseData]);
+
+  // Handle initialization of editMode only when active lesson changes (to support starting in edit mode from parent workspace actions)
+  useEffect(() => {
     setEditMode(!readOnly && !!startInEdit);
     setActiveInsertMenuIdx(null);
-  }, [active.mIdx, active.cIdx, courseData, readOnly, startInEdit]);
+  }, [active.mIdx, active.cIdx, readOnly, startInEdit]);
 
   const hasPrev = activeLessonIndex > 0;
   const hasNext = activeLessonIndex >= 0 && activeLessonIndex < lessons.length - 1;
@@ -403,7 +540,12 @@ export default function LessonPreviewEditorModal({
         title: file.name,
       });
     } catch (e) {
-      alert('File upload failed. Please try again.');
+      setModalConfig({
+        title: "Upload Failed",
+        message: "File upload failed. Please try again.",
+        type: "warning",
+        confirmText: "OK"
+      });
     } finally {
       setUploadingBlockIdx(null);
     }
@@ -495,6 +637,13 @@ export default function LessonPreviewEditorModal({
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-md animate-fade-in">
 
+      {/* ── Custom Action Modal Popup ── */}
+      <ActionModal
+        isOpen={!!modalConfig}
+        onClose={() => setModalConfig(null)}
+        {...modalConfig}
+      />
+
       {/* ── Secure Document Viewer Modal ── */}
       {secureViewerUrl && (
         <SecureDocViewer
@@ -503,7 +652,10 @@ export default function LessonPreviewEditorModal({
         />
       )}
 
-      <div className={`theme-${theme} theme-container w-full max-w-5xl h-[90vh] rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col relative animate-scale-in border`} style={{ borderColor: 'var(--border-color)', backgroundColor: 'var(--bg-primary)' }}>
+      <div 
+        className={`theme-container theme-${theme} animate-scale-in`} 
+        style={!['light', 'dark', 'sepia', 'dark-theme', 'iron-man-theme', 'spider-man-theme', 'hulk-theme'].includes(theme) ? activeThemeObj.variables : {}}
+      >
         
         {/* Header toolbar */}
         <div className="p-6 sm:px-10 flex items-center justify-between sticky top-0 z-20 border-b" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
@@ -523,20 +675,87 @@ export default function LessonPreviewEditorModal({
 
           <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
             {/* Dynamic Premium Theme Switcher Selector */}
-            <div className="flex items-center gap-1 bg-opacity-40 rounded-xl p-1 border" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
-              {['light', 'dark', 'sepia'].map((t) => (
+            <div className="flex items-center gap-2">
+              <div className="relative" ref={dropdownRef}>
                 <button
-                  key={t}
-                  onClick={() => setTheme(t)}
-                  className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition ${theme === t ? 'shadow-sm' : 'opacity-60 hover:opacity-100'}`}
-                  style={{
-                    backgroundColor: theme === t ? 'var(--bg-primary)' : 'transparent',
-                    color: theme === t ? 'var(--accent-color)' : 'var(--text-secondary)'
+                  onClick={() => setDropdownOpen(!dropdownOpen)}
+                  className="flex items-center gap-1.5 rounded-xl px-3.5 py-2.5 border hover:bg-slate-100/50 transition active:scale-95 shadow-sm"
+                  style={{ 
+                    backgroundColor: 'var(--bg-secondary)', 
+                    borderColor: 'var(--border-color)',
+                    color: 'var(--text-secondary)'
                   }}
                 >
-                  {t}
+                  <Paintbrush className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-black uppercase tracking-wider">
+                    {activeThemeObj?.name || 'Select Theme'}
+                  </span>
+                  <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
-              ))}
+
+                {dropdownOpen && (
+                  <div 
+                    className="absolute right-0 mt-2 w-48 rounded-2xl shadow-xl border overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150"
+                    style={{ 
+                      backgroundColor: 'var(--bg-primary)', 
+                      borderColor: 'var(--border-color)'
+                    }}
+                  >
+                    <div className="py-1.5 max-h-60 overflow-y-auto">
+                      {themes.map((t) => (
+                        <button
+                          key={t.id}
+                          onClick={() => {
+                            setTheme(t.id);
+                            setDropdownOpen(false);
+                          }}
+                          className="w-full flex items-center justify-between px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider transition-colors text-left"
+                          style={{
+                            color: theme === t.id ? 'var(--accent-color)' : 'var(--text-secondary)',
+                            backgroundColor: theme === t.id ? 'var(--accent-bg)' : 'transparent',
+                          }}
+                          onMouseEnter={(e) => {
+                            if (theme !== t.id) {
+                              e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
+                              e.currentTarget.style.color = 'var(--text-main)';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (theme !== t.id) {
+                              e.currentTarget.style.backgroundColor = 'transparent';
+                              e.currentTarget.style.color = 'var(--text-secondary)';
+                            }
+                          }}
+                        >
+                          <span>{t.name}</span>
+                          {theme === t.id && <Check className="w-3.5 h-3.5" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => themeFileInputRef.current?.click()}
+                className="p-2.5 rounded-xl border hover:bg-slate-100/50 transition active:scale-95 flex items-center gap-1.5 shadow-sm whitespace-nowrap"
+                style={{ 
+                  backgroundColor: 'var(--bg-secondary)', 
+                  borderColor: 'var(--border-color)',
+                  color: 'var(--text-secondary)'
+                }}
+                title="Upload Custom Theme JSON/CSS"
+              >
+                <Palette className="w-3.5 h-3.5" />
+                <span className="text-[10px] font-black uppercase tracking-wider">Upload Theme</span>
+              </button>
+              <input
+                type="file"
+                ref={themeFileInputRef}
+                onChange={handleThemeUpload}
+                accept=".json,.css"
+                className="hidden"
+              />
             </div>
 
             <div className="flex items-center gap-1 border-r pr-3" style={{ borderColor: 'var(--border-color)' }}>
@@ -600,7 +819,47 @@ export default function LessonPreviewEditorModal({
 
         {/* Content Viewer / Editor Body */}
         <div className="flex-1 overflow-y-auto no-scrollbar" style={{ backgroundColor: 'var(--bg-secondary)' }}>
-          <div className="max-w-4xl mx-auto px-6 py-12 sm:px-12 space-y-8 shadow-sm my-10 rounded-[2.5rem] border" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
+          <div className="lesson-paper-container">
+            {/* Watermark Overlay behind content */}
+            <div className="theme-watermark-overlay" aria-hidden="true">
+              {theme === 'iron-man-theme' && (
+                <svg viewBox="0 0 100 100" className="w-full h-full animate-[spin_60s_linear_infinite]">
+                  <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="6 3" />
+                  <circle cx="50" cy="50" r="35" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                  <circle cx="50" cy="50" r="25" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="3 3" />
+                  <circle cx="50" cy="50" r="10" fill="none" stroke="currentColor" strokeWidth="3" />
+                  <path d="M 50,2 L 50,15 M 50,85 L 50,98 M 2,50 L 15,50 M 85,50 L 98,50" stroke="currentColor" strokeWidth="2" />
+                  <path d="M 16,16 L 25,25 M 75,75 L 84,84 M 16,84 L 25,75 M 75,16 L 84,25" stroke="currentColor" strokeWidth="1.5" />
+                </svg>
+              )}
+              {theme === 'spider-man-theme' && (
+                <svg viewBox="0 0 100 100" className="w-full h-full">
+                  <path d="M 50,0 L 50,100 M 0,50 L 100,50 M 15,15 L 85,85 M 15,85 L 85,15" stroke="currentColor" strokeWidth="0.75" />
+                  <polygon points="50,15 75,25 85,50 75,75 50,85 25,75 15,50 25,25" fill="none" stroke="currentColor" strokeWidth="0.75" />
+                  <polygon points="50,25 68,32 75,50 68,68 50,75 32,68 25,50 32,32" fill="none" stroke="currentColor" strokeWidth="0.75" />
+                  <polygon points="50,35 61,40 65,50 61,60 50,65 39,60 35,50 39,40" fill="none" stroke="currentColor" strokeWidth="0.75" />
+                  <ellipse cx="50" cy="50" rx="4" ry="6" fill="currentColor" />
+                  <circle cx="50" cy="42" r="3" fill="currentColor" />
+                  <path d="M 47,46 Q 40,42 35,46 M 47,49 Q 38,47 33,53 M 47,52 Q 38,53 35,62 M 47,55 Q 40,59 38,68" stroke="currentColor" strokeWidth="1.25" fill="none" />
+                  <path d="M 53,46 Q 60,42 65,46 M 53,49 Q 62,47 67,53 M 53,52 Q 62,53 65,62 M 53,55 Q 60,59 62,68" stroke="currentColor" strokeWidth="1.25" fill="none" />
+                </svg>
+              )}
+              {theme === 'hulk-theme' && (
+                <svg viewBox="0 0 100 100" className="w-full h-full">
+                  <circle cx="50" cy="50" r="8" fill="currentColor" />
+                  <path d="M 50,50 L 50,20 A 30,30 0 0,1 76,35 Z" fill="currentColor" />
+                  <path d="M 50,50 L 24,65 A 30,30 0 0,1 24,35 Z" fill="currentColor" transform="rotate(120 50 50)" />
+                  <path d="M 50,50 L 24,65 A 30,30 0 0,1 24,35 Z" fill="currentColor" transform="rotate(240 50 50)" />
+                  <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="2" />
+                  <circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" strokeWidth="1" />
+                </svg>
+              )}
+              {!['iron-man-theme', 'spider-man-theme', 'hulk-theme'].includes(theme) && (
+                <div className="theme-watermark-text">
+                  {activeThemeObj?.name || 'COURSE OUTLINE'}
+                </div>
+              )}
+            </div>
             {blocksDraft ? (
               <div ref={containerRef} className="space-y-6">
                 
@@ -608,11 +867,11 @@ export default function LessonPreviewEditorModal({
                   const isLastBlock = idx === blocksDraft.length - 1;
                   
                   return (
-                    <div key={block.id || idx} className="group/block relative">
+                    <div key={block.id || idx} className="block-wrapper-relative">
                       
                       {/* Top indicator & delete button inside edit mode */}
                       {editMode && (
-                        <div className="absolute -top-3 left-4 bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider opacity-0 group-hover/block:opacity-100 transition-opacity z-10 flex items-center gap-2 shadow-sm border border-slate-200">
+                        <div className="block-hover-header">
                           <span>{block.type}</span>
                           <button 
                             onClick={() => handleDeleteBlock(idx)}
@@ -625,14 +884,14 @@ export default function LessonPreviewEditorModal({
                       )}
 
                       {/* Render block types */}
-                      <div className={`p-1 rounded-xl transition-all duration-200 ${editMode ? 'border border-dashed border-slate-200 hover:border-sky-300 hover:shadow-sm p-4' : ''}`}>
+                      <div className={`block-container ${editMode ? 'block-container-edit' : ''}`}>
                          {block.type === 'heading' && (
                           editMode ? (
                             <div className="flex gap-2 items-center">
                               <select 
                                 value={block.level || 2}
                                 onChange={(e) => handleUpdateBlock(idx, { level: parseInt(e.target.value) })}
-                                className="bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700"
+                                className="editor-select-field !w-auto !p-2 !text-xs"
                               >
                                 <option value={1}>H1</option>
                                 <option value={2}>H2</option>
@@ -642,16 +901,16 @@ export default function LessonPreviewEditorModal({
                                 type="text"
                                 value={block.text || ''}
                                 onChange={(e) => handleUpdateBlock(idx, { text: e.target.value })}
-                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm font-semibold text-slate-800"
+                                className="editor-text-input !p-2 !text-sm !font-semibold"
                               />
                             </div>
                           ) : (
                             block.level === 1 ? (
-                              <h1 className="text-3xl font-black tracking-tight mb-4 border-b pb-2" style={{ color: 'var(--text-main)', borderColor: 'var(--border-color)' }}>{block.text}</h1>
+                              <h1 className="lesson-h1">{block.text}</h1>
                             ) : block.level === 3 ? (
-                              <h3 className="text-lg font-bold mb-2" style={{ color: 'var(--text-main)' }}>{block.text}</h3>
+                              <h3 className="lesson-h3">{block.text}</h3>
                             ) : (
-                              <h2 className="text-xl font-bold mb-3 border-l-4 pl-3" style={{ color: 'var(--accent-color)', borderColor: 'var(--accent-color)' }}>{block.text}</h2>
+                              <h2 className="lesson-h2">{block.text}</h2>
                             )
                           )
                         )}
@@ -662,13 +921,12 @@ export default function LessonPreviewEditorModal({
                               value={block.text || ''}
                               onChange={(e) => handleUpdateBlock(idx, { text: e.target.value })}
                               rows={5}
-                              className="w-full bg-white border border-slate-200 rounded-xl p-3 text-sm text-slate-700 font-medium focus:ring-2 focus:ring-sky-100 outline-none leading-relaxed"
+                              className="editor-textarea-field"
                               placeholder="Detailed paragraph content (150-250 words suggested)..."
                             />
                           ) : (
                             <p 
-                              className="leading-relaxed text-base mb-4"
-                              style={{ color: 'var(--text-secondary)' }}
+                              className="lesson-paragraph"
                               dangerouslySetInnerHTML={{ __html: formatRichText(block.text) }}
                             />
                           )
@@ -689,7 +947,7 @@ export default function LessonPreviewEditorModal({
                                       newItems[itemIdx] = e.target.value;
                                       handleUpdateBlock(idx, { items: newItems });
                                     }}
-                                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-medium text-slate-700"
+                                    className="editor-text-input !p-2 !text-xs"
                                   />
                                   <button
                                     onClick={() => {
@@ -712,15 +970,15 @@ export default function LessonPreviewEditorModal({
                             </div>
                           ) : (
                             block.type === 'bullet_list' ? (
-                              <ul className="list-disc pl-6 space-y-2 mb-4" style={{ color: 'var(--text-secondary)' }}>
+                              <ul className="lesson-list lesson-list-bullet">
                                 {(block.items || []).map((item, itemIdx) => (
-                                  <li key={itemIdx} dangerouslySetInnerHTML={{ __html: formatRichText(item) }} />
+                                  <li key={itemIdx} className="lesson-list-item" dangerouslySetInnerHTML={{ __html: formatRichText(item) }} />
                                 ))}
                               </ul>
                             ) : (
-                              <ol className="list-decimal pl-6 space-y-2 mb-4" style={{ color: 'var(--text-secondary)' }}>
+                              <ol className="lesson-list lesson-list-number">
                                 {(block.items || []).map((item, itemIdx) => (
-                                  <li key={itemIdx} dangerouslySetInnerHTML={{ __html: formatRichText(item) }} />
+                                  <li key={itemIdx} className="lesson-list-item" dangerouslySetInnerHTML={{ __html: formatRichText(item) }} />
                                 ))}
                               </ol>
                             )
@@ -729,25 +987,25 @@ export default function LessonPreviewEditorModal({
 
                         {block.type === 'image' && (
                           editMode ? (
-                            <div className="space-y-2 p-3 bg-slate-50 rounded-xl">
+                            <div className="space-y-2 p-3 bg-slate-50/50 border border-slate-100 rounded-xl">
                               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Image Block</label>
                               <input 
                                 type="text"
                                 placeholder="Image URL (can be empty)"
                                 value={block.url || ''}
                                 onChange={(e) => handleUpdateBlock(idx, { url: e.target.value })}
-                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs"
+                                className="editor-text-input !p-2 !text-xs"
                               />
                               <input 
                                 type="text"
                                 placeholder="Caption / Prompt Description"
                                 value={block.caption || ''}
                                 onChange={(e) => handleUpdateBlock(idx, { caption: e.target.value })}
-                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs"
+                                className="editor-text-input !p-2 !text-xs"
                               />
                             </div>
                           ) : (
-                            <div className="my-6 text-center bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+                            <div className="image-block-container">
                               {block.url ? (
                                 <img src={block.url} alt={block.caption || ''} className="max-w-full max-h-[400px] object-contain rounded-xl mx-auto shadow-sm" />
                               ) : (
@@ -755,32 +1013,32 @@ export default function LessonPreviewEditorModal({
                                   [Visual Placeholder: {block.caption}]
                                 </div>
                               )}
-                              {block.caption && <p className="text-xs text-slate-500 italic mt-2">{block.caption}</p>}
+                              {block.caption && <p className="image-block-caption">{block.caption}</p>}
                             </div>
                           )
                         )}
 
                         {block.type === 'video' && (
                           editMode ? (
-                            <div className="space-y-2 p-3 bg-slate-50 rounded-xl">
+                            <div className="space-y-2 p-3 bg-slate-50/50 border border-slate-100 rounded-xl">
                               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Video Block</label>
                               <input 
                                 type="text"
                                 placeholder="Video URL"
                                 value={block.url || ''}
                                 onChange={(e) => handleUpdateBlock(idx, { url: e.target.value })}
-                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs"
+                                className="editor-text-input !p-2 !text-xs"
                               />
                               <input 
                                 type="text"
                                 placeholder="Caption"
                                 value={block.caption || ''}
                                 onChange={(e) => handleUpdateBlock(idx, { caption: e.target.value })}
-                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs"
+                                className="editor-text-input !p-2 !text-xs"
                               />
                             </div>
                           ) : (
-                            <div className="my-6 text-center bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+                            <div className="video-block-container">
                               {block.url ? (
                                 <video src={block.url} controls className="max-w-full rounded-xl mx-auto" />
                               ) : (
@@ -788,7 +1046,7 @@ export default function LessonPreviewEditorModal({
                                   [Video Segment: {block.caption}]
                                 </div>
                               )}
-                              {block.caption && <p className="text-xs text-slate-500 italic mt-2">{block.caption}</p>}
+                              {block.caption && <p className="video-block-caption">{block.caption}</p>}
                             </div>
                           )
                         )}
@@ -808,7 +1066,7 @@ export default function LessonPreviewEditorModal({
                                       newHeaders[hIdx] = e.target.value;
                                       handleUpdateBlock(idx, { headers: newHeaders });
                                     }}
-                                    className="bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold w-full"
+                                    className="table-edit-input"
                                   />
                                 ))}
                               </div>
@@ -825,7 +1083,7 @@ export default function LessonPreviewEditorModal({
                                         newRows[rIdx][cIdx] = e.target.value;
                                         handleUpdateBlock(idx, { rows: newRows });
                                       }}
-                                      className="bg-white border border-slate-200 rounded-lg p-2 text-xs w-full"
+                                      className="table-edit-input"
                                     />
                                   ))}
                                   <button
@@ -834,7 +1092,7 @@ export default function LessonPreviewEditorModal({
                                       newRows.splice(rIdx, 1);
                                       handleUpdateBlock(idx, { rows: newRows });
                                     }}
-                                    className="text-red-400 hover:text-red-600"
+                                    className="row-delete-button"
                                   >
                                     <Trash className="w-3.5 h-3.5" />
                                   </button>
@@ -863,22 +1121,22 @@ export default function LessonPreviewEditorModal({
                               </div>
                             </div>
                           ) : (
-                            <div className="overflow-x-auto my-6 border rounded-2xl shadow-sm" style={{ borderColor: 'var(--border-color)', backgroundColor: 'var(--bg-primary)' }}>
-                              <table className="min-w-full divide-y" style={{ divideColor: 'var(--border-color)' }}>
-                                <thead style={{ backgroundColor: 'var(--bg-secondary)' }}>
+                            <div className="table-block-wrapper">
+                              <table className="lesson-table">
+                                <thead>
                                   <tr>
                                     {(block.headers || []).map((header, hIdx) => (
-                                      <th key={hIdx} scope="col" className="px-6 py-3.5 text-left text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-main)' }}>
+                                      <th key={hIdx} scope="col">
                                         {header}
                                       </th>
                                     ))}
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y" style={{ backgroundColor: 'var(--bg-primary)', divideColor: 'var(--border-color)' }}>
+                                <tbody>
                                   {(block.rows || []).map((row, rIdx) => (
-                                    <tr key={rIdx} className="transition-colors hover:opacity-90">
+                                    <tr key={rIdx}>
                                       {row.map((cell, cIdx) => (
-                                        <td key={cIdx} className="px-6 py-4 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+                                        <td key={cIdx}>
                                           {cell}
                                         </td>
                                       ))}
@@ -892,13 +1150,13 @@ export default function LessonPreviewEditorModal({
 
                         {block.type === 'callout' && (
                           editMode ? (
-                            <div className="space-y-3 p-3 bg-yellow-50/30 border border-yellow-100 rounded-xl">
+                            <div className="space-y-3 p-3 bg-slate-50/50 border border-slate-100 rounded-xl">
                               <div className="flex gap-2 items-center">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Callout Type</label>
                                 <select 
                                   value={block.callout_type || 'info'}
                                   onChange={(e) => handleUpdateBlock(idx, { callout_type: e.target.value })}
-                                  className="bg-white border border-slate-200 rounded-lg p-1 text-xs"
+                                  className="editor-select-field !w-auto !p-1.5 !text-xs"
                                 >
                                   <option value="info">Info</option>
                                   <option value="warning">Warning</option>
@@ -910,26 +1168,20 @@ export default function LessonPreviewEditorModal({
                                 value={block.text || ''}
                                 onChange={(e) => handleUpdateBlock(idx, { text: e.target.value })}
                                 rows={2}
-                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs outline-none"
+                                className="editor-textarea-field"
                               />
                             </div>
                           ) : (
                             (() => {
-                              let styles = 'bg-sky-50 border-sky-400 text-sky-800';
                               let CalloutIcon = Info;
-                              if (block.callout_type === 'warning') { styles = 'bg-amber-50/50 border-amber-450 text-amber-850'; CalloutIcon = AlertTriangle; }
-                              else if (block.callout_type === 'tip') { styles = 'bg-emerald-50/50 border-emerald-450 text-emerald-850'; CalloutIcon = Lightbulb; }
-                              else if (block.callout_type === 'danger') { styles = 'bg-rose-50/50 border-rose-450 text-rose-850'; CalloutIcon = AlertCircle; }
+                              if (block.callout_type === 'warning') { CalloutIcon = AlertTriangle; }
+                              else if (block.callout_type === 'tip') { CalloutIcon = Lightbulb; }
+                              else if (block.callout_type === 'danger') { CalloutIcon = AlertCircle; }
                               
-                              // Use central variables if they override, otherwise fallback
                               return (
-                                <div className="border-l-6 p-5 rounded-2xl flex gap-3 my-4" style={{ 
-                                  backgroundColor: 'var(--accent-bg)', 
-                                  borderColor: 'var(--accent-color)',
-                                  color: 'var(--text-secondary)'
-                                }}>
-                                  <CalloutIcon className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--accent-color)' }} />
-                                  <div className="text-sm font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: formatRichText(block.text) }} />
+                                <div className="callout-block-container">
+                                  <CalloutIcon className="callout-icon-wrapper w-5 h-5" />
+                                  <div className="callout-text" dangerouslySetInnerHTML={{ __html: formatRichText(block.text) }} />
                                 </div>
                               );
                             })()
@@ -938,39 +1190,39 @@ export default function LessonPreviewEditorModal({
 
                         {block.type === 'code' && (
                           editMode ? (
-                            <div className="space-y-3 bg-slate-50 p-4 rounded-xl">
+                            <div className="space-y-3 bg-slate-50/50 border border-slate-100 p-4 rounded-xl">
                               <div className="flex gap-2">
                                 <input 
                                   type="text"
                                   placeholder="Language"
                                   value={block.language || 'javascript'}
                                   onChange={(e) => handleUpdateBlock(idx, { language: e.target.value })}
-                                  className="bg-white border border-slate-200 rounded-lg p-2 text-xs w-1/4"
+                                  className="editor-text-input !p-2 !text-xs w-1/4"
                                 />
                                 <input 
                                   type="text"
                                   placeholder="Explanation"
                                   value={block.explanation || ''}
                                   onChange={(e) => handleUpdateBlock(idx, { explanation: e.target.value })}
-                                  className="bg-white border border-slate-200 rounded-lg p-2 text-xs w-3/4"
+                                  className="editor-text-input !p-2 !text-xs w-3/4"
                                 />
                               </div>
                               <textarea
                                 value={block.code || ''}
                                 onChange={(e) => handleUpdateBlock(idx, { code: e.target.value })}
                                 rows={6}
-                                className="w-full bg-slate-900 text-sky-400 font-mono p-4 rounded-lg text-xs leading-relaxed focus:ring-0 outline-none"
+                                className="editor-textarea-field !font-mono !text-xs"
                               />
                             </div>
                           ) : (
                             <div className="my-6">
                               <div className="position-relative">
-                                <pre className="p-6 pt-12 rounded-2xl overflow-x-auto font-mono text-sm leading-relaxed" style={{ backgroundColor: 'var(--code-bg)', color: 'var(--code-text)' }}>
+                                <pre className="code-block-pre">
                                   <code>{block.code}</code>
                                 </pre>
                               </div>
                               {block.explanation && (
-                                <div className="mt-3 p-4 border rounded-xl text-sm leading-relaxed font-medium" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)', color: 'var(--text-secondary)' }}>
+                                <div className="code-explanation-box">
                                   {block.explanation}
                                 </div>
                               )}
@@ -980,28 +1232,28 @@ export default function LessonPreviewEditorModal({
 
                         {block.type === 'example' && (
                           editMode ? (
-                            <div className="space-y-3 p-3 bg-emerald-50/30 border border-emerald-100 rounded-xl">
+                            <div className="space-y-3 p-3 bg-slate-50/50 border border-slate-100 rounded-xl">
                               <input 
                                 type="text"
                                 value={block.scenario || ''}
                                 onChange={(e) => handleUpdateBlock(idx, { scenario: e.target.value })}
-                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold"
+                                className="editor-text-input"
                                 placeholder="Scenario Name"
                               />
                               <textarea 
                                 value={block.detail || ''}
                                 onChange={(e) => handleUpdateBlock(idx, { detail: e.target.value })}
-                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs leading-relaxed"
+                                className="editor-textarea-field"
                                 placeholder="Detail content..."
                                 rows={3}
                               />
                             </div>
                           ) : (
-                            <div className="border-l-6 p-6 rounded-2xl my-6" style={{ backgroundColor: 'var(--accent-bg)', borderColor: 'var(--accent-color)' }}>
-                              <h4 className="text-xs font-black uppercase tracking-widest mb-2 flex items-center gap-1.5" style={{ color: 'var(--accent-color)' }}>
+                            <div className="example-block-container">
+                              <h4 className="example-block-title">
                                 <Lightbulb className="w-4 h-4" /> Real-World Example: {block.scenario}
                               </h4>
-                              <p className="text-sm leading-relaxed font-medium" style={{ color: 'var(--text-secondary)' }}>{block.detail}</p>
+                              <p className="example-block-text">{block.detail}</p>
                             </div>
                           )
                         )}
@@ -1016,19 +1268,19 @@ export default function LessonPreviewEditorModal({
 
                         {block.type === 'assignment' && (
                           editMode ? (
-                            <div className="space-y-3 p-4 bg-violet-50/30 border border-violet-100 rounded-xl">
+                            <div className="space-y-3 p-4 bg-slate-50/50 border border-slate-100 rounded-xl">
                               <span className="text-[10px] font-bold text-violet-600 uppercase tracking-widest block">Assignment Block</span>
                               <input 
                                 type="text"
                                 value={block.task || ''}
                                 onChange={(e) => handleUpdateBlock(idx, { task: e.target.value })}
-                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold"
+                                className="editor-text-input"
                                 placeholder="Task Name"
                               />
                               <textarea 
                                 value={block.instructions || ''}
                                 onChange={(e) => handleUpdateBlock(idx, { instructions: e.target.value })}
-                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs"
+                                className="editor-textarea-field"
                                 placeholder="Instructions"
                                 rows={2}
                               />
@@ -1044,7 +1296,7 @@ export default function LessonPreviewEditorModal({
                                         newCrit[cIdx] = e.target.value;
                                         handleUpdateBlock(idx, { grading_criteria: newCrit });
                                       }}
-                                      className="bg-white border border-slate-200 rounded-lg p-1 text-xs w-full"
+                                      className="editor-text-input !p-1.5 !text-xs"
                                     />
                                     <button
                                       onClick={() => {
@@ -1052,7 +1304,7 @@ export default function LessonPreviewEditorModal({
                                         newCrit.splice(cIdx, 1);
                                         handleUpdateBlock(idx, { grading_criteria: newCrit });
                                       }}
-                                      className="text-red-400 hover:text-red-600"
+                                      className="row-delete-button"
                                     >
                                       <Trash className="w-3.5 h-3.5" />
                                     </button>
@@ -1060,25 +1312,25 @@ export default function LessonPreviewEditorModal({
                                 ))}
                                 <button
                                   onClick={() => handleUpdateBlock(idx, { grading_criteria: [...(block.grading_criteria || []), 'New Criterion'] })}
-                                  className="text-[9px] font-bold text-violet-600 bg-violet-50 px-2.5 py-1 rounded-lg border border-violet-100 flex items-center gap-1 active:scale-95"
+                                  className="add-point-button"
                                 >
                                   <Plus className="w-2.5 h-2.5" /> Add Criterion
                                 </button>
                               </div>
                             </div>
                           ) : (
-                            <div className="border rounded-3xl p-6 sm:p-8 space-y-4 my-6" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
-                              <h4 className="text-xs font-black uppercase tracking-widest flex items-center gap-1.5" style={{ color: 'var(--accent-color)' }}>
+                            <div className="summary-block-container">
+                              <h4 className="summary-block-title">
                                 <CheckSquare className="w-4 h-4" /> Practical Assignment: {block.task}
                               </h4>
-                              <p className="text-sm leading-relaxed font-medium" style={{ color: 'var(--text-secondary)' }}>{block.instructions}</p>
+                              <p className="summary-list-item">{block.instructions}</p>
                               {block.grading_criteria && block.grading_criteria.length > 0 && (
                                 <div className="space-y-2 pt-2 border-t" style={{ borderColor: 'var(--border-color)' }}>
-                                  <span className="text-[10px] font-bold uppercase tracking-widest block" style={{ color: 'var(--accent-color)' }}>Grading Checklist</span>
+                                  <span className="summary-block-title mt-4 block">Grading Checklist</span>
                                   <ul className="space-y-1.5 list-none pl-0">
                                     {block.grading_criteria.map((item, cIdx) => (
-                                      <li key={cIdx} className="flex items-start gap-2 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-                                        <Check className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" style={{ color: 'var(--accent-color)' }} />
+                                      <li key={cIdx} className="summary-list-item flex items-start gap-2 text-xs font-medium">
+                                        <Check className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
                                         <span>{item}</span>
                                       </li>
                                     ))}
@@ -1091,7 +1343,7 @@ export default function LessonPreviewEditorModal({
 
                         {block.type === 'summary' && (
                           editMode ? (
-                            <div className="space-y-2 p-3 bg-sky-50 rounded-xl">
+                            <div className="space-y-3 p-3 bg-slate-50/50 border border-slate-100 rounded-xl">
                               <span className="text-[10px] font-bold text-sky-600 uppercase tracking-widest block">Summary Takeaways</span>
                               {(block.points || []).map((point, ptIdx) => (
                                 <div key={ptIdx} className="flex gap-2 items-center">
@@ -1103,7 +1355,7 @@ export default function LessonPreviewEditorModal({
                                       newPoints[ptIdx] = e.target.value;
                                       handleUpdateBlock(idx, { points: newPoints });
                                     }}
-                                    className="bg-white border border-slate-200 rounded-lg p-1.5 text-xs w-full"
+                                    className="editor-text-input !p-1.5 !text-xs"
                                   />
                                   <button
                                     onClick={() => {
@@ -1111,7 +1363,7 @@ export default function LessonPreviewEditorModal({
                                       newPts.splice(ptIdx, 1);
                                       handleUpdateBlock(idx, { points: newPts });
                                     }}
-                                    className="text-red-400 hover:text-red-600"
+                                    className="row-delete-button"
                                   >
                                     <Trash className="w-3.5 h-3.5" />
                                   </button>
@@ -1119,19 +1371,19 @@ export default function LessonPreviewEditorModal({
                               ))}
                               <button
                                 onClick={() => handleUpdateBlock(idx, { points: [...(block.points || []), 'New Summary Point'] })}
-                                className="text-[9px] font-bold text-sky-600 bg-sky-50 px-2.5 py-1 rounded-lg border border-sky-100 flex items-center gap-1 active:scale-95"
+                                className="add-point-button"
                               >
                                 <Plus className="w-2.5 h-2.5" /> Add Point
                               </button>
                             </div>
                           ) : (
-                            <div className="border rounded-3xl p-6 sm:p-8 space-y-4 my-6" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
-                              <h4 className="text-xs font-black uppercase tracking-widest flex items-center gap-1.5" style={{ color: 'var(--accent-color)' }}>
+                            <div className="summary-block-container">
+                              <h4 className="summary-block-title">
                                 <BookOpen className="w-4 h-4" /> Lesson Summary
                               </h4>
-                              <ul className="space-y-2 pl-4 list-disc text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+                              <ul className="space-y-2 pl-4 list-disc text-sm font-medium">
                                 {(block.points || []).map((pt, ptIdx) => (
-                                  <li key={ptIdx}>{pt}</li>
+                                  <li key={ptIdx} className="summary-list-item">{pt}</li>
                                 ))}
                               </ul>
                             </div>
@@ -1140,36 +1392,35 @@ export default function LessonPreviewEditorModal({
 
                         {block.type === 'reference' && (
                           editMode ? (
-                            <div className="space-y-2 p-3 bg-blue-50/30 border border-blue-100 rounded-xl">
+                            <div className="space-y-3 p-3 bg-slate-50/50 border border-slate-100 rounded-xl">
                               <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest block">Reference Link</span>
                               <input 
                                 type="text"
                                 placeholder="Title"
                                 value={block.title || ''}
                                 onChange={(e) => handleUpdateBlock(idx, { title: e.target.value })}
-                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs"
+                                className="editor-text-input"
                               />
                               <input 
                                 type="text"
                                 placeholder="URL"
                                 value={block.url || ''}
                                 onChange={(e) => handleUpdateBlock(idx, { url: e.target.value })}
-                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs"
+                                className="editor-text-input"
                               />
                             </div>
                           ) : (
-                            <div className="flex items-center justify-between p-4 rounded-2xl border transition-all gap-2 my-3" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
+                            <div className="reference-block-container">
                               <div>
-                                <h4 className="text-sm font-bold flex items-center gap-1.5" style={{ color: 'var(--text-main)' }}>
-                                  <BookOpen className="w-4 h-4" style={{ color: 'var(--accent-color)' }} /> {block.title}
+                                <h4 className="text-sm font-bold flex items-center gap-1.5">
+                                  <BookOpen className="w-4 h-4" /> {block.title}
                                 </h4>
                               </div>
                               <a 
                                 href={block.url} 
                                 target="_blank" 
                                 rel="noreferrer" 
-                                className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl shadow-sm transition active:scale-95 whitespace-nowrap border"
-                                style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--accent-color)', borderColor: 'var(--border-color)' }}
+                                className="visit-resource-button"
                               >
                                 Visit Resource ↗
                               </a>
@@ -1180,8 +1431,8 @@ export default function LessonPreviewEditorModal({
                         {/* ─── ATTACHMENT BLOCK ─── */}
                         {block.type === 'attachment' && (
                           editMode ? (
-                            <div className="space-y-3 p-4 bg-orange-50/30 border border-orange-100 rounded-xl">
-                              <span className="text-[10px] font-bold text-orange-600 uppercase tracking-widest flex items-center gap-1.5">
+                            <div className="space-y-3 p-4 bg-slate-50/50 border border-slate-100 rounded-xl">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
                                 <Paperclip className="w-3.5 h-3.5" /> File Attachment Block
                               </span>
                               <input 
@@ -1189,7 +1440,7 @@ export default function LessonPreviewEditorModal({
                                 placeholder="Display Title (auto-filled on upload)"
                                 value={block.title || ''}
                                 onChange={(e) => handleUpdateBlock(idx, { title: e.target.value })}
-                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs"
+                                className="editor-text-input"
                               />
                               {block.file_url ? (
                                 <div className="flex items-center gap-3 p-3 bg-white border border-green-200 rounded-xl">
@@ -1205,17 +1456,17 @@ export default function LessonPreviewEditorModal({
                                 </div>
                               ) : (
                                 <div className="space-y-3">
-                                  <div className="flex border-b border-orange-100 text-xs">
+                                  <div className="flex border-b border-slate-150 text-xs">
                                     <button
                                       type="button"
-                                      className={`px-3 py-1.5 font-bold transition-all border-b-2 ${(!attachmentTabs[idx] || attachmentTabs[idx] === 'upload') ? 'border-orange-500 text-orange-600' : 'border-transparent text-slate-400 hover:text-slate-650'}`}
+                                      className={`px-3 py-1.5 font-bold transition-all border-b-2 ${(!attachmentTabs[idx] || attachmentTabs[idx] === 'upload') ? 'border-sky-500 text-sky-650' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
                                       onClick={() => setAttachmentTabs(prev => ({ ...prev, [idx]: 'upload' }))}
                                     >
                                       Upload New
                                     </button>
                                     <button
                                       type="button"
-                                      className={`px-3 py-1.5 font-bold transition-all border-b-2 ${(attachmentTabs[idx] === 'internal') ? 'border-orange-500 text-orange-600' : 'border-transparent text-slate-400 hover:text-slate-650'}`}
+                                      className={`px-3 py-1.5 font-bold transition-all border-b-2 ${(attachmentTabs[idx] === 'internal') ? 'border-sky-500 text-sky-650' : 'border-transparent text-slate-400 hover:text-slate-650'}`}
                                       onClick={() => {
                                         setAttachmentTabs(prev => ({ ...prev, [idx]: 'internal' }));
                                         fetchMedia();
@@ -1226,16 +1477,16 @@ export default function LessonPreviewEditorModal({
                                   </div>
 
                                   {(!attachmentTabs[idx] || attachmentTabs[idx] === 'upload') ? (
-                                    <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-orange-200 rounded-xl cursor-pointer hover:bg-orange-50/50 transition">
+                                    <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50/30 transition">
                                       {uploadingBlockIdx === idx ? (
-                                        <div className="flex items-center gap-2 text-orange-600">
+                                        <div className="flex items-center gap-2 text-sky-600">
                                           <Loader2 className="w-5 h-5 animate-spin" />
                                           <span className="text-xs font-bold">Uploading...</span>
                                         </div>
                                       ) : (
                                         <>
-                                          <Upload className="w-6 h-6 text-orange-400 mb-1" />
-                                          <span className="text-xs font-bold text-orange-600">Click to upload file</span>
+                                          <Upload className="w-6 h-6 text-slate-400 mb-1" />
+                                          <span className="text-xs font-bold text-slate-500">Click to upload file</span>
                                           <span className="text-[10px] text-slate-400 mt-0.5">PDF, DOCX, XLSX, PPT, etc.</span>
                                         </>
                                       )}
@@ -1254,14 +1505,14 @@ export default function LessonPreviewEditorModal({
                                         placeholder="Search files..."
                                         value={mediaSearch}
                                         onChange={(e) => setMediaSearch(e.target.value)}
-                                        className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs"
+                                        className="editor-text-input"
                                       />
                                       {loadingMedia ? (
-                                        <div className="flex items-center justify-center p-4 text-xs text-orange-600 gap-2">
+                                        <div className="flex items-center justify-center p-4 text-xs text-sky-600 gap-2">
                                           <Loader2 className="w-4 h-4 animate-spin" /> Loading files...
                                         </div>
                                       ) : (
-                                        <div className="max-h-40 overflow-y-auto border border-orange-100 rounded-xl bg-white divide-y divide-slate-100">
+                                        <div className="max-h-40 overflow-y-auto border border-slate-100 rounded-xl bg-white divide-y divide-slate-100">
                                           {mediaFiles.filter(f => f.filename.toLowerCase().includes(mediaSearch.toLowerCase())).length === 0 ? (
                                             <div className="p-3 text-xs text-slate-400 text-center">No files found.</div>
                                           ) : (
@@ -1271,7 +1522,7 @@ export default function LessonPreviewEditorModal({
                                                 <button
                                                   key={fIdx}
                                                   type="button"
-                                                  className="w-full text-left p-2 hover:bg-orange-50/50 transition-colors text-xs flex justify-between items-center"
+                                                  className="w-full text-left p-2 hover:bg-slate-50/50 transition-colors text-xs flex justify-between items-center"
                                                   onClick={() => {
                                                     handleUpdateBlock(idx, {
                                                       file_url: file.url,
@@ -1294,14 +1545,14 @@ export default function LessonPreviewEditorModal({
                             </div>
                           ) : (
                             block.file_url ? (
-                              <div className="flex items-center justify-between p-4 rounded-2xl border transition-all gap-2 my-3" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
+                              <div className="attachment-block-container">
                                 <div className="flex items-center gap-3">
-                                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'var(--accent-bg)', borderColor: 'var(--border-color)' }}>
-                                    <Paperclip className="w-4 h-4" style={{ color: 'var(--accent-color)' }} />
+                                  <div className="attachment-icon-badge">
+                                    <Paperclip className="w-4 h-4" />
                                   </div>
                                   <div>
-                                    <h4 className="text-sm font-bold animate-fade-in" style={{ color: 'var(--text-main)' }}>{block.title || block.file_name || 'Attached File'}</h4>
-                                    <p className="text-[10px] font-medium" style={{ color: 'var(--text-muted)' }}>{block.file_name || 'File Attachment'}</p>
+                                    <h4 className="text-sm font-bold animate-fade-in">{block.title || block.file_name || 'Attached File'}</h4>
+                                    <p className="text-[10px] font-medium">{block.file_name || 'File Attachment'}</p>
                                   </div>
                                 </div>
                                 <button
@@ -1309,15 +1560,14 @@ export default function LessonPreviewEditorModal({
                                     const url = block.file_url.startsWith('/uploads/') ? `http://localhost:8000${block.file_url}` : block.file_url;
                                     setSecureViewerUrl(url);
                                   }}
-                                  className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl shadow-sm transition active:scale-95 whitespace-nowrap border"
-                                  style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--accent-color)', borderColor: 'var(--border-color)' }}
+                                  className="secure-open-button"
                                 >
                                   Open Securely
                                 </button>
                               </div>
                             ) : (
-                              <div className="p-4 rounded-2xl border border-dashed text-center" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
-                                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No file attached yet. Click Edit to upload.</p>
+                              <div className="attachment-empty-placeholder">
+                                <p>No file attached yet. Click Edit to upload.</p>
                               </div>
                             )
                           )

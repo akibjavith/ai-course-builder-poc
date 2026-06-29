@@ -1,8 +1,17 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+@import "./themes/base.css";
+@import "./themes/light.css";
+@import "./themes/dark.css";
+@import "./themes/sepia.css";
+@import "./themes/iron-man.css";
+@import "./themes/spider-man.css";
+@import "./themes/hulk.css";
+@import "./themes/dark-theme.css";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Orbitron:wght@400;500;600;700;800;900&family=Oswald:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800;900&family=Poppins:wght@300;400;500;600;700;800;900&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
 
 @layer base {
   body {
@@ -54,39 +63,7 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Rich Content Styles - Refined for Ocean Blue */
-.rich-content {
-  color: #475569; /* slate-600 */
-}
-.rich-content h1, .rich-content h2, .rich-content h3 {
-  color: #0f172a; /* slate-900 */
-  font-weight: 700;
-  margin-top: 2rem;
-  margin-bottom: 1rem;
-}
-.rich-content h1 { font-size: 2.5rem; letter-spacing: -0.02em; }
-.rich-content h2 { font-size: 2rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem; }
-.rich-content h3 { font-size: 1.5rem; }
-.rich-content p {
-  line-height: 1.8;
-  margin-bottom: 1.25rem;
-}
-.rich-content ul, .rich-content ol {
-  margin-bottom: 1.25rem;
-  padding-left: 1.5rem;
-}
-.rich-content ul { list-style-type: disc; }
-.rich-content ol { list-style-type: decimal; }
-.rich-content li { margin-bottom: 0.5rem; }
-.rich-content strong { color: #0f172a; font-weight: 700; }
-.rich-content blockquote {
-  border-left: 4px solid #0ea5e9;
-  padding-left: 1.5rem;
-  font-style: italic;
-  color: #64748b;
-  margin: 2.5rem 0;
-  @apply bg-sky-50/50 py-4 pr-4 rounded-r-xl;
-}
+
 
 /* Fix for Blank ReactQuill Editor */
 .quill-editor-container {
@@ -118,7 +95,7 @@
 }
 
 /* ─── Premium Dynamic Themes Definition ─── */
-:root, .theme-light {
+:root {
   --bg-primary: #ffffff;
   --bg-secondary: #f8fafc; /* slate-50 */
   --text-main: #0f172a;    /* slate-900 */
@@ -132,103 +109,6 @@
   --theme-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
 }
 
-.theme-dark {
-  --bg-primary: #090d16;   /* dark ebony midnight */
-  --bg-secondary: #111827; /* gray-900 */
-  --text-main: #f8fafc;    /* slate-50 */
-  --text-secondary: #cbd5e1; /* slate-300 */
-  --text-muted: #64748b;   /* slate-500 */
-  --border-color: #1f2937; /* gray-800 */
-  --accent-color: #f97316; /* neon orange-500 */
-  --accent-bg: #2c1a0f;    /* orange-950/40 */
-  --code-bg: #030712;
-  --code-text: #fb923c;
-  --theme-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.3), 0 4px 6px -4px rgb(0 0 0 / 0.3);
-}
 
-.theme-sepia {
-  --bg-primary: #fcf8f2;   /* warm book cream */
-  --bg-secondary: #f5ecd8; /* soft wheat secondary */
-  --text-main: #433422;    /* deep roast coffee */
-  --text-secondary: #5c4a37; /* medium roast coffee */
-  --text-muted: #8c7b65;   /* muted bronze */
-  --border-color: #ebdcb9; /* soft wheat borders */
-  --accent-color: #15803d; /* deep forest green */
-  --accent-bg: #f0fdf4;    /* emerald-50 */
-  --code-bg: #2f2519;
-  --code-text: #eab308;
-  --theme-shadow: 0 4px 6px -1px rgb(67 52 34 / 0.05), 0 2px 4px -2px rgb(67 52 34 / 0.05);
-}
 
-/* Bind content block systems to CSS variables */
-.theme-container {
-  background-color: var(--bg-primary) !important;
-  color: var(--text-main) !important;
-}
-
-.rich-content {
-  color: var(--text-secondary);
-}
-.rich-content h1, .rich-content h2, .rich-content h3 {
-  color: var(--text-main);
-  font-weight: 700;
-  margin-top: 2rem;
-  margin-bottom: 1rem;
-}
-.rich-content h1 { font-size: 2.5rem; letter-spacing: -0.02em; }
-.rich-content h2 { font-size: 2rem; border-bottom: 2px solid var(--border-color); padding-bottom: 0.5rem; }
-.rich-content h3 { font-size: 1.5rem; }
-.rich-content p {
-  line-height: 1.8;
-  margin-bottom: 1.25rem;
-}
-.rich-content ul, .rich-content ol {
-  margin-bottom: 1.25rem;
-  padding-left: 1.5rem;
-}
-.rich-content ul { list-style-type: disc; }
-.rich-content ol { list-style-type: decimal; }
-.rich-content li { margin-bottom: 0.5rem; }
-.rich-content strong { color: var(--text-main); font-weight: 700; }
-.rich-content blockquote {
-  border-left: 4px solid var(--accent-color);
-  padding-left: 1.5rem;
-  font-style: italic;
-  color: var(--text-secondary);
-  margin: 2.5rem 0;
-  background-color: var(--accent-bg);
-  @apply py-4 pr-4 rounded-r-xl;
-}
-
-.premium-editor-area {
-  font-family: 'Outfit', sans-serif;
-  color: var(--text-secondary);
-}
-.premium-editor-area h2 {
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: var(--text-main);
-  margin-top: 1.5rem;
-  margin-bottom: 1rem;
-  letter-spacing: -0.01em;
-}
-.premium-editor-area h3 {
-  font-size: 1.35rem;
-  font-weight: 600;
-  color: var(--text-main);
-  margin-top: 1.25rem;
-  margin-bottom: 0.75rem;
-}
-.premium-editor-area p {
-  margin-bottom: 1.25rem;
-  line-height: 1.7;
-  color: var(--text-secondary);
-}
-.premium-editor-area ul, .premium-editor-area ol {
-  padding-left: 1.5rem;
-  margin-bottom: 1.25rem;
-}
-.premium-editor-area li {
-  margin-bottom: 0.5rem;
-}
 

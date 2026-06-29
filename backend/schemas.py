@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 class CourseDetails(BaseModel):
     courseType: Optional[str] = "Custom Course"
@@ -270,6 +270,13 @@ LessonBlock = Annotated[
 class LessonBlocksResponse(BaseModel):
     title: str
     blocks: List[LessonBlock]
+
+
+class ThemeUploadRequest(BaseModel):
+    id: str
+    name: str
+    variables: Dict[str, str]
+
 
 
 

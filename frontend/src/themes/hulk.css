@@ -1,0 +1,156 @@
+/* ==========================================================================
+   HULK THEME STYLESHEET (hulk.css)
+   ========================================================================== */
+
+.theme-hulk-theme {
+  --bg-primary: #0f1f0f;
+  --bg-secondary: #1b4332;
+  --text-main: #f0fdf4;
+  --text-secondary: #bbf7d0;
+  --text-muted: #86efac;
+  --border-color: #22c55e;
+  --accent-color: #4ade80;
+  --accent-bg: #14532d;
+  --code-bg: #052e16;
+  --code-text: #a3e635;
+  --theme-shadow: 0 12px 28px rgba(34, 197, 94, 0.45);
+  --font-family: "Oswald", sans-serif;
+  --font-size-base: 1.1rem;
+  --font-size-h1: 3.4rem;
+  --font-size-h2: 2.7rem;
+  --font-size-h3: 2rem;
+  --line-height: 1.95;
+  --block-spacing: 2rem;
+}
+
+/* Hulk Specific Design Overrides */
+
+/* Paragraph Grows Larger on Hover (Hulk Smash/Grow) */
+.theme-hulk-theme .lesson-paragraph {
+  transition: all 0.15s ease-out;
+}
+.theme-hulk-theme .lesson-paragraph:hover {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+/* Thick deep green underlines for links */
+.theme-hulk-theme a {
+  transition: color 0.15s ease;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+}
+.theme-hulk-theme a:hover {
+  color: var(--accent-color);
+  text-decoration-color: var(--accent-color);
+  text-decoration-thickness: 3px;
+}
+
+/* Massive borders and alternates with toxic green */
+.theme-hulk-theme table {
+  border: 3px solid var(--border-color);
+  border-collapse: collapse;
+}
+.theme-hulk-theme th {
+  border: 3px solid var(--border-color);
+  background-color: var(--accent-bg);
+  color: var(--accent-color);
+  font-size: 1.2rem;
+  text-transform: uppercase;
+}
+.theme-hulk-theme td {
+  border: 2px solid var(--border-color);
+  padding: 0.75rem;
+  transition: all 0.15s ease;
+}
+.theme-hulk-theme tr:nth-child(even) td {
+  background-color: rgba(34, 197, 94, 0.06); /* toxic green tint */
+}
+
+/* Cell padding expansion on hover */
+.theme-hulk-theme td:hover {
+  background-color: var(--accent-bg) !important;
+  color: var(--text-main) !important;
+  padding: 0.9rem;
+  font-weight: 700;
+}
+
+/* Quiz option smash button hovers */
+.theme-hulk-theme .quiz-option-button {
+  transition: all 0.15s ease;
+}
+.theme-hulk-theme .quiz-option-button:enabled:hover {
+  border-color: var(--accent-color);
+  background-color: var(--accent-bg);
+  color: var(--text-main);
+  transform: scale(1.01);
+}
+
+/* Headings Smash overrides */
+.theme-hulk-theme .lesson-h1 {
+  border-bottom: 4px solid var(--border-color);
+  text-transform: uppercase;
+  letter-spacing: -0.04em;
+}
+
+.theme-hulk-theme .lesson-h2 {
+  border-left: 8px solid var(--accent-color);
+  text-transform: uppercase;
+}
+
+/* Bullet Lists - Thick square markers */
+.theme-hulk-theme .lesson-list-bullet {
+  list-style-type: none;
+  padding-left: 0.5rem;
+}
+
+.theme-hulk-theme .lesson-list-bullet li::before {
+  content: "■";
+  font-size: 0.85rem;
+  margin-right: 0.625rem;
+  color: var(--accent-color);
+  display: inline-block;
+  transition: transform 0.15s ease-out, color 0.15s ease;
+}
+
+.theme-hulk-theme .lesson-list-bullet li:hover::before {
+  transform: scale(1.5);
+  color: #a3e635; /* toxic lime */
+}
+
+.theme-hulk-theme .lesson-list-item {
+  transition: all 0.15s ease;
+}
+
+.theme-hulk-theme .lesson-list-item:hover {
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+/* Gamma Database Console Code Blocks */
+.theme-hulk-theme .code-block-pre {
+  position: relative;
+  background-color: #021a0c;
+  border: 3px solid var(--border-color);
+  box-shadow: 0 0 16px rgba(34, 197, 94, 0.25);
+  transition: all 0.2s ease;
+}
+
+.theme-hulk-theme .code-block-pre::before {
+  content: "[GAMMA_DATABASE // STACK]";
+  position: absolute;
+  top: 0.5rem;
+  left: 1rem;
+  font-size: 10px;
+  font-weight: 900;
+  color: var(--code-text);
+  letter-spacing: 0.05em;
+  opacity: 0.8;
+}
+
+.theme-hulk-theme .code-block-pre:hover {
+  box-shadow: 0 0 25px rgba(163, 230, 53, 0.4);
+  transform: scale(1.005);
+}
+

@@ -1,0 +1,48 @@
+/* ==========================================================================
+   DARK THEME STYLESHEET (dark-theme.css)
+   ========================================================================== */
+
+.theme-dark-theme {
+  --bg-primary: #121212;
+  --bg-secondary: #1e1e1e;
+  --text-main: #ffffff;
+  --text-secondary: #d1d5db;
+  --text-muted: #9ca3af;
+  --border-color: #374151;
+  --accent-color: #3b82f6;
+  --accent-bg: #1e3a8a;
+  --code-bg: #111827;
+  --code-text: #facc15;
+  --theme-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  --font-family: "Inter", sans-serif;
+  --font-size-base: 1rem;
+  --font-size-h1: 2.8rem;
+  --font-size-h2: 2.2rem;
+  --font-size-h3: 1.7rem;
+  --line-height: 1.8;
+  --block-spacing: 1.5rem;
+}
+
+/* Modern Dark Theme hover states */
+.theme-dark-theme a {
+  transition: color 0.15s ease;
+}
+.theme-dark-theme a:hover {
+  text-decoration: underline;
+  color: var(--accent-color);
+}
+
+.theme-dark-theme .lesson-paragraph {
+  transition: color 0.15s ease;
+}
+.theme-dark-theme .lesson-paragraph:hover {
+  color: var(--text-main);
+}
+
+.theme-dark-theme .quiz-option-button {
+  transition: all 0.15s ease;
+}
+.theme-dark-theme .quiz-option-button:enabled:hover {
+  background-color: var(--accent-bg);
+  border-color: var(--accent-color);
+}
