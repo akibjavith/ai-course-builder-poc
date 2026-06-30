@@ -8,6 +8,7 @@ import {
 import { uploadChapterMedia, listMediaFiles, getThemes, uploadTheme } from '../api';
 import SecureDocViewer from './SecureDocViewer';
 import ActionModal from './ActionModal';
+import DynamicStyle from './DynamicStyle';
 
 // Generates a local short ID if uuid isn't available
 const generateLocalId = () => Math.random().toString(36).substr(2, 9);
@@ -292,8 +293,10 @@ export default function LessonPreviewEditorModal({
   initialCIdx,
   startInEdit = false,
   readOnly = false,
+  role = 'super-admin',
   onClose,
 }) {
+  const userRole = readOnly ? 'learner' : role;
   const lessons = useMemo(() => flattenLessons(courseData?.structure), [courseData?.structure]);
   const [active, setActive] = useState({ mIdx: initialMIdx, cIdx: initialCIdx });
   const [editMode, setEditMode] = useState(!readOnly && !!startInEdit);
@@ -321,11 +324,45 @@ export default function LessonPreviewEditorModal({
   const [secureViewerUrl, setSecureViewerUrl] = useState(null);
 
   // State for dynamic content theme switching
-  const [theme, setTheme] = useState('light');
+  const [theme, setTheme] = useState(chapter?.content?.themeId || 'light');
   const [themes, setThemes] = useState(DEFAULT_THEMES);
   const themeFileInputRef = useRef(null);
   const dropdownRef = useRef(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  // Sync theme when active chapter changes or loaded from DB
+  useEffect(() => {
+    if (chapter?.content?.themeId) {
+      setTheme(chapter.content.themeId);
+    } else {
+      setTheme('light');
+    }
+  }, [active.mIdx, active.cIdx, chapter]);
+
+  const handleSelectTheme = (newThemeId) => {
+    setTheme(newThemeId);
+    setDropdownOpen(false);
+    if (readOnly) return;
+    
+    // Auto-save selected theme to lesson content
+    const newModules = (courseData.structure?.modules || []).map((mod, m) => {
+      if (m !== active.mIdx) return mod;
+      return {
+        ...mod,
+        chapters: (mod.chapters || []).map((chap, c) => {
+          if (c !== active.cIdx) return chap;
+          return {
+            ...chap,
+            content: {
+              ...(chap.content || {}),
+              themeId: newThemeId,
+            }
+          };
+        }),
+      };
+    });
+    updateCourseData('structure', { ...courseData.structure, modules: newModules });
+  };
   const [modalConfig, setModalConfig] = useState(null);
 
   const fetchThemes = async () => {
@@ -433,6 +470,14 @@ export default function LessonPreviewEditorModal({
   const activeThemeObj = useMemo(() => {
     return themes.find(t => t.id === theme) || themes[0] || DEFAULT_THEMES[0];
   }, [theme, themes]);
+
+  const themeCss = useMemo(() => {
+    if (!activeThemeObj || !activeThemeObj.variables) return '';
+    const rules = Object.entries(activeThemeObj.variables)
+      .map(([key, val]) => `  ${key}: ${val};`)
+      .join('\n');
+    return `[data-lesson-instance="${chapter?.id || active.mIdx + '-' + active.cIdx}"] {\n${rules}\n}`;
+  }, [activeThemeObj, chapter, active]);
 
   useEffect(() => {
     fetchThemes();
@@ -574,6 +619,7 @@ export default function LessonPreviewEditorModal({
                 ...(chap.content || {}),
                 content_type: 'lesson-blocks',
                 html_content: '', // Reset legacy
+                themeId: theme,
                 completed: true
               }
             };
@@ -593,6 +639,7 @@ export default function LessonPreviewEditorModal({
                 ...(chap.content || {}),
                 content_type: 'html',
                 html_content: htmlDraft,
+                themeId: theme,
                 completed: true,
               },
             };
@@ -654,8 +701,9 @@ export default function LessonPreviewEditorModal({
 
       <div 
         className={`theme-container theme-${theme} animate-scale-in`} 
-        style={!['light', 'dark', 'sepia', 'dark-theme', 'iron-man-theme', 'spider-man-theme', 'hulk-theme'].includes(theme) ? activeThemeObj.variables : {}}
+        data-lesson-instance={chapter?.id || active.mIdx + '-' + active.cIdx}
       >
+        <DynamicStyle css={themeCss} styleId={`lesson-theme-${chapter?.id || active.mIdx + '-' + active.cIdx}`} />
         
         {/* Header toolbar */}
         <div className="p-6 sm:px-10 flex items-center justify-between sticky top-0 z-20 border-b" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}>
@@ -676,86 +724,89 @@ export default function LessonPreviewEditorModal({
           <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
             {/* Dynamic Premium Theme Switcher Selector */}
             <div className="flex items-center gap-2">
-              <div className="relative" ref={dropdownRef}>
-                <button
-                  onClick={() => setDropdownOpen(!dropdownOpen)}
-                  className="flex items-center gap-1.5 rounded-xl px-3.5 py-2.5 border hover:bg-slate-100/50 transition active:scale-95 shadow-sm"
-                  style={{ 
-                    backgroundColor: 'var(--bg-secondary)', 
-                    borderColor: 'var(--border-color)',
-                    color: 'var(--text-secondary)'
-                  }}
-                >
-                  <Paintbrush className="w-3.5 h-3.5" />
-                  <span className="text-[10px] font-black uppercase tracking-wider">
-                    {activeThemeObj?.name || 'Select Theme'}
-                  </span>
-                  <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''}`} />
-                </button>
-
-                {dropdownOpen && (
-                  <div 
-                    className="absolute right-0 mt-2 w-48 rounded-2xl shadow-xl border overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150"
+              {(userRole === 'super-admin' || userRole === 'vendor-admin') && (
+                <div className="relative" ref={dropdownRef}>
+                  <button
+                    onClick={() => setDropdownOpen(!dropdownOpen)}
+                    className="flex items-center gap-1.5 rounded-xl px-3.5 py-2.5 border hover:bg-slate-100/50 transition active:scale-95 shadow-sm"
                     style={{ 
-                      backgroundColor: 'var(--bg-primary)', 
-                      borderColor: 'var(--border-color)'
+                      backgroundColor: 'var(--bg-secondary)', 
+                      borderColor: 'var(--border-color)',
+                      color: 'var(--text-secondary)'
                     }}
                   >
-                    <div className="py-1.5 max-h-60 overflow-y-auto">
-                      {themes.map((t) => (
-                        <button
-                          key={t.id}
-                          onClick={() => {
-                            setTheme(t.id);
-                            setDropdownOpen(false);
-                          }}
-                          className="w-full flex items-center justify-between px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider transition-colors text-left"
-                          style={{
-                            color: theme === t.id ? 'var(--accent-color)' : 'var(--text-secondary)',
-                            backgroundColor: theme === t.id ? 'var(--accent-bg)' : 'transparent',
-                          }}
-                          onMouseEnter={(e) => {
-                            if (theme !== t.id) {
-                              e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
-                              e.currentTarget.style.color = 'var(--text-main)';
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (theme !== t.id) {
-                              e.currentTarget.style.backgroundColor = 'transparent';
-                              e.currentTarget.style.color = 'var(--text-secondary)';
-                            }
-                          }}
-                        >
-                          <span>{t.name}</span>
-                          {theme === t.id && <Check className="w-3.5 h-3.5" />}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+                    <Paintbrush className="w-3.5 h-3.5" />
+                    <span className="text-[10px] font-black uppercase tracking-wider">
+                      {activeThemeObj?.name || 'Select Theme'}
+                    </span>
+                    <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
 
-              <button
-                onClick={() => themeFileInputRef.current?.click()}
-                className="p-2.5 rounded-xl border hover:bg-slate-100/50 transition active:scale-95 flex items-center gap-1.5 shadow-sm whitespace-nowrap"
-                style={{ 
-                  backgroundColor: 'var(--bg-secondary)', 
-                  borderColor: 'var(--border-color)',
-                  color: 'var(--text-secondary)'
-                }}
-                title="Upload Custom Theme JSON/CSS"
-              >
-                <Palette className="w-3.5 h-3.5" />
-                <span className="text-[10px] font-black uppercase tracking-wider">Upload Theme</span>
-              </button>
-              <input
-                type="file"
-                ref={themeFileInputRef}
-                onChange={handleThemeUpload}
-                accept=".json,.css"
-                className="hidden"
-              />
+                  {dropdownOpen && (
+                    <div 
+                      className="absolute right-0 mt-2 w-48 rounded-2xl shadow-xl border overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150"
+                      style={{ 
+                        backgroundColor: 'var(--bg-primary)', 
+                        borderColor: 'var(--border-color)'
+                      }}
+                    >
+                      <div className="py-1.5 max-h-60 overflow-y-auto">
+                        {themes.map((t) => (
+                          <button
+                            key={t.id}
+                            onClick={() => handleSelectTheme(t.id)}
+                            className="w-full flex items-center justify-between px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider transition-colors text-left"
+                            style={{
+                              color: theme === t.id ? 'var(--accent-color)' : 'var(--text-secondary)',
+                              backgroundColor: theme === t.id ? 'var(--accent-bg)' : 'transparent',
+                            }}
+                            onMouseEnter={(e) => {
+                              if (theme !== t.id) {
+                                e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
+                                e.currentTarget.style.color = 'var(--text-main)';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (theme !== t.id) {
+                                e.currentTarget.style.backgroundColor = 'transparent';
+                                e.currentTarget.style.color = 'var(--text-secondary)';
+                              }
+                            }}
+                          >
+                            <span>{t.name}</span>
+                            {theme === t.id && <Check className="w-3.5 h-3.5" />}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {userRole === 'super-admin' && (
+                <>
+                  <button
+                    onClick={() => themeFileInputRef.current?.click()}
+                    className="p-2.5 rounded-xl border hover:bg-slate-100/50 transition active:scale-95 flex items-center gap-1.5 shadow-sm whitespace-nowrap"
+                    style={{ 
+                      backgroundColor: 'var(--bg-secondary)', 
+                      borderColor: 'var(--border-color)',
+                      color: 'var(--text-secondary)'
+                    }}
+                    title="Upload Custom Theme JSON/CSS"
+                  >
+                    <Palette className="w-3.5 h-3.5" />
+                    <span className="text-[10px] font-black uppercase tracking-wider">Upload Theme</span>
+                  </button>
+                  <input
+                    type="file"
+                    ref={themeFileInputRef}
+                    onChange={handleThemeUpload}
+                    accept=".json,.css"
+                    className="hidden"
+                  />
+                </>
+              )}
             </div>
 
             <div className="flex items-center gap-1 border-r pr-3" style={{ borderColor: 'var(--border-color)' }}>
