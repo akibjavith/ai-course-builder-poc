@@ -278,5 +278,26 @@ class ThemeUploadRequest(BaseModel):
     variables: Dict[str, str]
 
 
+class ChatbotBuilderRequest(BaseModel):
+    messages: list
+    currentStep: str = "GATHER_DETAILS"
+    courseData: Optional[dict] = {}
+
+
+class ChatbotDraftSaveRequest(BaseModel):
+    id: str
+    courseName: str
+    currentStep: str
+    courseData: dict
+    messages: list
+
+
+class RenameDraftRequest(BaseModel):
+    name: str
+
+
+
+
+
 
 

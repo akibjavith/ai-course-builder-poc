@@ -180,5 +180,43 @@ export const uploadTheme = async (themeData) => {
   return response.data;
 };
 
+export const chatWithChatbotBuilder = async (messages, currentStep, courseData) => {
+  const response = await axios.post(`${API_URL}/course/chatbot-builder/chat`, {
+    messages,
+    currentStep,
+    courseData
+  });
+  return response.data;
+};
+
+
+export const saveChatbotDraft = async (draftData) => {
+  const response = await axios.post(`${API_URL}/course/chatbot-builder/draft`, draftData);
+  return response.data;
+};
+
+export const getChatbotDrafts = async () => {
+  const response = await axios.get(`${API_URL}/course/chatbot-builder/drafts`);
+  return response.data;
+};
+
+export const getChatbotDraft = async (draftId) => {
+  const response = await axios.get(`${API_URL}/course/chatbot-builder/draft/${draftId}`);
+  return response.data;
+};
+
+export const deleteChatbotDraft = async (draftId) => {
+  const response = await axios.delete(`${API_URL}/course/chatbot-builder/draft/${draftId}`);
+  return response.data;
+};
+
+export const renameChatbotDraft = async (draftId, name) => {
+  const response = await axios.post(`${API_URL}/course/chatbot-builder/draft/${draftId}/rename`, { name });
+  return response.data;
+};
+
+
+
+
 
 

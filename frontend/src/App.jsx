@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PlayCircle } from 'lucide-react';
+import { PlayCircle, Sparkles } from 'lucide-react';
 import Stepper from './components/Stepper';
 import SourceSelection from './components/SourceSelection';
 import CourseDetails from './components/CourseDetails';
@@ -8,6 +8,7 @@ import CoursesDashboard from './pages/CoursesDashboard';
 import CourseStructure from './components/CourseStructure';
 import CourseContent from './components/CourseContent';
 import LessonPreviewEditorModal from './components/LessonPreviewEditorModal';
+import ChatbotCourseCreator from './components/ChatbotCourseCreator';
 import { getCourseById } from './api';
 import logo from './assets/logo.png';
 
@@ -134,12 +135,20 @@ function App() {
                 <img src={logo} alt="Logo" className="h-10 w-auto object-contain" />
                 <h1 className="text-2xl font-bold text-slate-900 tracking-tight">AI Course Builder</h1>
              </div>
-            <button 
-              onClick={() => { resetBuilder(); setView('builder'); }}
-              className="bg-sky-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-sky-700 transition shadow-sm active:scale-95"
-            >
-              + Create New Course
-            </button>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setView('chatbot')}
+                className="bg-sky-600 hover:bg-sky-700 text-white px-6 py-2.5 rounded-xl font-bold transition shadow-sm active:scale-95 flex items-center gap-2"
+              >
+                <Sparkles className="w-4 h-4" /> Create via AI Chatbot
+              </button>
+              <button 
+                onClick={() => { resetBuilder(); setView('builder'); }}
+                className="bg-sky-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-sky-700 transition shadow-sm active:scale-95"
+              >
+                + Create New Course
+              </button>
+            </div>
           </div>
         </header>
         <main>
@@ -147,10 +156,19 @@ function App() {
             <CoursesDashboard 
                onViewCourse={handleViewCourse} 
                onEditCourse={handleEditCourse}
+               onStartChatbot={() => setView('chatbot')}
             />
           </div>
         </main>
       </div>
+    );
+  }
+
+  if (view === 'chatbot') {
+    return (
+      <ChatbotCourseCreator
+        onClose={() => setView('dashboard')}
+      />
     );
   }
 

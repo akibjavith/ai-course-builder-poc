@@ -384,3 +384,180 @@ def get_all_subjects_from_mysql():
     finally:
         cursor.close()
         conn.close()
+
+def get_local_db_connection():
+    db_port = int(os.getenv("LOCAL_DB_PORT", 3306))
+    return mysql.connector.connect(
+        host=os.getenv("LOCAL_DB_HOST", "localhost"),
+        user=os.getenv("LOCAL_DB_USER", "root"),
+        password=os.getenv("LOCAL_DB_PASSWORD", ""),
+        database=os.getenv("LOCAL_DB_NAME", "ai_course_db"),
+        port=db_port,
+        charset='utf8mb4',
+        collation='utf8mb4_unicode_ci'
+    )
+
+def init_draft_table():
+    # Make sure target database exists by connecting without DB name first
+    db_port = int(os.getenv("LOCAL_DB_PORT", 3306))
+    db_name = os.getenv("LOCAL_DB_NAME", "ai_course_db")
+    
+    # Try connecting without specifying DB name first to create the schema if missing
+    temp_conn = mysql.connector.connect(
+        host=os.getenv("LOCAL_DB_HOST", "localhost"),
+        user=os.getenv("LOCAL_DB_USER", "root"),
+        password=os.getenv("LOCAL_DB_PASSWORD", ""),
+        port=db_port
+    )
+    temp_cursor = temp_conn.cursor()
+    try:
+        temp_cursor.execute(f"CREATE DATABASE IF NOT EXISTS {db_name} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
+        temp_conn.commit()
+    except Exception as e:
+        print(f"Error creating local database {db_name}: {e}")
+    finally:
+        temp_cursor.close()
+        temp_conn.close()
+
+    # Now connect to the database and build the table
+    conn = get_local_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS corp_chatbot_course_draft (
+                id VARCHAR(50) PRIMARY KEY,
+                course_name VARCHAR(255),
+                current_step VARCHAR(50),
+                course_data LONGTEXT,
+                messages LONGTEXT,
+                created_at DATETIME,
+                updated_at DATETIME
+            )
+        """)
+        conn.commit()
+        print("DEBUG: Local MySQL drafts table initialized successfully.")
+    except Exception as e:
+        print(f"Error initializing local draft table: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+def save_chatbot_draft(draft_id: str, course_name: str, current_step: str, course_data: dict, messages: list):
+    conn = get_local_db_connection()
+    cursor = conn.cursor()
+    import datetime
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    course_data_json = json.dumps(course_data)
+    messages_json = json.dumps(messages)
+    
+    try:
+        # Check if exists
+        cursor.execute("SELECT id FROM corp_chatbot_course_draft WHERE id = %s", (draft_id,))
+        exists = cursor.fetchone()
+        
+        if exists:
+            sql = """
+                UPDATE corp_chatbot_course_draft SET
+                    course_name = %s,
+                    current_step = %s,
+                    course_data = %s,
+                    messages = %s,
+                    updated_at = %s
+                WHERE id = %s
+            """
+            cursor.execute(sql, (course_name, current_step, course_data_json, messages_json, now_str, draft_id))
+        else:
+            sql = """
+                INSERT INTO corp_chatbot_course_draft 
+                    (id, course_name, current_step, course_data, messages, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """
+            cursor.execute(sql, (draft_id, course_name, current_step, course_data_json, messages_json, now_str, now_str))
+            
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
+
+def get_chatbot_drafts():
+    conn = get_local_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT id, course_name, current_step, course_data, messages, updated_at FROM corp_chatbot_course_draft ORDER BY updated_at DESC")
+        rows = cursor.fetchall()
+        drafts = []
+        for r in rows:
+            try:
+                cdata = json.loads(r["course_data"]) if r["course_data"] else {}
+            except Exception:
+                cdata = {}
+            try:
+                msgs = json.loads(r["messages"]) if r["messages"] else []
+            except Exception:
+                msgs = []
+                
+            drafts.append({
+                "id": r["id"],
+                "courseName": r["course_name"],
+                "currentStep": r["current_step"],
+                "courseData": cdata,
+                "messages": msgs,
+                "updated_at": r["updated_at"].strftime("%Y-%m-%d %H:%M:%S") if hasattr(r["updated_at"], "strftime") else str(r["updated_at"])
+            })
+        return drafts
+    finally:
+        cursor.close()
+        conn.close()
+
+def get_chatbot_draft(draft_id: str):
+    conn = get_local_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT id, course_name, current_step, course_data, messages FROM corp_chatbot_course_draft WHERE id = %s", (draft_id,))
+        r = cursor.fetchone()
+        if not r:
+            return None
+        try:
+            cdata = json.loads(r["course_data"]) if r["course_data"] else {}
+        except Exception:
+            cdata = {}
+        try:
+            msgs = json.loads(r["messages"]) if r["messages"] else []
+        except Exception:
+            msgs = []
+            
+        return {
+            "id": r["id"],
+            "courseName": r["course_name"],
+            "currentStep": r["current_step"],
+            "courseData": cdata,
+            "messages": msgs
+        }
+    finally:
+        cursor.close()
+        conn.close()
+
+def delete_chatbot_draft(draft_id: str):
+    conn = get_local_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM corp_chatbot_course_draft WHERE id = %s", (draft_id,))
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
+
+def rename_chatbot_draft(draft_id: str, new_name: str):
+    conn = get_local_db_connection()
+    cursor = conn.cursor()
+    import datetime
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        cursor.execute("UPDATE corp_chatbot_course_draft SET course_name = %s, updated_at = %s WHERE id = %s", (new_name, now_str, draft_id))
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
+
+

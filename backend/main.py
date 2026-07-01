@@ -6,7 +6,8 @@ from schemas import (
     CourseStructureRequest,
     GenerateTitleRequest, GenerateTitleResponse, FetchWebRequest, FetchYouTubeRequest,
     GenerateOutlineBaseRequest, ExportChapterRequest, GenerateVoiceScriptReq, GenerateFlashcardsRequest,
-    GenerateMCQRequest, GenerateAssessmentRequest, ChatRequest, ThemeUploadRequest
+    GenerateMCQRequest, GenerateAssessmentRequest, ChatRequest, ThemeUploadRequest,
+    ChatbotBuilderRequest
 )
 from course_planner import generate_course_structure
 from content_generator import generate_chapter_content, generate_course_quiz
@@ -651,6 +652,140 @@ async def api_chat(req: ChatRequest):
     except Exception as e:
         logger.error(f"Error in chat completion API: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/course/chatbot-builder/chat")
+async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
+    from chatbot_builder_service import build_builder_system_prompt, parse_quick_replies
+    from chat_service import parse_metadata
+
+    logger.info(f"Chatbot Builder request received. Step: {req.currentStep}")
+
+    system_prompt = build_builder_system_prompt(
+        current_step=req.currentStep,
+        course_data=req.courseData
+    )
+
+    messages = [{"role": "system", "content": system_prompt}] + req.messages
+
+    try:
+        response = openai_client.chat.completions.create(
+            model=LLM_MODEL,
+            messages=messages,
+            temperature=0.7,
+            max_tokens=6000
+        )
+        
+        ai_reply = response.choices[0].message.content
+
+        # Parse metadata suggestions (details, structure, content prompts)
+        scope = "Details"
+        if req.currentStep == "OUTLINE_EDIT":
+            scope = "Structure"
+        elif req.currentStep in ("CONTENT_GEN", "QUIZ_GEN"):
+            scope = "Content"
+
+        reply_text, metadata, type_val = parse_metadata(
+            ai_reply=ai_reply,
+            scope=scope,
+            details=req.courseData.get("details", {})
+        )
+
+        # Parse quick-replies lists
+        reply_text, quick_replies = parse_quick_replies(reply_text)
+
+        return {
+            "status": "success",
+            "reply": reply_text,
+            "quickReplies": quick_replies,
+            "metadata": metadata,
+            "type": type_val
+        }
+    except Exception as e:
+        logger.error(f"Error in chatbot builder completion API: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+from schemas import ChatbotDraftSaveRequest
+
+# Draft database table startup init event
+@app.on_event("startup")
+def startup_db_init():
+    try:
+        from database import init_draft_table
+        init_draft_table()
+    except Exception as e:
+        logger.error(f"Failed to auto-initialize drafts MySQL table: {e}")
+
+# Get all drafts
+@app.get("/course/chatbot-builder/drafts")
+def api_get_chatbot_drafts():
+    try:
+        from database import get_chatbot_drafts
+        drafts = get_chatbot_drafts()
+        return {"status": "success", "drafts": drafts}
+    except Exception as e:
+        logger.error(f"Error fetching chatbot drafts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Get a specific draft
+@app.get("/course/chatbot-builder/draft/{draft_id}")
+def api_get_chatbot_draft(draft_id: str):
+    try:
+        from database import get_chatbot_draft
+        draft = get_chatbot_draft(draft_id)
+        if not draft:
+            raise HTTPException(status_code=404, detail="Draft not found")
+        return {"status": "success", "draft": draft}
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error fetching chatbot draft {draft_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Save or update a draft
+@app.post("/course/chatbot-builder/draft")
+def api_save_chatbot_draft(req: ChatbotDraftSaveRequest):
+    try:
+        from database import save_chatbot_draft
+        save_chatbot_draft(
+            draft_id=req.id,
+            course_name=req.courseName,
+            current_step=req.currentStep,
+            course_data=req.courseData,
+            messages=req.messages
+        )
+        return {"status": "success", "message": "Draft saved successfully"}
+    except Exception as e:
+        logger.error(f"Error saving chatbot draft: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Delete a draft
+@app.delete("/course/chatbot-builder/draft/{draft_id}")
+def api_delete_chatbot_draft(draft_id: str):
+    try:
+        from database import delete_chatbot_draft
+        delete_chatbot_draft(draft_id)
+        return {"status": "success", "message": "Draft deleted successfully"}
+    except Exception as e:
+        logger.error(f"Error deleting chatbot draft {draft_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+from schemas import RenameDraftRequest
+
+# Rename a draft
+@app.post("/course/chatbot-builder/draft/{draft_id}/rename")
+def api_rename_chatbot_draft(draft_id: str, req: RenameDraftRequest):
+    try:
+        from database import rename_chatbot_draft
+        rename_chatbot_draft(draft_id, req.name)
+        return {"status": "success", "message": "Draft renamed successfully"}
+    except Exception as e:
+        logger.error(f"Error renaming chatbot draft {draft_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
 
 
 

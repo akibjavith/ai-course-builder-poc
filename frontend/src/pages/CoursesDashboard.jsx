@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { getCourses, deleteCourse } from '../api';
 import { Loader2, BookOpen, Clock, Users, PlayCircle, ExternalLink, Trash2, Edit3 } from 'lucide-react';
 
-export default function CoursesDashboard({ onViewCourse, onEditCourse }) {
+export default function CoursesDashboard({ onViewCourse, onEditCourse, onStartChatbot }) {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
 
