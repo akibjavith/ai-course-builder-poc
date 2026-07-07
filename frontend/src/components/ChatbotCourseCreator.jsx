@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { chatWithChatbotBuilder, createCourse, uploadDoc, generateLessonContent, saveChatbotDraft, getChatbotDrafts, getChatbotDraft, deleteChatbotDraft, renameChatbotDraft, getSubjects } from '../api';
 import logo from '../assets/logo.png';
+import LessonPreviewEditorModal from './LessonPreviewEditorModal';
 
 const SUGGESTED_CHIPS = [
   "Create a Python programming course",
@@ -17,10 +18,8 @@ const SUGGESTED_CHIPS = [
 ];
 
 const STEPS = [
-  { id: 'GATHER_DETAILS', label: 'Details', icon: FileText },
+  { id: 'ASK_TOPIC', label: 'Details', icon: FileText },
   { id: 'OUTLINE_EDIT', label: 'Outline', icon: Layers },
-  { id: 'CONTENT_GEN', label: 'Lessons', icon: BookOpen },
-  { id: 'QUIZ_GEN', label: 'Quizzes', icon: HelpCircle },
   { id: 'READY', label: 'Publish', icon: CheckCircle }
 ];
 
@@ -31,10 +30,26 @@ export default function ChatbotCourseCreator({ onClose }) {
   const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [quickReplies, setQuickReplies] = useState([]);
-  const [currentStep, setCurrentStep] = useState('GATHER_DETAILS');
+  const [currentStep, setCurrentStep] = useState('ASK_TOPIC');
   const [deepThinkActive, setDeepThinkActive] = useState(false);
   const [generatingChapter, setGeneratingChapter] = useState(null);
   const [activeLessonModal, setActiveLessonModal] = useState(null);
+  
+  // Batch Content Gen and Preview States
+  const [isBatchGenerating, setIsBatchGenerating] = useState(false);
+  const [generationStatus, setGenerationStatus] = useState('idle'); // 'idle' | 'generating' | 'completed' | 'cancelled'
+  const cancelGenerationRef = useRef(false);
+  const chatInputRef = useRef(null);
+
+  const focusInput = () => {
+    setTimeout(() => {
+      if (chatInputRef.current) chatInputRef.current.focus();
+    }, 50);
+  };
+  const [batchTotal, setBatchTotal] = useState(0);
+  const [batchCompleted, setBatchCompleted] = useState(0);
+  const [batchCurrentTitle, setBatchCurrentTitle] = useState('');
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   
   // Collage Sidebar & DB Draft States
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -76,6 +91,7 @@ export default function ChatbotCourseCreator({ onClose }) {
   const [attachedFile, setAttachedFile] = useState(null);
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const isDirtyRef = useRef(false);
 
   // Load drafts list on mount and check for shared url parameter
   const fetchDraftsList = async () => {
@@ -153,6 +169,7 @@ export default function ChatbotCourseCreator({ onClose }) {
 
   // Auto-save active draft to MySQL DB when state updates
   useEffect(() => {
+    if (!isDirtyRef.current) return;
     if (activeDraftId && Array.isArray(messages) && messages.length > 0) {
       // Look for manual override name or extracted name, else fallback to first user message
       let derivedName = courseData?.details?.courseName || "";
@@ -194,18 +211,294 @@ export default function ChatbotCourseCreator({ onClose }) {
     }
   }, [messages, courseData, currentStep, activeDraftId]);
 
-  // Scroll to bottom on new messages
+  // Scroll to bottom on new messages and focus input
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
+    if (!loading && !isBatchGenerating) {
+      focusInput();
+    }
+  }, [messages, loading, isBatchGenerating]);
+
+  // Batch sequential content generation loop
+  const startBatchGeneration = async (currentCourseData) => {
+    setLoading(true);
+    const prepareMsg = {
+      role: 'assistant',
+      content: "Outline confirmed! Proposing prompt blueprints and generating all lesson contents sequentially. Please wait...",
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setMessages(prev => [...prev, prepareMsg]);
+
+    try {
+      const historyForApi = messages
+        .concat({ role: 'user', content: "Confirm outline and generate detailed prompt blueprints for all chapters." })
+        .filter(m => m && typeof m.content === 'string')
+        .map(m => ({ role: m.role || 'user', content: m.content || '' }));
+
+      const res = await chatWithChatbotBuilder(historyForApi, 'PROMPT_GEN', currentCourseData);
+      let nextCourseData = { ...currentCourseData };
+
+      if (res && res.status === 'success' && res.metadata) {
+        if (res.metadata.prompts) {
+          nextCourseData.content = (currentCourseData.content || []).map(c => {
+            const match = res.metadata.prompts.find(p => p && p.title === c.chapter_title);
+            return match ? { ...c, prompt: match.prompt } : c;
+          });
+        }
+        setCourseData(nextCourseData);
+      }
+
+      const chaptersToGenerate = [];
+      (nextCourseData.structure?.modules || []).forEach((mod, mIdx) => {
+        (mod?.chapters || []).forEach((chap, cIdx) => {
+          chaptersToGenerate.push({
+            mIdx,
+            cIdx,
+            chapterTitle: chap.title,
+            moduleTitle: mod.title
+          });
+        });
+      });
+
+      if (chaptersToGenerate.length === 0) {
+        throw new Error("No chapters found in the course structure.");
+      }
+
+      cancelGenerationRef.current = false;
+      setGenerationStatus('generating');
+      setIsBatchGenerating(true);
+      setBatchTotal(chaptersToGenerate.length);
+      setBatchCompleted(0);
+      setBatchCurrentTitle(chaptersToGenerate[0].chapterTitle);
+      setLoading(false);
+
+      let updatedCourse = { ...nextCourseData };
+
+      for (let i = 0; i < chaptersToGenerate.length; i++) {
+        if (cancelGenerationRef.current) {
+          setGenerationStatus('cancelled');
+          setIsBatchGenerating(false);
+          setLoading(false);
+          const cancelMsg = {
+            role: 'assistant',
+            content: "Course content generation has been cancelled. Let me know if you want to resume or make adjustments to the syllabus outline.",
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          setMessages(prev => [...prev, cancelMsg]);
+          setQuickReplies(["Generate Course", "Create a New Course"]);
+          return;
+        }
+
+        const { mIdx, cIdx, chapterTitle, moduleTitle } = chaptersToGenerate[i];
+        setBatchCurrentTitle(chapterTitle);
+
+        const chapterObj = updatedCourse.content?.find(c => c.module_title === moduleTitle && c.chapter_title === chapterTitle);
+        const chapterPrompt = chapterObj?.prompt || `Generate a detailed structured lesson on ${chapterTitle}`;
+
+        try {
+          const resBlock = await generateLessonContent({
+            title: chapterTitle,
+            module_title: moduleTitle,
+            prompt: chapterPrompt,
+            type: 'html',
+            course_details: updatedCourse.details
+          });
+
+          if (resBlock && resBlock.blocks) {
+            const latestModules = JSON.parse(JSON.stringify(updatedCourse.structure?.modules || []));
+            const targetChapter = latestModules[mIdx]?.chapters?.[cIdx];
+            if (targetChapter) {
+              targetChapter.contents = [{
+                type: 'lesson-blocks',
+                title: resBlock.title || chapterTitle,
+                blocks: resBlock.blocks,
+                source: 'ai',
+                completed: true,
+                timestamp: new Date().toISOString()
+              }];
+              targetChapter.content = {
+                content_type: 'lesson-blocks',
+                html_content: '',
+                completed: true
+              };
+            }
+            updatedCourse = {
+              ...updatedCourse,
+              structure: { ...updatedCourse.structure, modules: latestModules }
+            };
+            setCourseData(updatedCourse);
+          }
+        } catch (err) {
+          console.error(`Failed to generate chapter block content for "${chapterTitle}"`, err);
+        }
+
+        setBatchCompleted(i + 1);
+      }
+
+      setGenerationStatus('completed');
+      setIsBatchGenerating(false);
+      setCurrentStep('READY');
+      
+      // Request final congratulations and summary from AI builder
+      const finalHistory = messages.concat(
+        { role: 'user', content: "Content generation is complete. Congratulate me." }
+      ).map(m => ({ role: m.role || 'user', content: m.content || '' }));
+      
+      setLoading(true);
+      const resReady = await chatWithChatbotBuilder(finalHistory, 'READY', updatedCourse);
+      setLoading(false);
+
+      if (resReady && resReady.status === 'success') {
+        const finalMsg = {
+          role: 'assistant',
+          content: resReady.reply || "Content generation is successfully complete! You can now preview and publish your course.",
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        setMessages(prev => [...prev, finalMsg]);
+        setQuickReplies(["Create a New Course"]);
+      }
+
+    } catch (err) {
+      console.error("Batch content generation failed", err);
+      alert("An error occurred during content generation.");
+      setIsBatchGenerating(false);
+      setLoading(false);
+    }
+  };
 
   const handleSendMessage = async (textToSend, overrideStep = null, overrideCourseData = null) => {
-    if (!textToSend.trim() && !attachedFile) return;
-    if (loading) return;
+    if (!textToSend || !textToSend.trim()) return;
+    if (loading || isBatchGenerating) return;
 
+    const lowercaseText = textToSend.trim().toLowerCase();
+
+    // Intercept generic greetings in Step 1
+    const greetings = ["hi", "hello", "hey", "hola", "greetings", "start", "get started", "new course"];
+    if (currentStep === 'ASK_TOPIC' && greetings.includes(lowercaseText)) {
+      isDirtyRef.current = true;
+      if (!started) setStarted(true);
+      const userMsg = {
+        role: 'user',
+        content: textToSend,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      const assistantMsg = {
+        role: 'assistant',
+        content: "Hello! I am your AI course architect. What subject or topic would you like to create a course on?",
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setMessages(prev => [...prev, userMsg, assistantMsg]);
+      setInputMessage('');
+      setQuickReplies(SUGGESTED_CHIPS);
+      return;
+    }
+
+    // Direct interceptions for preview, publish and reset
+    if (lowercaseText === "preview course") {
+      setIsPreviewOpen(true);
+      return;
+    }
+    if (lowercaseText === "publish course") {
+      handlePublish();
+      return;
+    }
+    if (lowercaseText === "create a new course" || lowercaseText === "create new course") {
+      handleResetWithoutConfirm();
+      return;
+    }
+
+    // Lock step transitions locally
+    let nextStepToUse = currentStep;
+    let nextCourseData = { ...courseData };
+
+    if (!overrideStep) {
+      if (currentStep === 'ASK_TOPIC') {
+        nextCourseData.details = {
+          ...courseData.details,
+          courseName: textToSend,
+          subject: textToSend,
+          price: "0",
+          evaluator: "Sarah Johnson",
+          courseType: "Custom Course"
+        };
+        nextStepToUse = 'ASK_AUDIENCE';
+        setCurrentStep('ASK_AUDIENCE');
+      } else if (currentStep === 'ASK_AUDIENCE') {
+        nextCourseData.details = {
+          ...courseData.details,
+          requirements: textToSend
+        };
+        nextStepToUse = 'ASK_DIFFICULTY';
+        setCurrentStep('ASK_DIFFICULTY');
+      } else if (currentStep === 'ASK_DIFFICULTY') {
+        nextCourseData.details = {
+          ...courseData.details,
+          level: textToSend.toLowerCase()
+        };
+        nextStepToUse = 'ASK_OBJECTIVE';
+        setCurrentStep('ASK_OBJECTIVE');
+      } else if (currentStep === 'ASK_OBJECTIVE') {
+        nextCourseData.details = {
+          ...courseData.details,
+          description: textToSend
+        };
+        nextStepToUse = 'ASK_LANGUAGE';
+        setCurrentStep('ASK_LANGUAGE');
+      } else if (currentStep === 'ASK_LANGUAGE') {
+        nextCourseData.details = {
+          ...courseData.details,
+          language: textToSend
+        };
+        nextStepToUse = 'ASK_DURATION';
+        setCurrentStep('ASK_DURATION');
+      } else if (currentStep === 'ASK_DURATION') {
+        const hours = parseInt(textToSend.replace(/[^0-9]/g, '')) || 10;
+        nextCourseData.details = {
+          ...courseData.details,
+          duration: String(hours)
+        };
+        nextCourseData.sourceType = 'external';
+        nextStepToUse = 'CONFIRM_DETAILS';
+        setCurrentStep('CONFIRM_DETAILS');
+        textToSend = `${textToSend}. Please summarize all course requirements.`;
+      } else if (currentStep === 'CONFIRM_DETAILS') {
+        const isConfirm = ["looks good", "looks fine", "looks ok", "continue", "confirm"].some(kw => lowercaseText.includes(kw));
+        if (isConfirm) {
+          nextStepToUse = 'OUTLINE_EDIT';
+          setCurrentStep('OUTLINE_EDIT');
+          textToSend = "Looks good. Please generate the course structure outline now.";
+        } else {
+          nextStepToUse = 'CONFIRM_DETAILS';
+        }
+      } else if (currentStep === 'OUTLINE_EDIT') {
+        const isConfirm = ["looks good", "confirm outline", "looks perfect", "perfect", "confirm syllabus"].some(kw => lowercaseText.includes(kw));
+        if (isConfirm) {
+          nextStepToUse = 'CONFIRM_GENERATE';
+          setCurrentStep('CONFIRM_GENERATE');
+          textToSend = "Confirm syllabus structure. Ask if ready to generate content.";
+        } else {
+          nextStepToUse = 'OUTLINE_EDIT';
+        }
+      } else if (currentStep === 'CONFIRM_GENERATE') {
+        const generateKeywords = ["generate course", "generate content", "generate", "yes", "continue", "start", "proceed", "let's go", "go ahead"];
+        const wantsGenerate = generateKeywords.some(kw => lowercaseText.includes(kw));
+        if (wantsGenerate) {
+          startBatchGeneration(courseData);
+          return;
+        } else {
+          nextStepToUse = 'CONFIRM_GENERATE';
+        }
+      }
+    } else {
+      nextStepToUse = overrideStep;
+      if (overrideCourseData) {
+        nextCourseData = overrideCourseData;
+      }
+    }
+
+    isDirtyRef.current = true;
     let finalMessageText = textToSend;
 
-    // Transition to chat workspace if on landing screen
     if (!started) {
       setStarted(true);
     }
@@ -230,9 +523,8 @@ export default function ChatbotCourseCreator({ onClose }) {
           content: m.content || ''
         }));
 
-      const stepToUse = overrideStep || currentStep;
-      const courseDataToUse = overrideCourseData || courseData;
-      const res = await chatWithChatbotBuilder(historyForApi, stepToUse, courseDataToUse);
+      setCourseData(nextCourseData);
+      const res = await chatWithChatbotBuilder(historyForApi, nextStepToUse, nextCourseData);
 
       if (res && res.status === 'success') {
         const assistantMsg = {
@@ -244,7 +536,34 @@ export default function ChatbotCourseCreator({ onClose }) {
         };
 
         setMessages(prev => [...prev, assistantMsg]);
-        setQuickReplies(res.quickReplies || []);
+
+        // Dynamically override or supplement quick replies based on the NEXT step
+        let replies = res.quickReplies || [];
+        const activeStep = nextStepToUse;
+        if (activeStep === 'ASK_TOPIC') {
+          replies = SUGGESTED_CHIPS;
+        } else if (activeStep === 'ASK_AUDIENCE') {
+          replies = ["Beginners", "College Students", "Working Professionals", "Developers", "Anyone interested"];
+        } else if (activeStep === 'ASK_DIFFICULTY') {
+          replies = ["Beginner", "Intermediate", "Advanced"];
+        } else if (activeStep === 'ASK_OBJECTIVE') {
+          replies = getObjectiveSuggestions(nextCourseData.details?.subject || nextCourseData.details?.courseName || '');
+        } else if (activeStep === 'ASK_LANGUAGE') {
+          replies = ["English", "Tamil", "Hindi", "Custom"];
+        } else if (activeStep === 'ASK_DURATION') {
+          replies = ["5 Hours", "10 Hours", "20 Hours", "40 Hours"];
+        } else if (activeStep === 'ASK_REFERENCE') {
+          replies = [];
+        } else if (activeStep === 'CONFIRM_DETAILS') {
+          replies = ["Continue", "Edit Details"];
+        } else if (activeStep === 'OUTLINE_EDIT') {
+          replies = ["Looks Good, Confirm Outline!", "Add a module", "Make it shorter"];
+        } else if (activeStep === 'CONFIRM_GENERATE') {
+          replies = ["Generate Course", "Cancel"];
+        } else if (activeStep === 'READY') {
+          replies = ["Preview Course", "Publish Course", "Create a New Course"];
+        }
+        setQuickReplies(replies);
 
         // Safe merging of metadata suggestions into courseData
         if (res.metadata) {
@@ -287,22 +606,6 @@ export default function ChatbotCourseCreator({ onClose }) {
                   contents: []
                 };
               });
-            } else if (res.type === 'content') {
-              if (res.metadata.prompts) {
-                updated.content = (prev.content || []).map(c => {
-                  const match = res.metadata.prompts.find(p => p && p.title === c.chapter_title);
-                  return match ? { ...c, prompt: match.prompt } : c;
-                });
-              } else if (res.metadata.prompt) {
-                updated.content = (prev.content || []).map(c => {
-                  if (c.chapter_title === res.metadata.title) {
-                    return { ...c, prompt: res.metadata.prompt };
-                  }
-                  return c;
-                });
-              }
-            } else if (res.type === 'quiz') {
-              updated.quiz = res.metadata.questions || res.metadata || [];
             }
             return updated;
           });
@@ -358,11 +661,13 @@ export default function ChatbotCourseCreator({ onClose }) {
     try {
       const res = await uploadDoc(file);
       if (res && res.status === 'success') {
-        setCourseData(prev => ({
-          ...prev,
+        const updatedCourse = {
+          ...courseData,
           sourceType: 'internal'
-        }));
-        handleSendMessage(`I've uploaded the document "${file.name}" to help create the course content. Please outline the syllabus based on it.`);
+        };
+        setCourseData(updatedCourse);
+        setCurrentStep('CONFIRM_DETAILS');
+        handleSendMessage(`Uploaded reference document "${file.name}". Please summarize all requirements.`, 'CONFIRM_DETAILS', updatedCourse);
       }
     } catch (err) {
       console.error("Failed to upload document", err);
@@ -391,8 +696,14 @@ export default function ChatbotCourseCreator({ onClose }) {
       const result = await createCourse(payload);
       if (result && result.status === 'success') {
         localStorage.removeItem('ai_chatbot_course_draft');
-        alert("Success! Your AI course has been published to your academy.");
-        onClose();
+        
+        const publishSuccessMsg = {
+          role: 'assistant',
+          content: `🎉 Congratulations! Your course **"${courseData.details?.courseName || 'Untitled Course'}"** has been successfully published to your academy database!\n\nIf you want to start a brand new course, click the **"Create a New Course"** button below.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        setMessages(prev => [...prev, publishSuccessMsg]);
+        setQuickReplies(["Create a New Course"]);
       }
     } catch (err) {
       console.error("Publishing error", err);
@@ -400,6 +711,12 @@ export default function ChatbotCourseCreator({ onClose }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCancelGeneration = () => {
+    cancelGenerationRef.current = true;
+    setGenerationStatus('cancelled');
+    setIsBatchGenerating(false);
   };
 
   const handleReset = () => {
@@ -474,7 +791,7 @@ export default function ChatbotCourseCreator({ onClose }) {
           content: [],
           quiz: []
         });
-        setCurrentStep(d.currentStep || 'GATHER_DETAILS');
+        setCurrentStep(d.currentStep || 'ASK_TOPIC');
         setStarted(true);
         if (d.courseData?.details) {
           setActiveCardDetails({ ...d.courseData.details, price: "0" });
@@ -532,10 +849,12 @@ export default function ChatbotCourseCreator({ onClose }) {
       quiz: []
     });
     setStarted(false);
-    setCurrentStep('GATHER_DETAILS');
+    setCurrentStep('ASK_TOPIC');
     setQuickReplies([]);
     setActiveCardDetails(null);
     setAttachedFile(null);
+    setGenerationStatus('idle');
+    cancelGenerationRef.current = false;
   };
 
   // Group drafts dynamically by modify date
@@ -932,314 +1251,165 @@ export default function ChatbotCourseCreator({ onClose }) {
   };
 
   // 1. Safe Details card renderer
-  const renderInlineDetails = (details, idx) => {
+  const renderInlineDetails = (details) => {
     if (!details) return null;
     
-    const latestDetailsCardIndex = messages
-      .map((m, i) => m.metadataType === 'details' ? i : -1)
-      .filter(idx => idx !== -1)
-      .pop();
-    const isLatest = idx === latestDetailsCardIndex;
-
-    const data = isLatest ? (activeCardDetails || details) : details;
-    if (!data || !data.courseName) return null;
-
-    const CODE_OPTIONS = [
-      "NA", "Python", "SQL", "C++", "C", "MySQL", "PostgreSQL", "Java", "JavaScript"
-    ];
-
-    const LANGUAGE_OPTIONS = ["English", "Spanish", "French", "German", "Hindi"];
-
-    // local function to update details
-    const updateDetailsField = (field, value) => {
-      setActiveCardDetails(prev => {
-        const current = prev || { ...details, price: "0" };
-        const updated = { ...current, [field]: value };
-        if (field === 'subject') {
-          setSubjectSearchText(value);
-        }
-        return updated;
-      });
-    };
-
-    if (isLatest) {
-      const displayedSubject = subjectSearchText || data.subject || '';
-      
-      const durationVal = parseInt(activeCardDetails?.duration ?? details.duration);
-      const durationNum = isNaN(durationVal) ? 14 : durationVal;
-
-      return (
-        <div className="mt-4 bg-gradient-to-br from-indigo-50/95 via-white/95 to-sky-50/95 border border-indigo-200/80 rounded-2xl p-6 space-y-4 text-left shadow-xl animate-fade-in relative z-10 text-indigo-950">
-          <div className="flex justify-between items-center border-b border-indigo-100 pb-2.5">
-            <h4 className="font-extrabold text-xs text-indigo-800 flex items-center gap-1.5 uppercase tracking-wider">
-              <FileText className="w-3.5 h-3.5" /> Course Details Editor
-            </h4>
-            <span className="text-[8px] bg-indigo-100 text-indigo-700 border border-indigo-200/40 px-2 py-0.5 rounded uppercase font-black tracking-widest animate-pulse">
-              Active Draft
-            </span>
-          </div>
-
-          <div className="space-y-3.5">
-            {/* Title */}
-            <div>
-              <label className="text-[8px] uppercase tracking-widest text-indigo-500 font-extrabold block mb-1">Course Title</label>
-              <input
-                type="text"
-                value={activeCardDetails?.courseName ?? details.courseName ?? ''}
-                onChange={(e) => updateDetailsField('courseName', e.target.value)}
-                className="w-full bg-white/90 border border-indigo-200/50 rounded-xl px-3 py-2 text-xs text-indigo-950 placeholder-indigo-300 focus:border-indigo-550 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 transition shadow-sm"
-                placeholder="e.g. Intro to Python Programming"
-              />
-            </div>
-
-            {/* Description */}
-            <div>
-              <label className="text-[8px] uppercase tracking-widest text-indigo-500 font-extrabold block mb-1">Description</label>
-              <textarea
-                value={activeCardDetails?.description ?? details.description ?? ''}
-                onChange={(e) => updateDetailsField('description', e.target.value)}
-                className="w-full bg-white/90 border border-indigo-200/50 rounded-xl px-3 py-2 text-xs text-indigo-950 placeholder-indigo-300 focus:border-indigo-550 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 transition h-20 resize-none shadow-sm"
-                placeholder="What will students learn in this course?"
-              />
-            </div>
-
-            {/* Dropdowns */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* Searchable Subject Combobox */}
-              <div className="relative text-left">
-                <label className="text-[8px] uppercase tracking-widest text-indigo-500 font-extrabold block mb-1">Subject</label>
-                <input
-                  type="text"
-                  value={displayedSubject}
-                  onFocus={() => setSubjectDropdownOpen(true)}
-                  onBlur={() => {
-                    setTimeout(() => setSubjectDropdownOpen(false), 250);
-                  }}
-                  onChange={(e) => {
-                    setSubjectSearchText(e.target.value);
-                    setSubjectDropdownOpen(true);
-                    updateDetailsField('subject', e.target.value);
-                  }}
-                  className="w-full bg-white/90 border border-indigo-200/50 rounded-xl px-3 py-2 text-xs text-indigo-950 placeholder-indigo-300 focus:border-indigo-550 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 transition shadow-sm"
-                  placeholder="Search subject..."
-                />
-                
-                {/* Dropdown Suggestions List */}
-                {subjectDropdownOpen && (
-                  <div className="absolute left-0 right-0 mt-1 bg-white border border-indigo-100 rounded-xl max-h-40 overflow-y-auto shadow-2xl z-50 text-left divide-y divide-indigo-50 scrollbar-thin scrollbar-thumb-indigo-200">
-                    {dbSubjects
-                      .filter(s => 
-                        (s || '').toLowerCase().includes(displayedSubject.toLowerCase())
-                      )
-                      .map((s, sIdx) => (
-                        <div
-                          key={sIdx}
-                          onMouseDown={() => {
-                            setSubjectSearchText(s);
-                            updateDetailsField('subject', s);
-                            setSubjectDropdownOpen(false);
-                          }}
-                          className="px-3 py-2 hover:bg-indigo-50 hover:text-indigo-900 cursor-pointer text-xs transition text-indigo-950"
-                        >
-                          {s}
-                        </div>
-                      ))}
-                    {dbSubjects.filter(s => 
-                      (s || '').toLowerCase().includes(displayedSubject.toLowerCase())
-                    ).length === 0 && (
-                      <div className="px-3 py-2 text-indigo-400 text-xs italic">
-                        No matching subjects
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label className="text-[8px] uppercase tracking-widest text-indigo-500 font-extrabold block mb-1">Code Support</label>
-                <select
-                  value={activeCardDetails?.scriptingLanguage ?? details.scriptingLanguage ?? 'NA'}
-                  onChange={(e) => updateDetailsField('scriptingLanguage', e.target.value)}
-                  className="w-full bg-white/90 border border-indigo-200/50 rounded-xl px-2.5 py-2 text-xs text-indigo-950 focus:border-indigo-550 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition shadow-sm cursor-pointer"
-                >
-                  {CODE_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-[8px] uppercase tracking-widest text-indigo-500 font-extrabold block mb-1">Language</label>
-                <select
-                  value={activeCardDetails?.language ?? details.language ?? 'English'}
-                  onChange={(e) => updateDetailsField('language', e.target.value)}
-                  className="w-full bg-white/90 border border-indigo-200/50 rounded-xl px-2.5 py-2 text-xs text-indigo-950 focus:border-indigo-550 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition shadow-sm cursor-pointer"
-                >
-                  {LANGUAGE_OPTIONS.map(l => <option key={l} value={l}>{l}</option>)}
-                </select>
-              </div>
-            </div>
-
-            {/* Level Select Pills */}
-            <div>
-              <label className="text-[8px] uppercase tracking-widest text-indigo-500 font-extrabold block mb-1.5">Difficulty Level</label>
-              <div className="flex gap-2">
-                {['beginner', 'intermediate', 'advanced'].map(lvl => (
-                  <button
-                     key={lvl}
-                     type="button"
-                     onClick={() => updateDetailsField('level', lvl)}
-                     className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition ${
-                       (activeCardDetails?.level ?? details.level) === lvl 
-                         ? 'bg-indigo-600 text-white shadow-md' 
-                         : 'bg-white/90 text-indigo-700 border border-indigo-150/60 hover:bg-indigo-50 hover:text-indigo-900 transition'
-                     }`}
-                  >
-                    {lvl}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Duration Slider */}
-            <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="text-[8px] uppercase tracking-widest text-indigo-500 font-extrabold block">Duration</label>
-                <span className="text-[10px] text-indigo-600 font-black">{durationNum} Days</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <input
-                  type="range"
-                  min="7"
-                  max="60"
-                  value={durationNum}
-                  onChange={(e) => updateDetailsField('duration', e.target.value)}
-                  className="flex-1 accent-indigo-600 bg-indigo-100 rounded-lg appearance-none h-1 cursor-pointer"
-                />
-              </div>
-            </div>
-
-            {/* Prerequisites/Requirements */}
-            <div>
-              <label className="text-[8px] uppercase tracking-widest text-indigo-500 font-extrabold block mb-1">Requirements</label>
-              <input
-                type="text"
-                value={activeCardDetails?.requirements ?? details.requirements ?? ''}
-                onChange={(e) => updateDetailsField('requirements', e.target.value)}
-                className="w-full bg-white/90 border border-indigo-200/50 rounded-xl px-3 py-2 text-xs text-indigo-950 placeholder-indigo-300 focus:border-indigo-550 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 transition shadow-sm"
-                placeholder="e.g. Basic internet knowledge, laptop"
-              />
-            </div>
-          </div>
-
-          {/* Submit CTA */}
-          <div className="border-t border-indigo-100 pt-4 mt-2 flex gap-3">
-            <button
-              onClick={() => {
-                handleSendMessage("Please regenerate the course details suggestion card with a fresh name and description.");
-              }}
-              className="flex-1 bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 hover:border-indigo-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm"
-            >
-              <RotateCcw className="w-3.5 h-3.5" /> Regenerate
-            </button>
-
-            <button
-              onClick={() => {
-                const finalDetails = {
-                  ...details,
-                  ...activeCardDetails,
-                  price: "0"
-                };
-                const updatedCourseData = {
-                  ...courseData,
-                  details: finalDetails
-                };
-                setCourseData(updatedCourseData);
-                setCurrentStep('OUTLINE_EDIT');
-                handleSendMessage(
-                  `I confirm these details: "${finalDetails.courseName}". Please generate the syllabus outline next.`,
-                  'OUTLINE_EDIT',
-                  updatedCourseData
-                );
-              }}
-              className="flex-[2] bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-900/10"
-            >
-              <Check className="w-3.5 h-3.5" /> Confirm & Propose Syllabus
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    // Read-only static layout (for historical cards in the timeline, price-free)
+    // Read-only static layout matching the outline card style
     return (
-      <div className="mt-4 bg-gradient-to-br from-indigo-50/60 to-sky-50/60 border border-indigo-100/50 rounded-2xl p-5 space-y-4 text-left shadow-sm text-indigo-950">
-        <div className="flex justify-between items-center border-b border-indigo-100/50 pb-2">
-          <h4 className="font-bold text-xs text-indigo-800 flex items-center gap-1.5 uppercase tracking-wider">
-            <FileText className="w-3.5 h-3.5" /> Details Proposal
+      <div className="mt-4 bg-white border border-slate-200 shadow-lg rounded-2xl p-5 space-y-4 text-left animate-fade-in text-slate-800">
+        <div className="flex justify-between items-center border-b border-slate-100 pb-2.5">
+          <h4 className="font-extrabold text-xs text-indigo-650 flex items-center gap-1.5 uppercase tracking-wider">
+            <FileText className="w-3.5 h-3.5" /> Course Parameters
           </h4>
-          <span className="text-[9px] bg-indigo-100/50 text-indigo-700 border border-indigo-200/30 px-2 py-0.5 rounded uppercase font-extrabold tracking-wider">
-            {data.level || 'beginner'}
+          <span className="text-[9px] bg-emerald-50 text-emerald-600 border border-emerald-100 px-2 py-0.5 rounded font-black uppercase tracking-wider">
+            Details Summary
           </span>
         </div>
-        <div className="space-y-2.5">
-          <div>
-            <span className="text-[8px] uppercase tracking-widest text-indigo-500 font-extrabold block">Course Title</span>
-            <p className="text-indigo-950 font-black text-xs">{data.courseName}</p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div className="bg-slate-50 border border-slate-100/60 p-3 rounded-xl">
+            <span className="text-[8px] uppercase tracking-widest text-slate-400 font-extrabold block mb-0.5">Topic</span>
+            <span className="font-bold text-slate-800">{details.subject || details.courseName}</span>
           </div>
-          <div>
-            <span className="text-[8px] uppercase tracking-widest text-indigo-500 font-extrabold block">Description</span>
-            <p className="text-indigo-900 text-xs leading-relaxed">{data.description}</p>
+          <div className="bg-slate-50 border border-slate-100/60 p-3 rounded-xl">
+            <span className="text-[8px] uppercase tracking-widest text-slate-400 font-extrabold block mb-0.5">Target Audience</span>
+            <span className="font-bold text-slate-800">{details.requirements || 'Beginners'}</span>
           </div>
-          <div className="grid grid-cols-2 gap-2 text-[10px] border-t border-indigo-100/40 pt-3">
-            <div>
-              <span className="text-[8px] uppercase tracking-widest text-indigo-500/80 font-bold block">Subject</span>
-              <span className="text-indigo-950 font-semibold">{data.subject || 'General'}</span>
-            </div>
-            <div>
-              <span className="text-[8px] uppercase tracking-widest text-indigo-500/80 font-bold block">Code Support</span>
-              <span className="text-indigo-950 font-semibold">{data.scriptingLanguage || 'NA'}</span>
-            </div>
-            <div>
-              <span className="text-[8px] uppercase tracking-widest text-indigo-500/80 font-bold block">Duration</span>
-              <span className="text-indigo-950 font-semibold">{data.duration || 14} Days</span>
-            </div>
-            <div>
-              <span className="text-[8px] uppercase tracking-widest text-indigo-500/80 font-bold block">Language</span>
-              <span className="text-indigo-950 font-semibold">{data.language || 'English'}</span>
-            </div>
+          <div className="bg-slate-50 border border-slate-100/60 p-3 rounded-xl">
+            <span className="text-[8px] uppercase tracking-widest text-slate-400 font-extrabold block mb-0.5">Difficulty Level</span>
+            <span className="font-bold text-slate-800 uppercase">{details.level || 'Beginner'}</span>
+          </div>
+          <div className="bg-slate-50 border border-slate-100/60 p-3 rounded-xl">
+            <span className="text-[8px] uppercase tracking-widest text-slate-400 font-extrabold block mb-0.5">Objective</span>
+            <span className="font-bold text-slate-800">{details.description || 'Learn from Scratch'}</span>
+          </div>
+          <div className="bg-slate-50 border border-slate-100/60 p-3 rounded-xl">
+            <span className="text-[8px] uppercase tracking-widest text-slate-400 font-extrabold block mb-0.5">Language</span>
+            <span className="font-bold text-slate-800">{details.language || 'English'}</span>
+          </div>
+          <div className="bg-slate-50 border border-slate-100/60 p-3 rounded-xl">
+            <span className="text-[8px] uppercase tracking-widest text-slate-400 font-extrabold block mb-0.5">Duration</span>
+            <span className="font-bold text-slate-800">{details.duration ? `${details.duration} Hours` : '10 Hours'}</span>
           </div>
         </div>
       </div>
     );
   };
 
+  // Dynamically generate objective suggestion chips based on the course topic
+  const getObjectiveSuggestions = (topic) => {
+    const cleanTopic = (topic || "").toLowerCase();
+    if (cleanTopic.includes("python")) {
+      return [
+        "Learn Python programming from scratch",
+        "Master Python automation and scripting",
+        "Build web applications with Django and Flask"
+      ];
+    }
+    if (cleanTopic.includes("security") || cleanTopic.includes("cyber")) {
+      return [
+        "Learn ethical hacking and penetration testing",
+        "Understand network security and firewalls",
+        "Master security threat and vulnerability analysis"
+      ];
+    }
+    if (cleanTopic.includes("data") || cleanTopic.includes("machine learning") || cleanTopic.includes("ai")) {
+      return [
+        "Master data analysis with Pandas and NumPy",
+        "Build predictive machine learning models",
+        "Understand neural networks and deep learning"
+      ];
+    }
+    if (cleanTopic.includes("grammar") || cleanTopic.includes("english")) {
+      return [
+        "Master English grammar and sentence structure",
+        "Improve business writing and communication",
+        "Learn spoken English and conversation skills"
+      ];
+    }
+    // Fallback templates using the custom topic
+    const capitalized = topic ? (topic.charAt(0).toUpperCase() + topic.slice(1)) : "this subject";
+    return [
+      `Learn the core fundamentals of ${capitalized}`,
+      `Master advanced techniques and tools in ${capitalized}`,
+      `Build practical real-world projects with ${capitalized}`
+    ];
+  };
+
+  // Basic markdown text formatter for chat bubble rendering
+  const formatChatMessage = (text) => {
+    if (!text) return null;
+    
+    // Split by lines
+    const lines = text.split('\n');
+    return lines.map((line, lIdx) => {
+      // 1. Bullet list items
+      const isBullet = line.trim().startsWith('- ') || line.trim().startsWith('* ') || line.trim().startsWith('• ');
+      let content = line;
+      if (isBullet) {
+        content = line.trim().replace(/^[\-\*•]\s+/, '');
+      }
+
+      // 2. Bold text helper: replace **abc** with <strong>abc</strong>
+      const parts = [];
+      let lastIdx = 0;
+      const regex = /\*\*([^*]+)\*\*/g;
+      let match;
+      while ((match = regex.exec(content)) !== null) {
+        if (match.index > lastIdx) {
+          parts.push(content.substring(lastIdx, match.index));
+        }
+        parts.push(<strong key={match.index} className="font-black text-slate-905">{match[1]}</strong>);
+        lastIdx = regex.lastIndex;
+      }
+      if (lastIdx < content.length) {
+        parts.push(content.substring(lastIdx));
+      }
+
+      if (isBullet) {
+        return (
+          <li key={lIdx} className="list-disc ml-5 text-sm my-0.5 text-slate-700">
+            {parts}
+          </li>
+        );
+      }
+
+      return (
+        <p key={lIdx} className="text-sm my-1 text-slate-800 leading-relaxed min-h-[1rem]">
+          {parts}
+        </p>
+      );
+    });
+  };
+
   // 2. Safe Syllabus tree renderer
   const renderInlineStructure = (structure) => {
     if (!structure || !structure.modules || !Array.isArray(structure.modules) || structure.modules.length === 0) return null;
     return (
-      <div className="mt-4 bg-slate-900/95 border border-slate-700/80 rounded-2xl p-5 space-y-4 text-left shadow-xl animate-fade-in">
-        <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-          <h4 className="font-bold text-xs text-indigo-400 flex items-center gap-1.5 uppercase tracking-wider">
+      <div className="mt-4 bg-white border border-slate-200 shadow-lg rounded-2xl p-5 space-y-4 text-left animate-fade-in">
+        <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+          <h4 className="font-bold text-xs text-indigo-600 flex items-center gap-1.5 uppercase tracking-wider">
             <Layers className="w-3.5 h-3.5" /> Syllabus Proposal
           </h4>
-          <span className="text-[9px] bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-2.5 py-0.5 rounded font-black uppercase tracking-wider">
+          <span className="text-[9px] bg-indigo-50 text-indigo-600 border border-indigo-100 px-2.5 py-0.5 rounded font-black uppercase tracking-wider">
             {structure.modules.length} Modules
           </span>
         </div>
-        <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-800">
+        <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-200">
           {structure.modules.map((m, mIdx) => {
             if (!m) return null;
             return (
-              <div key={mIdx} className="bg-slate-950/80 border border-slate-900 rounded-xl p-3 space-y-2">
-                <div className="flex items-center gap-2 text-slate-200 font-bold text-xs">
-                  <span className="bg-sky-500/20 text-sky-400 px-2 py-0.5 rounded text-[8px] font-black uppercase">Mod {mIdx+1}</span>
+              <div key={mIdx} className="bg-slate-50 border border-slate-100 rounded-xl p-3.5 space-y-2">
+                <div className="flex items-center gap-2 text-slate-800 font-bold text-xs">
+                  <span className="bg-sky-100 text-sky-700 px-2 py-0.5 rounded text-[8px] font-black uppercase">Mod {mIdx+1}</span>
                   <span>{m.title}</span>
                 </div>
-                <div className="pl-3.5 space-y-1 border-l border-slate-800 text-[11px] text-slate-400">
+                <div className="pl-3.5 space-y-1.5 border-l border-slate-200 text-[11px] text-slate-500">
                   {Array.isArray(m.chapters) && m.chapters.map((c, cIdx) => {
                     if (!c) return null;
                     return (
                       <div key={cIdx} className="flex items-center gap-1.5 py-0.5">
-                        <span className="w-1 h-1 rounded-full bg-slate-600"></span>
+                        <span className="w-1 h-1 rounded-full bg-slate-400"></span>
                         <span>{c.title}</span>
                       </div>
                     );
@@ -1249,17 +1419,18 @@ export default function ChatbotCourseCreator({ onClose }) {
             );
           })}
         </div>
-        <div className="border-t border-slate-850 pt-3">
-          <button
-            onClick={() => {
-              setCurrentStep('CONTENT_GEN');
-              handleSendMessage("Outline is perfect. Start drafting chapter lesson prompts!", 'CONTENT_GEN');
-            }}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1 shadow-md"
-          >
-            Confirm Syllabus Outline <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
+        {currentStep === 'OUTLINE_EDIT' && (
+          <div className="border-t border-slate-100 pt-3">
+            <button
+              onClick={() => {
+                handleSendMessage("Looks Good, Confirm Outline!");
+              }}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1 shadow-md"
+            >
+              Confirm Syllabus Outline <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
       </div>
     );
   };
@@ -1726,13 +1897,13 @@ export default function ChatbotCourseCreator({ onClose }) {
                             ? 'bg-indigo-600 text-white rounded-2xl rounded-br-none' 
                             : 'bg-white border border-slate-200/80 text-slate-800 rounded-2xl rounded-bl-none'
                         }`}>
-                          <div className="text-sm whitespace-pre-line">{msg.content}</div>
+                           {msg.metadataType !== 'structure' && msg.metadataType !== 'details' && (
+                             <div className="space-y-0.5">{formatChatMessage(msg.content)}</div>
+                           )}
 
-                          {/* Render custom metadata cards inline inside the bubble */}
-                          {!isUser && msg.metadataType === 'details' && renderInlineDetails(msg.metadata, idx)}
-                          {!isUser && msg.metadataType === 'structure' && renderInlineStructure(msg.metadata)}
-                          {!isUser && msg.metadataType === 'content' && renderInlineContent(courseData.structure?.modules)}
-                          {!isUser && msg.metadataType === 'quiz' && renderInlineQuiz(msg.metadata)}
+                           {/* Render custom metadata cards inline inside the bubble */}
+                           {!isUser && msg.metadataType === 'details' && renderInlineDetails(msg.metadata)}
+                           {!isUser && msg.metadataType === 'structure' && renderInlineStructure(msg.metadata)}
                           
                           <div className="text-[9px] text-right mt-1.5 opacity-60">
                             {msg.timestamp}
@@ -1796,6 +1967,85 @@ export default function ChatbotCourseCreator({ onClose }) {
                   </div>
                 )}
 
+                {(isBatchGenerating || generationStatus === 'completed') && (
+                  <div className="flex justify-start animate-fade-in mt-4">
+                    <div className="bg-white border border-slate-200 shadow-md p-5 rounded-2xl rounded-bl-none max-w-[85%] w-full flex flex-col gap-4 text-slate-800">
+                      <div className="flex items-center gap-4">
+                        <div className="relative w-12 h-12 flex-shrink-0">
+                          {/* Background circle */}
+                          <svg className="w-full h-full transform -rotate-90">
+                            <circle
+                              cx="24"
+                              cy="24"
+                              r="20"
+                              strokeWidth="3.5"
+                              stroke="#f1f5f9"
+                              fill="transparent"
+                            />
+                            {/* Animated progress circle */}
+                            <circle
+                              cx="24"
+                              cy="24"
+                              r="20"
+                              strokeWidth="3.5"
+                              stroke={generationStatus === 'completed' ? '#10b981' : '#6366f1'}
+                              fill="transparent"
+                              strokeDasharray={125.6}
+                              strokeDashoffset={generationStatus === 'completed' ? 0 : (125.6 - (125.6 * Math.min(batchCompleted, batchTotal)) / batchTotal)}
+                              strokeLinecap="round"
+                              className="transition-all duration-500 ease-out"
+                            />
+                          </svg>
+                          {/* Percentage text */}
+                          <div className={`absolute inset-0 flex items-center justify-center text-[10px] font-black ${generationStatus === 'completed' ? 'text-emerald-600' : 'text-indigo-600'}`}>
+                            {generationStatus === 'completed' ? '100%' : `${Math.round((batchCompleted / batchTotal) * 100)}%`}
+                          </div>
+                        </div>
+                        <div className="flex-1 space-y-1">
+                          <span className={`text-[9px] uppercase tracking-widest font-black block ${generationStatus === 'completed' ? 'text-emerald-600' : 'text-indigo-600'}`}>
+                            {generationStatus === 'completed' ? 'Content Generation Complete' : 'Writing Course Material'}
+                          </span>
+                          <h5 className="text-xs font-bold text-slate-800 line-clamp-1">
+                            {generationStatus === 'completed' ? 'All lessons generated successfully!' : batchCurrentTitle}
+                          </h5>
+                          <p className="text-[10px] text-slate-500 font-medium">
+                            Completed {batchCompleted} of {batchTotal} chapters...
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons inside Card */}
+                      {isBatchGenerating && (
+                        <div className="border-t border-slate-100 pt-3">
+                          <button
+                            onClick={() => handleCancelGeneration()}
+                            className="w-full bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/50 font-bold py-2 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1 shadow-sm"
+                          >
+                            <X className="w-3.5 h-3.5" /> Cancel Course Generation
+                          </button>
+                        </div>
+                      )}
+
+                      {generationStatus === 'completed' && (
+                        <div className="border-t border-slate-100 pt-3 flex gap-2.5">
+                          <button
+                            onClick={() => setIsPreviewOpen(true)}
+                            className="flex-1 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/60 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm"
+                          >
+                            <Eye className="w-3.5 h-3.5" /> Preview Course
+                          </button>
+                          <button
+                            onClick={() => handlePublish()}
+                            className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-indigo-900/10"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" /> Publish Course
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div ref={messagesEndRef} />
               </div>
             </div>
@@ -1822,11 +2072,12 @@ export default function ChatbotCourseCreator({ onClose }) {
             <div className="p-4 bg-transparent border-t border-slate-200/20 backdrop-blur-sm">
               <div className="max-w-4xl mx-auto bg-white/85 backdrop-blur-md rounded-2xl border border-slate-200/60 p-2.5 shadow-md flex flex-col gap-2">
                 <textarea
+                  ref={chatInputRef}
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
-                  placeholder="Tell the AI architect what to add or modify..."
+                   placeholder={isBatchGenerating ? "Generating course content..." : "Tell the AI architect what to add or modify..."}
                   className="w-full bg-transparent resize-none focus:outline-none text-sm text-slate-800 placeholder-slate-400 px-2 py-1 h-14"
-                  disabled={loading}
+                  disabled={loading || isBatchGenerating}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
@@ -1837,16 +2088,19 @@ export default function ChatbotCourseCreator({ onClose }) {
                 <div className="flex justify-between items-center border-t border-slate-100/60 pt-2 px-2">
                   <div className="flex gap-2 items-center">
                     <button 
-                      onClick={() => setDeepThinkActive(prev => !prev)}
-                      className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition ${deepThinkActive ? 'bg-indigo-50/80 text-indigo-600 border border-indigo-100' : 'text-slate-500 hover:bg-slate-150/40'}`}
+                      onClick={() => !isBatchGenerating && setDeepThinkActive(prev => !prev)}
+                      disabled={isBatchGenerating}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition ${deepThinkActive ? 'bg-indigo-50/80 text-indigo-600 border border-indigo-100' : 'text-slate-500 hover:bg-slate-150/40'} ${isBatchGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       <Lightbulb className="w-3.5 h-3.5" />
                       <span>Deep Think</span>
                     </button>
+
+
                   </div>
                   <button
                     onClick={() => handleSendMessage(inputMessage)}
-                    disabled={!inputMessage.trim() || loading}
+                    disabled={!inputMessage.trim() || loading || isBatchGenerating}
                     className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1 transition shadow active:scale-95 disabled:opacity-50"
                   >
                     <span>Send</span>
@@ -1904,6 +2158,17 @@ export default function ChatbotCourseCreator({ onClose }) {
         </div>
       )}
 
+      {/* 4. Full Course Previewer Modal Overlay */}
+      {isPreviewOpen && (
+        <LessonPreviewEditorModal
+          courseData={courseData}
+          updateCourseData={(updated) => setCourseData(updated)}
+          initialMIdx={0}
+          initialCIdx={0}
+          readOnly={true}
+          onClose={() => setIsPreviewOpen(false)}
+        />
+      )}
     </div>
   );
 }

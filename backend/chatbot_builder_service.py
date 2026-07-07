@@ -7,65 +7,108 @@ logger = logging.getLogger("chatbot_builder_service")
 
 def build_builder_system_prompt(current_step: str, course_data: dict) -> str:
     """
-    Builds a system prompt specifically tailored for the Conversational Chatbot Course Creator.
+    Builds a system prompt specifically tailored for the step-by-step Conversational Course Creator.
     """
     details = course_data.get("details", {})
     structure = course_data.get("structure", {})
-    modules = structure.get("modules", [])
     
-    # Format current progress context for the LLM
     progress_context = f"""
 CURRENT COURSE DRAFT STATE:
 - Details: {json.dumps(details)}
-- Structure (Modules/Chapters count): {len(modules)} modules defined.
+- Structure: {json.dumps(structure)}
 """
     
     step_instructions = ""
-    if current_step == "GATHER_DETAILS":
+    if current_step == "ASK_TOPIC":
         step_instructions = """
-Goal: Gather course details (name, description, subject, difficulty level, duration, requirements/audience, language, and scriptingLanguage).
+Goal: Ask the user what subject or topic they would like to create a course on.
 Instructions:
-- Ask the user friendly questions to gather these details.
-- Proactively suggest details (name, description, level, duration) based on a simple topic keyword (e.g. if they say "Python", propose a complete details card immediately!).
-- When updating or proposing details, output a Course Details JSON block wrapped in [METADATA]...[/METADATA] tags.
-- Keep the conversational reply text above the details suggestion card extremely short and brief (exactly a single sentence, e.g. "Here are the suggested course details for your topic:"). Do not add any conversational filler or lists before the card.
-- Provide dynamic [QUICK_REPLIES] to help them select fields like level ("beginner", "intermediate", "advanced"), duration ("7 days", "14 days", "30 days"), or to accept your suggestions ("Confirm Details", "Change Name").
+- Ask exactly one friendly question.
+- Do NOT generate any details card, summaries, outlines, or modules. Keep it purely conversational.
+"""
+    elif current_step == "ASK_AUDIENCE":
+        step_instructions = """
+Goal: Ask the user who the target audience is for this course.
+Instructions:
+- Ask exactly one question to collect the audience (e.g. Beginners, college students, working professionals).
+- Do NOT suggest or generate any other details, outlines, or JSON blocks.
+"""
+    elif current_step == "ASK_DIFFICULTY":
+        step_instructions = """
+Goal: Ask the user what difficulty level this course should have.
+Instructions:
+- Ask exactly one question to collect the difficulty level (Beginner, Intermediate, Advanced).
+- Do NOT generate any other details, outlines, or JSON blocks.
+"""
+    elif current_step == "ASK_OBJECTIVE":
+        step_instructions = """
+Goal: Ask the user what the primary objective of this course is.
+Instructions:
+- Ask exactly one question to collect the objective (e.g. Learn Python from scratch, prepare for interviews).
+- Do NOT generate any other details, outlines, or JSON blocks.
+"""
+    elif current_step == "ASK_LANGUAGE":
+        step_instructions = """
+Goal: Ask the user what language the course should be generated in.
+Instructions:
+- Ask exactly one question to collect the language (English, Tamil, Hindi, etc.).
+- Do NOT generate any other details, outlines, or JSON blocks.
+"""
+    elif current_step == "ASK_DURATION":
+        step_instructions = """
+Goal: Ask the user what the approximate course duration in hours should be.
+Instructions:
+- Ask exactly one question to collect the course duration (e.g., 5 Hours, 10 Hours, 20 Hours, 40 Hours).
+- Do NOT generate any other details, outlines, or JSON blocks.
+"""
+    elif current_step == "ASK_REFERENCE":
+        step_instructions = """
+Goal: Ask the user if they want to upload any reference material (PDF, DOCX, PPT) or skip this step.
+Instructions:
+- Ask exactly one question about uploading reference material or skipping.
+- Do NOT generate any other details, outlines, or JSON blocks.
+"""
+    elif current_step == "CONFIRM_DETAILS":
+        step_instructions = """
+Goal: Summarize all collected details and ask for confirmation.
+Instructions:
+- Show a clean text summary of the collected requirements. You MUST ONLY include:
+  * Topic
+  * Target Audience
+  * Difficulty Level
+  * Objective
+  * Language
+  * Duration
+- CRITICAL: Do NOT show "Price", "Course Type", "Evaluator", "Scripting Language", or "Reference Material" in this text summary.
+- Ask: "Would you like to modify any of these details before I create the course structure?"
+- If the user requests edits (e.g., "change duration to 10 hours"), process it, update the details metadata, show the updated summary matching the rules above, and output the updated Details JSON block wrapped in [METADATA]...[/METADATA]. If details exist or are updated, you MUST include the Details JSON metadata block in that response.
 """
     elif current_step == "OUTLINE_EDIT":
         step_instructions = """
-Goal: Establish and refine the course structure (Modules and Chapters).
+Goal: Generate and refine the course structure syllabus outline (Modules and Chapters).
 Instructions:
-- If details are ready but structure is empty, immediately suggest a detailed course structure (modules and chapters) appropriate for the course level and topic.
-- Show the outline to the user and ask if they like it or want to add/remove modules or chapters.
-- If they ask for modifications, apply them and return the updated structure.
-- Always output the updated Course Structure JSON block wrapped in [METADATA]...[/METADATA] tags when proposing or modifying it.
-- Provide [QUICK_REPLIES] like: ["Looks Good, Confirm Outline!", "Add a module", "Make it shorter"].
+- You MUST immediately output the Course Structure JSON block wrapped in [METADATA]...[/METADATA] tags containing modules and chapters based on the confirmed details.
+- Scale syllabus outline size dynamically based on requested duration hours:
+  * Short courses (< 5 hours): 2 modules, 2 chapters each.
+  * Medium courses (5 to 15 hours): 3-4 modules, 3 chapters each.
+  * Long courses (> 15 hours): 5-8 modules, 3-4 chapters each.
+- The user can request outline edits (e.g., add, remove, rename modules/chapters). Update the structure JSON and return the complete updated structure JSON wrapped in [METADATA]...[/METADATA] immediately.
+- Do NOT generate any lesson content blocks or text summaries yet; generate ONLY the syllabus structure outline.
+- Ask the user to review the course structure outline.
 """
-    elif current_step == "CONTENT_GEN":
+    elif current_step == "CONFIRM_GENERATE":
         step_instructions = """
-Goal: Generate high-quality lesson content prompts for the chapters.
+Goal: Ask if they are ready to generate content.
 Instructions:
-- Instruct the user that we are setting up lesson content prompts for each chapter.
-- You can generate all content prompts at once or chapter by chapter.
-- When generating prompts, you must output them wrapped in [METADATA]...[/METADATA] using the schema.
-- Provide [QUICK_REPLIES] like: ["Generate All Chapter Prompts", "Customize Lesson 1", "Proceed to Quizzes"].
-"""
-    elif current_step == "QUIZ_GEN":
-        step_instructions = """
-Goal: Add course assessment quizzes.
-Instructions:
-- Discuss the final exam or assessments. Propose generating a comprehensive final quiz.
-- Generate quiz questions and options.
-- Provide [QUICK_REPLIES] like: ["Generate Final Quiz", "Skip Quiz", "Looks Good, Proceed!"].
+- Ask exactly: "The course structure has been finalized. Would you like me to start generating the complete course content?"
+- Do NOT output any list of modules, chapters, or syllabus outline in the conversational reply text. Keep the message extremely short and clean.
+- Do NOT output any JSON metadata cards or summaries.
 """
     elif current_step == "READY":
         step_instructions = """
-Goal: Final confirmation and publishing.
+Goal: Publishing confirmation.
 Instructions:
-- Congratulate the user on completing the draft!
-- Sum up what has been created: course title, number of modules, and exam questions.
-- Instruct them to click the "Publish" button to finalize.
-- Provide [QUICK_REPLIES] like: ["Publish Course", "Go back to Details", "Restart Course Builder"].
+- Congratulate the user on generating the course. Explain that they can preview the course using the "Preview Course" button, or publish it using the "Publish Course" button.
 """
 
     system_prompt = f"""You are the AI Course Architect, a friendly and professional instructional designer. 
@@ -77,19 +120,11 @@ You are currently in the stage: **{current_step}**.
 {progress_context}
 
 CRITICAL RULES FOR METADATA SUGGESTION CARDS:
-- If you generate or modify details, outline structures, or content prompts, you MUST wrap the complete JSON object inside '[METADATA]' and '[/METADATA]' tags.
+- If you generate or modify details or outline structures, you MUST wrap the complete JSON object inside '[METADATA]' and '[/METADATA]' tags.
 - NEVER include raw JSON or markdown code blocks (like ```json) in your conversational reply text. Any JSON structure must reside ONLY inside [METADATA]...[/METADATA].
 - Schemas:
   - Details: {{ "courseType": "Custom Course", "subject": "...", "courseName": "...", "description": "...", "price": "0", "duration": "...", "requirements": "...", "level": "...", "language": "...", "scriptingLanguage": "...", "evaluator": "..." }}
   - Structure: {{ "modules": [{{ "title": "...", "chapters": [{{ "title": "..." }}] }}] }}
-  - Content Prompts: {{ "prompts": [{{ "module": "...", "title": "...", "prompt": "..." }}] }}
-
-
-CRITICAL RULES FOR INLINE QUICK REPLIES:
-- You MUST provide a list of relevant quick-reply options for the current conversation step to guide the user.
-- Wrap this list as a JSON array of strings inside '[QUICK_REPLIES]' and '[/QUICK_REPLIES]' tags.
-- E.g., [QUICK_REPLIES]["Beginner", "Intermediate", "Advanced"][/QUICK_REPLIES] or [QUICK_REPLIES]["Looks Good!", "Modify Title"][/QUICK_REPLIES]
-- Never put these inside markdown code blocks. Keep them strictly in [QUICK_REPLIES] tags.
 
 Keep your response conversational, friendly, encouraging, and brief.
 """

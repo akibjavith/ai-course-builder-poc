@@ -65,7 +65,20 @@ def save_course_to_mysql(course_data: Dict[str, Any]):
         subject_name = details.get("subject", "General")
         cursor.execute("SELECT subject_id FROM m_subject WHERE subject_name = %s", (subject_name,))
         result = cursor.fetchone()
-        subject_id = result[0] if result else 1
+        if result:
+            subject_id = result[0]
+        else:
+            try:
+                cursor.execute(
+                    "INSERT INTO m_subject (subject_name, tenant_id) VALUES (%s, 1)", 
+                    (subject_name,)
+                )
+                subject_id = cursor.lastrowid
+            except Exception as insert_err:
+                print(f"DEBUG: Failed to insert new subject '{subject_name}', falling back to first available. Error: {insert_err}")
+                cursor.execute("SELECT subject_id FROM m_subject LIMIT 1")
+                first_subject = cursor.fetchone()
+                subject_id = first_subject[0] if first_subject else 1
         
         # Determine elearn_flag
         has_content = 1 if any(mod.get("chapters") for mod in modules) else 0

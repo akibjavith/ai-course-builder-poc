@@ -121,7 +121,7 @@ def build_system_prompt(scope: str, details: dict, course_data: dict, available_
         "VALID DROPDOWN OPTIONS (YOU MUST USE ONLY THESE):\n"
         "- courseType: Must be \"Custom Course\" or \"SCORM Course\"\n"
         "- subject: Must be EXACTLY one of: \"English\", \"Maths\", \"Science\", \"Social\", \"Physics\", \"Chemistry\", \"Biology\", \"History\", \"Geography\", \"Economics\", \"Computer Science\", \"Data Science\", \"Machine Learning\", \"AI\", \"Python Programming\", \"Digital Marketing\", \"Business Management\".\n"
-        "- duration: Must be a NUMERIC string (e.g., \"14\" for 14 days). Do NOT include \"days\" or \"weeks\".\n"
+        "- duration: Must be a NUMERIC string representing total hours (e.g., \"10\" for 10 hours). Do NOT include \"hours\" or \"hrs\".\n"
         "- level: Must be \"beginner\", \"intermediate\", or \"advanced\".\n"
         "- scriptingLanguage: Must be EXACTLY one of: \"NA\", \"Python\", \"SQL\", \"C++\", \"C\", \"MySQL\", \"PostgreSQL\", \"Java\", \"JavaScript\". CRITICAL: If the course topic, name, description, or subject is related to one of these programming/database options (e.g. Python, SQL, C++, C, MySQL, PostgreSQL, Java, JavaScript), you MUST set \"scriptingLanguage\" to that specific language (e.g. \"Java\" for Java programming, \"Python\" for Python/Data Science, etc.) instead of defaulting to \"NA\".\n"
         "- evaluator: Choose one from: \"Sarah Johnson\", \"Michael Chen\", \"Dr. Emily Smith\", \"Alex Rivera\"."
@@ -293,19 +293,39 @@ def parse_metadata(ai_reply: str, scope: str, details: dict) -> tuple:
     Returns (reply_text, metadata, type_val)
     """
     lower_reply = ai_reply.lower()
-    start_tag = "[metadata]"
-    end_tag = "[/metadata]"
     
+    tags_to_try = [
+        ("[metadata]", "[/metadata]"),
+        ("[meta data]", "[/meta data]"),
+        ("[meta_data]", "[/meta_data]"),
+        ("[metadata_block]", "[/metadata_block]")
+    ]
+    
+    start_idx = -1
+    end_idx = -1
+    start_tag_matched = ""
+    end_tag_matched = ""
+    
+    for start_tag, end_tag in tags_to_try:
+        idx = lower_reply.find(start_tag)
+        if idx != -1:
+            start_idx = idx
+            start_tag_matched = start_tag
+            end_tag_matched = end_tag
+            # Try to find corresponding end tag
+            e_idx = lower_reply.find(end_tag, start_idx + len(start_tag))
+            if e_idx != -1:
+                end_idx = e_idx
+            break
+            
     metadata_str = None
     text_part = ""
     
-    start_idx = lower_reply.find(start_tag)
     if start_idx != -1:
-        content_start = start_idx + len(start_tag)
-        end_idx = lower_reply.find(end_tag, content_start)
+        content_start = start_idx + len(start_tag_matched)
         if end_idx != -1:
             metadata_str = ai_reply[content_start:end_idx]
-            text_part = ai_reply[:start_idx] + ai_reply[end_idx + len(end_tag):]
+            text_part = ai_reply[:start_idx] + ai_reply[end_idx + len(end_tag_matched):]
         else:
             metadata_str = ai_reply[content_start:]
             text_part = ai_reply[:start_idx]
@@ -315,12 +335,33 @@ def parse_metadata(ai_reply: str, scope: str, details: dict) -> tuple:
         first_bracket = ai_reply.find('[')
         if first_brace != -1 or first_bracket != -1:
             start_idx = min(first_brace, first_bracket) if (first_brace != -1 and first_bracket != -1) else (first_brace if first_brace != -1 else first_bracket)
-            metadata_str = ai_reply[start_idx:]
+            fallback_str = ai_reply[start_idx:]
+            # Truncate anything after the last curly brace or bracket to keep only valid JSON structure
+            last_brace = fallback_str.rfind('}')
+            last_bracket = fallback_str.rfind(']')
+            if last_brace != -1 or last_bracket != -1:
+                end_idx = max(last_brace, last_bracket) + 1
+                metadata_str = fallback_str[:end_idx]
+            else:
+                metadata_str = fallback_str
             text_part = ai_reply[:start_idx]
             
-    reply_text = text_part.replace('[METADATA]', '').replace('[/METADATA]', '').replace('[metadata]', '').replace('[/metadata]', '').strip()
+    reply_text = text_part
+    for start_tag, end_tag in tags_to_try:
+        reply_text = reply_text.replace(start_tag.upper(), '') \
+                               .replace(end_tag.upper(), '') \
+                               .replace(start_tag.lower(), '') \
+                               .replace(end_tag.lower(), '')
+    reply_text = reply_text.strip()
+    
     if not metadata_str and not reply_text:
-        reply_text = ai_reply.replace('[METADATA]', '').replace('[/METADATA]', '').replace('[metadata]', '').replace('[/metadata]', '').strip()
+        reply_text = ai_reply
+        for start_tag, end_tag in tags_to_try:
+            reply_text = reply_text.replace(start_tag.upper(), '') \
+                                   .replace(end_tag.upper(), '') \
+                                   .replace(start_tag.lower(), '') \
+                                   .replace(end_tag.lower(), '')
+        reply_text = reply_text.strip()
 
     metadata = None
     type_val = None
