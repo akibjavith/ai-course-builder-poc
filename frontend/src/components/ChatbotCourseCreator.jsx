@@ -6,7 +6,7 @@ import {
   Mic, Lightbulb, Compass, ThumbsUp, ThumbsDown, Copy, 
   RotateCcw, X, Search, Bell, Info, Plus, PanelLeft
 } from 'lucide-react';
-import { chatWithChatbotBuilder, createCourse, uploadDoc, generateLessonContent, saveChatbotDraft, getChatbotDrafts, getChatbotDraft, deleteChatbotDraft, renameChatbotDraft, getSubjects } from '../api';
+import { chatWithChatbotBuilder, createCourse, uploadDoc, generateLessonContent, saveChatbotDraft, getChatbotDrafts, getChatbotDraft, deleteChatbotDraft, renameChatbotDraft, getSubjects, getCourseById } from '../api';
 import logo from '../assets/logo.png';
 import LessonPreviewEditorModal from './LessonPreviewEditorModal';
 
@@ -91,7 +91,7 @@ export default function ChatbotCourseCreator({ onClose }) {
   const [attachedFile, setAttachedFile] = useState(null);
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
-  const isDirtyRef = useRef(false);
+  const lastSavedDataRef = useRef(null);
 
   // Load drafts list on mount and check for shared url parameter
   const fetchDraftsList = async () => {
@@ -169,8 +169,17 @@ export default function ChatbotCourseCreator({ onClose }) {
 
   // Auto-save active draft to MySQL DB when state updates
   useEffect(() => {
-    if (!isDirtyRef.current) return;
     if (activeDraftId && Array.isArray(messages) && messages.length > 0) {
+      const currentState = JSON.stringify({
+        messages,
+        courseData,
+        currentStep
+      });
+
+      if (lastSavedDataRef.current === currentState) {
+        return; // Skip saving if data hasn't changed since last save/load
+      }
+
       // Look for manual override name or extracted name, else fallback to first user message
       let derivedName = courseData?.details?.courseName || "";
       if (!derivedName.trim()) {
@@ -201,6 +210,7 @@ export default function ChatbotCourseCreator({ onClose }) {
       
       saveChatbotDraft(payload)
         .then(() => {
+          lastSavedDataRef.current = currentState; // Mark current state as saved
           getChatbotDrafts().then(res => {
             if (res && res.status === 'success') {
               setDraftsList(res.drafts || []);
@@ -375,7 +385,6 @@ export default function ChatbotCourseCreator({ onClose }) {
     // Intercept generic greetings in Step 1
     const greetings = ["hi", "hello", "hey", "hola", "greetings", "start", "get started", "new course"];
     if (currentStep === 'ASK_TOPIC' && greetings.includes(lowercaseText)) {
-      isDirtyRef.current = true;
       if (!started) setStarted(true);
       const userMsg = {
         role: 'user',
@@ -496,7 +505,6 @@ export default function ChatbotCourseCreator({ onClose }) {
       }
     }
 
-    isDirtyRef.current = true;
     let finalMessageText = textToSend;
 
     if (!started) {
@@ -697,6 +705,12 @@ export default function ChatbotCourseCreator({ onClose }) {
       if (result && result.status === 'success') {
         localStorage.removeItem('ai_chatbot_course_draft');
         
+        // Save the MySQL course ID to states to block republishing
+        setCourseData(prev => ({
+          ...prev,
+          mysql_id: result.mysql_course_id
+        }));
+
         const publishSuccessMsg = {
           role: 'assistant',
           content: `🎉 Congratulations! Your course **"${courseData.details?.courseName || 'Untitled Course'}"** has been successfully published to your academy database!\n\nIf you want to start a brand new course, click the **"Create a New Course"** button below.`,
@@ -782,6 +796,19 @@ export default function ChatbotCourseCreator({ onClose }) {
       const res = await getChatbotDraft(id);
       if (res && res.status === 'success' && res.draft) {
         const d = res.draft;
+        
+        // Verify if the published course still exists in MySQL if it has a mysql_id
+        if (d.courseData?.mysql_id) {
+          try {
+            const verifyRes = await getCourseById(d.courseData.mysql_id);
+            if (!verifyRes || !verifyRes.course) {
+              d.courseData.mysql_id = null;
+            }
+          } catch (verifyErr) {
+            d.courseData.mysql_id = null;
+          }
+        }
+
         setActiveDraftId(d.id);
         setMessages(d.messages || []);
         setCourseData(d.courseData || {
@@ -797,6 +824,33 @@ export default function ChatbotCourseCreator({ onClose }) {
           setActiveCardDetails({ ...d.courseData.details, price: "0" });
         } else {
           setActiveCardDetails(null);
+        }
+
+        // Initialize lastSavedDataRef to prevent duplicate save on load
+        lastSavedDataRef.current = JSON.stringify({
+          messages: d.messages || [],
+          courseData: d.courseData || {},
+          currentStep: d.currentStep || 'ASK_TOPIC'
+        });
+
+        // Restore generation status and counts if step is READY
+        if (d.currentStep === 'READY') {
+          let totalChaps = 0;
+          let completedChaps = 0;
+          (d.courseData?.structure?.modules || []).forEach(mod => {
+            (mod?.chapters || []).forEach(chap => {
+              totalChaps++;
+              if (chap.contents && chap.contents.length > 0) {
+                completedChaps++;
+              }
+            });
+          });
+          setBatchTotal(totalChaps);
+          setBatchCompleted(completedChaps);
+          setGenerationStatus('completed');
+        } else {
+          setGenerationStatus('idle');
+          setIsBatchGenerating(false);
         }
       }
     } catch (err) {
@@ -855,6 +909,7 @@ export default function ChatbotCourseCreator({ onClose }) {
     setAttachedFile(null);
     setGenerationStatus('idle');
     cancelGenerationRef.current = false;
+    lastSavedDataRef.current = null;
   };
 
   // Group drafts dynamically by modify date
@@ -1272,7 +1327,7 @@ export default function ChatbotCourseCreator({ onClose }) {
             <span className="font-bold text-slate-800">{details.subject || details.courseName}</span>
           </div>
           <div className="bg-slate-50 border border-slate-100/60 p-3 rounded-xl">
-            <span className="text-[8px] uppercase tracking-widest text-slate-400 font-extrabold block mb-0.5">Target Audience</span>
+            <span className="text-[8px] uppercase tracking-widest text-slate-400 font-extrabold block mb-0.5">Learner Profile</span>
             <span className="font-bold text-slate-800">{details.requirements || 'Beginners'}</span>
           </div>
           <div className="bg-slate-50 border border-slate-100/60 p-3 rounded-xl">
@@ -1280,7 +1335,7 @@ export default function ChatbotCourseCreator({ onClose }) {
             <span className="font-bold text-slate-800 uppercase">{details.level || 'Beginner'}</span>
           </div>
           <div className="bg-slate-50 border border-slate-100/60 p-3 rounded-xl">
-            <span className="text-[8px] uppercase tracking-widest text-slate-400 font-extrabold block mb-0.5">Objective</span>
+            <span className="text-[8px] uppercase tracking-widest text-slate-400 font-extrabold block mb-0.5">Your Objective</span>
             <span className="font-bold text-slate-800">{details.description || 'Learn from Scratch'}</span>
           </div>
           <div className="bg-slate-50 border border-slate-100/60 p-3 rounded-xl">
@@ -1852,12 +1907,18 @@ export default function ChatbotCourseCreator({ onClose }) {
                 </button>
 
                 {courseData?.details?.courseName && (
-                  <button
-                    onClick={handlePublish}
-                    className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black px-4 py-1.5 rounded-xl text-xs transition active:scale-95 shadow-md flex items-center gap-1"
-                  >
-                    <CheckCircle className="w-3.5 h-3.5" /> Publish Course
-                  </button>
+                  courseData.mysql_id ? (
+                    <span className="bg-emerald-50 text-emerald-600 border border-emerald-200 px-4 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1">
+                      <CheckCircle className="w-3.5 h-3.5" /> Published
+                    </span>
+                  ) : (
+                    <button
+                      onClick={handlePublish}
+                      className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black px-4 py-1.5 rounded-xl text-xs transition active:scale-95 shadow-md flex items-center gap-1"
+                    >
+                      <CheckCircle className="w-3.5 h-3.5" /> Publish Course
+                    </button>
+                  )
                 )}
                 
                 <button 
@@ -1897,7 +1958,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                             ? 'bg-indigo-600 text-white rounded-2xl rounded-br-none' 
                             : 'bg-white border border-slate-200/80 text-slate-800 rounded-2xl rounded-bl-none'
                         }`}>
-                           {msg.metadataType !== 'structure' && msg.metadataType !== 'details' && (
+                           {msg.content && msg.content.trim() && (
                              <div className="space-y-0.5">{formatChatMessage(msg.content)}</div>
                            )}
 
@@ -2034,12 +2095,18 @@ export default function ChatbotCourseCreator({ onClose }) {
                           >
                             <Eye className="w-3.5 h-3.5" /> Preview Course
                           </button>
-                          <button
-                            onClick={() => handlePublish()}
-                            className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-indigo-900/10"
-                          >
-                            <CheckCircle className="w-3.5 h-3.5" /> Publish Course
-                          </button>
+                          {courseData.mysql_id ? (
+                            <div className="flex-1 bg-emerald-50 text-emerald-600 border border-emerald-250 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-inner">
+                              <CheckCircle className="w-3.5 h-3.5" /> Published to Academy
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handlePublish()}
+                              className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-indigo-900/10"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" /> Publish Course
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>

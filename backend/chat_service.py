@@ -348,19 +348,15 @@ def parse_metadata(ai_reply: str, scope: str, details: dict) -> tuple:
             
     reply_text = text_part
     for start_tag, end_tag in tags_to_try:
-        reply_text = reply_text.replace(start_tag.upper(), '') \
-                               .replace(end_tag.upper(), '') \
-                               .replace(start_tag.lower(), '') \
-                               .replace(end_tag.lower(), '')
+        reply_text = re.sub(re.escape(start_tag), '', reply_text, flags=re.IGNORECASE)
+        reply_text = re.sub(re.escape(end_tag), '', reply_text, flags=re.IGNORECASE)
     reply_text = reply_text.strip()
     
     if not metadata_str and not reply_text:
         reply_text = ai_reply
         for start_tag, end_tag in tags_to_try:
-            reply_text = reply_text.replace(start_tag.upper(), '') \
-                                   .replace(end_tag.upper(), '') \
-                                   .replace(start_tag.lower(), '') \
-                                   .replace(end_tag.lower(), '')
+            reply_text = re.sub(re.escape(start_tag), '', reply_text, flags=re.IGNORECASE)
+            reply_text = re.sub(re.escape(end_tag), '', reply_text, flags=re.IGNORECASE)
         reply_text = reply_text.strip()
 
     metadata = None
@@ -416,7 +412,12 @@ def parse_metadata(ai_reply: str, scope: str, details: dict) -> tuple:
             logger.error(f"Failed to parse metadata JSON. Raw match: {metadata_str}. Error: {e}")
             metadata = None
             type_val = None
-            reply_text = ai_reply.replace('[METADATA]', '').replace('[/METADATA]', '').strip()
+            # Case-insensitively strip tags from the original response
+            reply_text = ai_reply
+            for start_tag, end_tag in tags_to_try:
+                reply_text = re.sub(re.escape(start_tag), '', reply_text, flags=re.IGNORECASE)
+                reply_text = re.sub(re.escape(end_tag), '', reply_text, flags=re.IGNORECASE)
+            reply_text = reply_text.strip()
 
     if reply_text:
         reply_text = clean_reply_text(reply_text)
