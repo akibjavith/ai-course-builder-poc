@@ -6,7 +6,7 @@ import {
   Mic, Lightbulb, Compass, ThumbsUp, ThumbsDown, Copy, 
   RotateCcw, X, Search, Bell, Info, Plus, PanelLeft
 } from 'lucide-react';
-import { chatWithChatbotBuilder, createCourse, uploadDoc, generateLessonContent, saveChatbotDraft, getChatbotDrafts, getChatbotDraft, deleteChatbotDraft, renameChatbotDraft, getSubjects, getCourseById } from '../api';
+import { chatWithChatbotBuilder, createCourse, uploadDoc, generateLessonContent, saveChatbotDraft, getChatbotDrafts, getChatbotDraft, deleteChatbotDraft, renameChatbotDraft, getSubjects, getCourseById, generateStructure } from '../api';
 import logo from '../assets/logo.png';
 import LessonPreviewEditorModal from './LessonPreviewEditorModal';
 
@@ -295,7 +295,7 @@ export default function ChatbotCourseCreator({ onClose }) {
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           };
           setMessages(prev => [...prev, cancelMsg]);
-          setQuickReplies(["Generate Course", "Create a New Course"]);
+           setQuickReplies([]);
           return;
         }
 
@@ -365,7 +365,7 @@ export default function ChatbotCourseCreator({ onClose }) {
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
         setMessages(prev => [...prev, finalMsg]);
-        setQuickReplies(["Create a New Course"]);
+        setQuickReplies([]);
       }
 
     } catch (err) {
@@ -398,7 +398,7 @@ export default function ChatbotCourseCreator({ onClose }) {
       };
       setMessages(prev => [...prev, userMsg, assistantMsg]);
       setInputMessage('');
-      setQuickReplies(SUGGESTED_CHIPS);
+      setQuickReplies([]);
       return;
     }
 
@@ -422,34 +422,168 @@ export default function ChatbotCourseCreator({ onClose }) {
 
     if (!overrideStep) {
       if (currentStep === 'CONFIRM_DETAILS') {
-        const isConfirm = ["looks good", "looks fine", "looks ok", "continue", "confirm", "yes", "yep", "yeah", "correct", "fine", "ok", "sure", "proceed"].some(kw => lowercaseText.includes(kw));
+        // Wide net of confirmation keywords — including "proceed", "structure", "create", "generate", "yes"
+        const isConfirm = [
+          "looks good", "looks fine", "looks ok", "continue", "confirm", "yes", "yep", "yeah",
+          "correct", "fine", "ok", "sure", "proceed", "generate", "create", "structure", "start",
+          "go ahead", "do it", "let's go", "great", "perfect", "sounds good", "alright"
+        ].some(kw => lowercaseText.includes(kw));
+
         if (isConfirm) {
-          nextStepToUse = 'ASK_GENERATE_SKELETON';
-          setCurrentStep('ASK_GENERATE_SKELETON');
-          textToSend = "Yes, details are correct.";
+          // Add user message to chat immediately, then generate structure
+          const userMsg = {
+            role: 'user',
+            content: textToSend,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          setMessages(prev => [...prev, userMsg]);
+          setInputMessage('');
+          setLoading(true);
+          setQuickReplies([]);
+
+          try {
+            const details = nextCourseData.details || {};
+            const safeDetails = {
+              courseType: details.courseType || 'Custom Course',
+              subject: details.subject || details.courseName || 'General',
+              courseName: details.courseName || details.subject || 'Custom Course',
+              description: details.description || details.goal || 'Learn the subject',
+              price: details.price || '0',
+              duration: String(details.duration || '5'),
+              requirements: details.requirements || '',
+              level: details.level || 'beginner',
+              language: details.language || 'English',
+              scriptingLanguage: details.scriptingLanguage || 'NA',
+              evaluator: details.evaluator || ''
+            };
+            console.log('[ChatbotBuilder] Generating structure with:', safeDetails);
+            const structureRes = await generateStructure('external', safeDetails);
+            console.log('[ChatbotBuilder] Structure response:', structureRes);
+
+            const rawModules = structureRes?.data?.modules || structureRes?.modules;
+
+            if (rawModules && rawModules.length > 0) {
+              const normalizedModules = rawModules.map(m => {
+                if (!m) return null;
+                const normalizedChapters = (m.chapters || []).map(c => {
+                  if (!c) return null;
+                  return {
+                    ...c,
+                    contents: c.contents || [],
+                    content: c.content || { content_type: 'html', html_content: '', completed: false }
+                  };
+                }).filter(Boolean);
+                return { ...m, chapters: normalizedChapters };
+              }).filter(Boolean);
+
+              const flatChapters = [];
+              normalizedModules.forEach(m => {
+                m.chapters?.forEach(c => flatChapters.push({ module: m.title || '', title: c.title || '' }));
+              });
+
+              const structureMetadata = { next_step: 'OUTLINE_EDIT', modules: normalizedModules };
+              const structureMsg = {
+                role: 'assistant',
+                content: 'Here is your personalized learning roadmap outline. Do you have anything to change in this, or would you like to add any modules?',
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                metadata: structureMetadata,
+                metadataType: 'structure'
+              };
+
+              setMessages(prev => [...prev, structureMsg]);
+              setCurrentStep('OUTLINE_EDIT');
+              setCourseData(prev => ({
+                ...prev,
+                structure: { modules: normalizedModules },
+                content: flatChapters.map(fc => {
+                  const existing = prev.content?.find(ex => ex.module_title === fc.module && ex.chapter_title === fc.title);
+                  return existing || { module_title: fc.module, chapter_title: fc.title, contents: [] };
+                })
+              }));
+            } else {
+              console.error('[ChatbotBuilder] Empty modules in structure response:', structureRes);
+              setMessages(prev => [...prev, {
+                role: 'assistant',
+                content: 'Sorry, I had trouble generating the course outline. Please try again.',
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              }]);
+            }
+          } catch (structureErr) {
+            console.error('[ChatbotBuilder] Structure generation error:', structureErr);
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: 'Sorry, I encountered an error generating the course outline. Please try again.',
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            }]);
+          } finally {
+            setLoading(false);
+          }
+          return; // Skip the normal chatbot API call entirely
         } else {
           nextStepToUse = 'CONFIRM_DETAILS';
         }
       } else if (currentStep === 'ASK_GENERATE_SKELETON') {
-        const isYes = ["yes", "yep", "yeah", "sure", "ok", "proceed", "go ahead", "do it", "create", "generate"].some(kw => lowercaseText.includes(kw));
-        if (isYes) {
-          nextStepToUse = 'OUTLINE_EDIT';
-          setCurrentStep('OUTLINE_EDIT');
-          textToSend = "Yes, please generate the outline modules.";
-        } else {
-          nextStepToUse = 'ASK_GENERATE_SKELETON';
-        }
+        // Any message here triggers direct structure generation (legacy fallback)
+        const userMsg = {
+          role: 'user',
+          content: textToSend,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        setMessages(prev => [...prev, userMsg]);
+        setInputMessage('');
+        setLoading(true);
+        setQuickReplies([]);
+        try {
+          const details = nextCourseData.details || {};
+          const safeDetails = {
+            courseType: details.courseType || 'Custom Course',
+            subject: details.subject || details.courseName || 'General',
+            courseName: details.courseName || details.subject || 'Custom Course',
+            description: details.description || details.goal || 'Learn the subject',
+            price: details.price || '0',
+            duration: String(details.duration || '5'),
+            requirements: details.requirements || '',
+            level: details.level || 'beginner',
+            language: details.language || 'English',
+            scriptingLanguage: details.scriptingLanguage || 'NA',
+            evaluator: details.evaluator || ''
+          };
+          const structureRes = await generateStructure('external', safeDetails);
+          const rawModules = structureRes?.data?.modules || structureRes?.modules;
+          if (rawModules && rawModules.length > 0) {
+            const normalizedModules = rawModules.map(m => {
+              if (!m) return null;
+              const normalizedChapters = (m.chapters || []).map(c => {
+                if (!c) return null;
+                return { ...c, contents: c.contents || [], content: c.content || { content_type: 'html', html_content: '', completed: false } };
+              }).filter(Boolean);
+              return { ...m, chapters: normalizedChapters };
+            }).filter(Boolean);
+            const flatChapters = [];
+            normalizedModules.forEach(m => m.chapters?.forEach(c => flatChapters.push({ module: m.title || '', title: c.title || '' })));
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: 'Here is your personalized learning roadmap outline. Do you have anything to change in this, or would you like to add any modules?',
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              metadata: { next_step: 'OUTLINE_EDIT', modules: normalizedModules },
+              metadataType: 'structure'
+            }]);
+            setCurrentStep('OUTLINE_EDIT');
+            setCourseData(prev => ({
+              ...prev,
+              structure: { modules: normalizedModules },
+              content: flatChapters.map(fc => ({ module_title: fc.module, chapter_title: fc.title, contents: [] }))
+            }));
+          }
+        } catch (e) { console.error('Structure fallback error:', e); }
+        finally { setLoading(false); }
+        return;
+
       } else if (currentStep === 'OUTLINE_EDIT') {
-        const isConfirm = ["looks good", "confirm outline", "looks perfect", "perfect", "confirm syllabus", "yes", "yep", "yeah", "correct", "continue", "approve"].some(kw => lowercaseText.includes(kw));
-        const hasStructure = courseData.structure && courseData.structure.modules && courseData.structure.modules.length > 0;
-        if (isConfirm && hasStructure) {
-          startBatchGeneration(courseData);
-          return;
-        } else {
-          nextStepToUse = 'OUTLINE_EDIT';
-        }
+        // In OUTLINE_EDIT, the user edits/refines. Confirming the outline card moves to CONFIRM_GENERATE.
+        nextStepToUse = 'OUTLINE_EDIT';
       } else if (currentStep === 'CONFIRM_GENERATE') {
-        const generateKeywords = ["generate course", "generate content", "generate", "yes", "continue", "start", "proceed", "let's go", "go ahead"];
+        const generateKeywords = ["generate course", "generate content", "generate", "yes", "continue", "start", "proceed", "let's go", "go ahead", "sure", "ok", "yep", "yeah"];
         const wantsGenerate = generateKeywords.some(kw => lowercaseText.includes(kw));
         if (wantsGenerate) {
           startBatchGeneration(courseData);
@@ -504,36 +638,41 @@ export default function ChatbotCourseCreator({ onClose }) {
         };
 
         setMessages(prev => [...prev, assistantMsg]);
+        console.log('[ChatbotBuilder] API Response → type:', res.type, '| metadataType:', assistantMsg.metadataType, '| metadata:', res.metadata, '| reply:', res.reply);
 
         // Dynamically override or supplement quick replies based on the NEXT step
         let replies = res.quickReplies || [];
         const activeStep = (res.metadata && res.metadata.next_step) || nextStepToUse;
-        if (activeStep === 'ASK_TOPIC') {
-          replies = SUGGESTED_CHIPS;
-        } else if (activeStep === 'ASK_GOAL') {
-          replies = ["Get a job", "Career switch", "Build projects", "Crack interviews", "Personal interest"];
-        } else if (activeStep === 'ASK_LEVEL') {
-          replies = ["Completely new", "Know the basics", "Intermediate", "Advanced"];
-        } else if (activeStep === 'ASK_STYLE') {
-          replies = ["Theory focused", "Practical hands-on", "Project based", "Balanced"];
-        } else if (activeStep === 'ASK_DURATION') {
-          replies = ["5 Hours", "10 Hours", "20 Hours", "40 Hours"];
-        } else if (activeStep === 'CONFIRM_DETAILS') {
-          replies = ["Yes, Looks Good!", "Edit Details"];
-        } else if (activeStep === 'ASK_GENERATE_SKELETON') {
-          replies = ["Yes, Generate Modules", "No"];
-        } else if (activeStep === 'OUTLINE_EDIT') {
-          replies = ["Looks Good, Confirm Outline!", "Add a module", "Make it shorter"];
-        } else if (activeStep === 'CONFIRM_GENERATE') {
-          replies = ["Generate Course", "Cancel"];
-        } else if (activeStep === 'READY') {
-          replies = ["Preview Course", "Publish Course", "Create a New Course"];
-        }
-        setQuickReplies(replies);
+        // Quick replies are completely disabled per user request
+        replies = [];
+        setQuickReplies([]);
 
-        // Update currentStep state if returned in metadata
+        // Update currentStep state if returned in metadata, otherwise use robust keyword fallbacks
         if (res.metadata && res.metadata.next_step) {
           setCurrentStep(res.metadata.next_step);
+        } else {
+          const lowerReply = (res.reply || "").toLowerCase();
+          if (currentStep === 'ASK_TOPIC') {
+            if (lowerReply.includes('learning goal') || lowerReply.includes('what is your goal') || lowerReply.includes('hope to achieve')) {
+              setCurrentStep('ASK_GOAL');
+            }
+          } else if (currentStep === 'ASK_GOAL') {
+            if (lowerReply.includes('familiar') || lowerReply.includes('level') || lowerReply.includes('experience')) {
+              setCurrentStep('ASK_LEVEL');
+            }
+          } else if (currentStep === 'ASK_LEVEL') {
+            if (lowerReply.includes('learning style') || lowerReply.includes('structured') || lowerReply.includes('hands-on') || lowerReply.includes('combination') || lowerReply.includes('prefer')) {
+              setCurrentStep('ASK_STYLE');
+            }
+          } else if (currentStep === 'ASK_STYLE') {
+            if (lowerReply.includes('hour') || lowerReply.includes('duration') || lowerReply.includes('dedicate') || lowerReply.includes('time')) {
+              setCurrentStep('ASK_DURATION');
+            }
+          } else if (currentStep === 'ASK_DURATION') {
+            if (lowerReply.includes('summary') || lowerReply.includes('requirements') || lowerReply.includes('modify') || lowerReply.includes('difficulty') || lowerReply.includes('would you like to modify')) {
+              setCurrentStep('CONFIRM_DETAILS');
+            }
+          }
         }
 
         // Safe merging of metadata suggestions into courseData
@@ -686,11 +825,11 @@ export default function ChatbotCourseCreator({ onClose }) {
 
         const publishSuccessMsg = {
           role: 'assistant',
-          content: `🎉 Congratulations! Your course **"${courseData.details?.courseName || 'Untitled Course'}"** has been successfully published to your academy database!\n\nIf you want to start a brand new course, click the **"Create a New Course"** button below.`,
+          content: `🎉 Congratulations! Your course **"${courseData.details?.courseName || 'Untitled Course'}"** has been successfully published to your academy database!\n\nIf you want to start a brand new course, click the **"New Course"** button in the sidebar.`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
         setMessages(prev => [...prev, publishSuccessMsg]);
-        setQuickReplies(["Create a New Course"]);
+        setQuickReplies([]);
       }
     } catch (err) {
       console.error("Publishing error", err);
@@ -1364,12 +1503,18 @@ export default function ChatbotCourseCreator({ onClose }) {
     const lines = text.split('\n');
     const filteredLines = lines.filter(line => {
       const trimmed = line.trim();
-      // Filter out lines starting with numbers (e.g. "1. ", "2) ")
-      if (/^\d+[\.\)]/.test(trimmed)) return false;
-      // Filter out bullet points
-      if (/^[\-\*•]/.test(trimmed)) return false;
-      // Filter out empty lines or outline headers
-      if (trimmed.toLowerCase().startsWith('module') || trimmed.toLowerCase().startsWith('chapter')) return false;
+      // Filter out lines starting with numbers (e.g. "1. ", "2) ", "1:") — module/chapter numbering
+      if (/^\d+[\.):\-]/.test(trimmed)) return false;
+      // Filter out lettered list items (e.g. "a) ", "A. ")
+      if (/^[a-zA-Z][\.):]\s/.test(trimmed)) return false;
+      // Filter out bullet points / dashes / asterisks
+      if (/^[\-\*•\–]/.test(trimmed)) return false;
+      // Filter out lines starting with Module, Chapter, Unit, Lesson, Topic, Section
+      const lower = trimmed.toLowerCase();
+      if (lower.startsWith('module') || lower.startsWith('chapter') || lower.startsWith('unit') ||
+          lower.startsWith('lesson') || lower.startsWith('topic') || lower.startsWith('section')) return false;
+      // Filter out lines that look like course outline titles (short lines with colons at end)
+      if (trimmed.endsWith(':') && trimmed.length < 60) return false;
       return true;
     });
     return filteredLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
@@ -1462,11 +1607,16 @@ export default function ChatbotCourseCreator({ onClose }) {
             );
           })}
         </div>
-        {currentStep === 'OUTLINE_EDIT' && (
-          <div className="border-t border-slate-100 pt-3">
+        {(currentStep === 'OUTLINE_EDIT' || currentStep === 'CONFIRM_GENERATE') && (
+          <div className="border-t border-slate-100 pt-3 space-y-2">
+            <p className="text-[10px] text-slate-400 text-center leading-relaxed">
+              Great! Here's the updated course structure outline. Please take a moment to review it. Would you like to make any further modifications, or are you happy with this outline?
+            </p>
             <button
               onClick={() => {
-                handleSendMessage("Looks Good, Confirm Outline!");
+                // Transition to CONFIRM_GENERATE so AI asks for final confirmation before generation
+                setCurrentStep('CONFIRM_GENERATE');
+                handleSendMessage("I am happy with this outline. Please confirm and proceed.", 'CONFIRM_GENERATE', courseData);
               }}
               className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1 shadow-md"
             >
@@ -1787,21 +1937,6 @@ export default function ChatbotCourseCreator({ onClose }) {
               </p>
             </div>
 
-            {/* Suggestion Chips */}
-            <div className="space-y-2.5">
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Quick Suggestions</span>
-              <div className="flex flex-wrap gap-2 justify-center max-w-xl">
-                {SUGGESTED_CHIPS.map((chip, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleSendMessage(chip)}
-                    className="bg-white/70 hover:bg-white text-indigo-700 hover:text-indigo-900 border border-white/60 hover:border-indigo-400/30 px-4 py-2 rounded-full text-xs font-semibold shadow-sm transition active:scale-95"
-                  >
-                    {chip}
-                  </button>
-                ))}
-              </div>
-            </div>
 
             {/* Welcome bottom Input container */}
             <div className="w-full max-w-2xl bg-white/80 backdrop-blur-md rounded-2xl border border-white/60 p-3 shadow-lg flex flex-col gap-2">

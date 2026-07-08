@@ -17,6 +17,7 @@ from course_store import save_course, get_courses, get_course, update_course, de
 from database import save_course_to_mysql
 import os
 import shutil
+import json
 from dotenv import load_dotenv
 import logging
 from openai import OpenAI
@@ -661,6 +662,87 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
 
     logger.info(f"Chatbot Builder request received. Step: {req.currentStep}")
 
+    # -------------------------------------------------------------------------
+    # OUTLINE_EDIT: Use a dedicated JSON-mode call to guarantee structure output
+    # -------------------------------------------------------------------------
+    if req.currentStep == "OUTLINE_EDIT":
+        try:
+            current_structure = req.courseData.get("structure", {})
+            details = req.courseData.get("details", {})
+            
+            # Find the user's last edit request
+            user_message = "Modify the outline"
+            if req.messages:
+                for msg in reversed(req.messages):
+                    if msg.get("role") == "user":
+                        user_message = msg.get("content", "")
+                        break
+
+            edit_prompt = f"""You are an expert curriculum designer.
+Your task is to modify the current course outline based strictly on the user's request.
+
+Course Details:
+- Name: {details.get("courseName")}
+- Subject: {details.get("subject")}
+- Goal: {details.get("description")}
+- Level: {details.get("level")}
+- Duration: {details.get("duration")} Hours
+
+Current Course Outline (JSON):
+{json.dumps(current_structure, indent=2)}
+
+User's Modification Request:
+"{user_message}"
+
+Rules:
+- Apply the user's modification request (e.g. reduce to 2 modules, rename chapters, add a new module, etc.) directly on the current course outline.
+- Output the ENTIRE updated course outline structure.
+- Do NOT prepend numbers, chapter numbers, or index prefixes (like "Module 1", "Chapter 1 -", "1.1") to module or chapter titles.
+- Keep other unchanged modules and chapters as they are.
+- Output ONLY valid JSON conforming to the schema. No markdown code blocks, no text explanations.
+
+Expected JSON output format exactly:
+{{
+  "next_step": "OUTLINE_EDIT",
+  "modules": [
+    {{
+      "title": "Module Title",
+      "chapters": [
+        {{"title": "Chapter Title"}},
+        {{"title": "Another Chapter Title"}}
+      ]
+    }}
+  ]
+}}"""
+
+            response = openai_client.chat.completions.create(
+                model=LLM_MODEL,
+                messages=[
+                    {"role": "system", "content": "You are a curriculum design expert. Output only valid JSON conforming to the schema. No markdown, no extra text."},
+                    {"role": "user", "content": edit_prompt}
+                ],
+                temperature=0.7,
+                max_tokens=4000,
+                response_format={"type": "json_object"}
+            )
+
+            structure_json = json.loads(response.choices[0].message.content)
+            structure_json["next_step"] = "OUTLINE_EDIT"
+
+            return {
+                "status": "success",
+                "reply": "Here is the updated course structure outline. Please take a moment to review it. Would you like to make any further modifications, or are you happy with this outline?",
+                "quickReplies": [],
+                "metadata": structure_json,
+                "type": "structure"
+            }
+        except Exception as e:
+            logger.error(f"Error in OUTLINE_EDIT JSON modification: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # -------------------------------------------------------------------------
+    # All other steps: standard conversational flow
+    # -------------------------------------------------------------------------
     system_prompt = build_builder_system_prompt(
         current_step=req.currentStep,
         course_data=req.courseData
@@ -680,9 +762,7 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
 
         # Parse metadata suggestions (details, structure, content prompts)
         scope = "Details"
-        if req.currentStep == "OUTLINE_EDIT":
-            scope = "Structure"
-        elif req.currentStep in ("CONTENT_GEN", "QUIZ_GEN"):
+        if req.currentStep in ("CONTENT_GEN", "QUIZ_GEN"):
             scope = "Content"
 
         reply_text, metadata, type_val = parse_metadata(

@@ -59,11 +59,52 @@ async def generate_lesson(req: LessonRequest):
 @router.post("/lesson-blocks", response_model=LessonBlocksResponse)
 async def generate_lesson_blocks(req: LessonRequest):
     try:
+        import re
         course_title = req.course_details.courseName if req.course_details else "the course"
         course_desc = req.course_details.description if req.course_details else ""
         subject = req.course_details.subject if req.course_details else "General"
         difficulty = req.course_details.level if req.course_details else "beginner"
         objectives = req.course_details.requirements if req.course_details else ""
+
+        # Extract duration to scale lesson blocks content
+        duration_hours = 10
+        logger.info(f"[LessonBlocks] req.course_details: {req.course_details}")
+        if req.course_details and req.course_details.duration:
+            logger.info(f"[LessonBlocks] raw duration string: '{req.course_details.duration}'")
+            match = re.search(r'\d+', str(req.course_details.duration))
+            if match:
+                duration_hours = int(match.group())
+        logger.info(f"[LessonBlocks] resolved duration_hours: {duration_hours}")
+
+        if duration_hours <= 2:
+            duration_guidelines = """
+        COURSE DURATION LEVEL: SHORT COURSE (1-2 Hours).
+        - The generated lesson content must be concise, short, and brief.
+        - Paragraph blocks: Write concise, brief explanations containing between 50 to 80 words. Do NOT write long paragraphs.
+        - Bullet lists and numbered lists: Keep them short (maximum 2 to 3 items).
+        - Tables: Generate small tables with a maximum of 2 rows.
+        - Quizzes and Knowledge Checks: Write exactly 1 single question.
+        """
+        elif duration_hours <= 14:
+            duration_guidelines = """
+        COURSE DURATION LEVEL: MEDIUM COURSE (3-14 Hours).
+        - The generated lesson content should be moderate in length and detail.
+        - Paragraph blocks: Write detailed explanations containing between 120 to 180 words.
+        - Bullet lists and numbered lists: Keep them at a moderate size (3-5 items).
+        - Tables: Generate moderate tables with 3 to 5 rows.
+        - Quizzes and Knowledge Checks: Write exactly 2 to 3 questions.
+        """
+        else:
+            duration_guidelines = f"""
+        COURSE DURATION LEVEL: LONG COURSE ({duration_hours} Hours).
+        - The generated lesson content must be highly comprehensive, in-depth, exhaustive, and extensive.
+        - Total word count: The entire lesson content must be extremely thorough, targeting a minimum of 1500 to 2000 words.
+        - Paragraph blocks: Write highly detailed, deep-dive, verbose textbook explanations containing between 220 to 350 words. You MUST generate at least 3 to 4 distinct paragraph blocks under each major sub-heading to explain the concepts in deep detail. Do NOT write short summaries.
+        - Bullet lists and numbered lists: Write comprehensive, complete lists (5 to 10 items) with detailed descriptions for each item.
+        - Tables: Generate large comparison tables (5+ rows).
+        - Quizzes and Knowledge Checks: Write exactly 4 to 5 questions to test in-depth knowledge.
+        - CRITICAL: Avoid short summaries. You will be penalized if the content is short or brief.
+        """
 
         prompt_str = f"""
         Generate structured block-based educational content for the lesson '{req.title}' in the module '{req.module_title}' for the course '{course_title}'.
@@ -71,6 +112,8 @@ async def generate_lesson_blocks(req: LessonRequest):
         Subject: {subject}
         Difficulty: {difficulty}
         Audience: {objectives}
+        
+        {duration_guidelines}
         
         Additional prompt instructions / focus areas: {req.prompt or 'None'}
 
@@ -85,18 +128,18 @@ async def generate_lesson_blocks(req: LessonRequest):
         
         The allowed block types and their exact structure/rules are:
         1. "heading": level (1, 2, or 3), text. Use this for outline and sub-topics.
-        2. "paragraph": text. CRITICAL: Every paragraph block MUST be a deep-dive, comprehensive, and highly detailed explanation containing between 150 to 250 words. Do not write short paragraphs. Write directly to the student.
-        3. "bullet_list": items (list of strings). Must contain at least 3-5 distinct points.
-        4. "numbered_list": items (list of strings). Must contain at least 3-5 sequential steps or items.
+        2. "paragraph": text. CRITICAL: Every paragraph block MUST follow the word count limits defined in the COURSE DURATION LEVEL guidelines above. Write directly to the student.
+        3. "bullet_list": items (list of strings). Follow the item count defined in the COURSE DURATION LEVEL guidelines above.
+        4. "numbered_list": items (list of strings). Follow the item count defined in the COURSE DURATION LEVEL guidelines above.
         5. "image": url (always output "" for now), caption (describe what the visual should represent).
         6. "video": url (always output "" for now), caption (describe what the video/narration should show).
-        7. "table": headers (list of strings), rows (list of lists of strings). Used for comparisons, classifications, and vocabulary guides. Every cell must contain actual comparative or vocabulary data (e.g., word, meaning, example sentence), not descriptions.
+        7. "table": headers (list of strings), rows (list of lists of strings). Used for comparisons, classifications, and vocabulary guides. Follow the row count defined in the COURSE DURATION LEVEL guidelines above. Every cell must contain actual comparative or vocabulary data, not descriptions.
         8. "callout": text, callout_type (one of: "info", "warning", "tip", "danger").
         9. "code": language, code, explanation. Write actual functional code without markdown backticks inside the code field.
         10. "example": scenario, detail. Real-world scenario case study, math calculation, or code walk-through. Must contain the complete scenario and result.
-        11. "quiz": question, options (list of strings), correctAnswer (the exact string from options), explanation. Make sure the question is actual learner assessment, not placeholder text.
+        11. "quiz": question, options (list of strings), correctAnswer (the exact string from options), explanation. Make sure the question is actual learner assessment, not placeholder text. Follow the question count defined in the COURSE DURATION LEVEL guidelines above.
         12. "assignment": task, instructions, grading_criteria (list of strings). Write actual tasks the student can work on.
-        13. "knowledge_check": question, options (list of strings), answer (the exact string from options), explanation.
+        13. "knowledge_check": question, options (list of strings), answer (the exact string from options), explanation. Follow the question count defined in the COURSE DURATION LEVEL guidelines above.
         14. "summary": points (list of strings summarizing key takeaways).
         15. "reference": title, url (trusted educational platforms/documentation, no hallucinated URLs).
 
@@ -129,7 +172,10 @@ async def generate_lesson_blocks(req: LessonRequest):
         response = get_openai_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are a professional educational content architect. Output JSON only."},
+                {
+                    "role": "system",
+                    "content": "You are a world-class educational textbook author. Your goal is to write highly detailed, comprehensive, in-depth, and exhaustive textbook material. You write extremely long, thorough, and complete lessons. Never summarize or omit details. Output JSON only."
+                },
                 {"role": "user", "content": prompt_str}
             ],
             temperature=0.7,
