@@ -368,7 +368,15 @@ def parse_metadata(ai_reply: str, scope: str, details: dict) -> tuple:
             repaired_str = try_repair_truncated_json(cleaned_str)
             metadata = json.loads(repaired_str)
             
-            if "Details" in scope:
+            # Determine type dynamically based on parsed JSON keys
+            if isinstance(metadata, dict) and "modules" in metadata:
+                detected_type = "structure"
+            elif isinstance(metadata, dict) and any(k in metadata for k in ("subject", "courseName", "description", "level", "requirements", "duration")):
+                detected_type = "details"
+            else:
+                detected_type = "details" if "Details" in scope else "structure" if "Structure" in scope else "content"
+
+            if detected_type == "details":
                 type_val = "details"
                 defaults = {
                     "courseType": details.get("courseType") or "Custom Course",
@@ -387,7 +395,7 @@ def parse_metadata(ai_reply: str, scope: str, details: dict) -> tuple:
                     if key not in metadata or not metadata[key]:
                         logger.warning(f"Metadata key '{key}' was missing or empty. Applying default: '{val}'")
                         metadata[key] = val
-            elif "Structure" in scope:
+            elif detected_type == "structure":
                 type_val = "structure"
                 modules = metadata.get("modules") if isinstance(metadata.get("modules"), list) else []
                 normalized_modules = []

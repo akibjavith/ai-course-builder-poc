@@ -421,70 +421,30 @@ export default function ChatbotCourseCreator({ onClose }) {
     let nextCourseData = { ...courseData };
 
     if (!overrideStep) {
-      if (currentStep === 'ASK_TOPIC') {
-        nextCourseData.details = {
-          ...courseData.details,
-          courseName: textToSend,
-          subject: textToSend,
-          price: "0",
-          evaluator: "Sarah Johnson",
-          courseType: "Custom Course"
-        };
-        nextStepToUse = 'ASK_AUDIENCE';
-        setCurrentStep('ASK_AUDIENCE');
-      } else if (currentStep === 'ASK_AUDIENCE') {
-        nextCourseData.details = {
-          ...courseData.details,
-          requirements: textToSend
-        };
-        nextStepToUse = 'ASK_DIFFICULTY';
-        setCurrentStep('ASK_DIFFICULTY');
-      } else if (currentStep === 'ASK_DIFFICULTY') {
-        nextCourseData.details = {
-          ...courseData.details,
-          level: textToSend.toLowerCase()
-        };
-        nextStepToUse = 'ASK_OBJECTIVE';
-        setCurrentStep('ASK_OBJECTIVE');
-      } else if (currentStep === 'ASK_OBJECTIVE') {
-        nextCourseData.details = {
-          ...courseData.details,
-          description: textToSend
-        };
-        nextStepToUse = 'ASK_LANGUAGE';
-        setCurrentStep('ASK_LANGUAGE');
-      } else if (currentStep === 'ASK_LANGUAGE') {
-        nextCourseData.details = {
-          ...courseData.details,
-          language: textToSend
-        };
-        nextStepToUse = 'ASK_DURATION';
-        setCurrentStep('ASK_DURATION');
-      } else if (currentStep === 'ASK_DURATION') {
-        const hours = parseInt(textToSend.replace(/[^0-9]/g, '')) || 10;
-        nextCourseData.details = {
-          ...courseData.details,
-          duration: String(hours)
-        };
-        nextCourseData.sourceType = 'external';
-        nextStepToUse = 'CONFIRM_DETAILS';
-        setCurrentStep('CONFIRM_DETAILS');
-        textToSend = `${textToSend}. Please summarize all course requirements.`;
-      } else if (currentStep === 'CONFIRM_DETAILS') {
-        const isConfirm = ["looks good", "looks fine", "looks ok", "continue", "confirm"].some(kw => lowercaseText.includes(kw));
+      if (currentStep === 'CONFIRM_DETAILS') {
+        const isConfirm = ["looks good", "looks fine", "looks ok", "continue", "confirm", "yes", "yep", "yeah", "correct", "fine", "ok", "sure", "proceed"].some(kw => lowercaseText.includes(kw));
         if (isConfirm) {
-          nextStepToUse = 'OUTLINE_EDIT';
-          setCurrentStep('OUTLINE_EDIT');
-          textToSend = "Looks good. Please generate the course structure outline now.";
+          nextStepToUse = 'ASK_GENERATE_SKELETON';
+          setCurrentStep('ASK_GENERATE_SKELETON');
+          textToSend = "Yes, details are correct.";
         } else {
           nextStepToUse = 'CONFIRM_DETAILS';
         }
+      } else if (currentStep === 'ASK_GENERATE_SKELETON') {
+        const isYes = ["yes", "yep", "yeah", "sure", "ok", "proceed", "go ahead", "do it", "create", "generate"].some(kw => lowercaseText.includes(kw));
+        if (isYes) {
+          nextStepToUse = 'OUTLINE_EDIT';
+          setCurrentStep('OUTLINE_EDIT');
+          textToSend = "Yes, please generate the outline modules.";
+        } else {
+          nextStepToUse = 'ASK_GENERATE_SKELETON';
+        }
       } else if (currentStep === 'OUTLINE_EDIT') {
-        const isConfirm = ["looks good", "confirm outline", "looks perfect", "perfect", "confirm syllabus"].some(kw => lowercaseText.includes(kw));
-        if (isConfirm) {
-          nextStepToUse = 'CONFIRM_GENERATE';
-          setCurrentStep('CONFIRM_GENERATE');
-          textToSend = "Confirm syllabus structure. Ask if ready to generate content.";
+        const isConfirm = ["looks good", "confirm outline", "looks perfect", "perfect", "confirm syllabus", "yes", "yep", "yeah", "correct", "continue", "approve"].some(kw => lowercaseText.includes(kw));
+        const hasStructure = courseData.structure && courseData.structure.modules && courseData.structure.modules.length > 0;
+        if (isConfirm && hasStructure) {
+          startBatchGeneration(courseData);
+          return;
         } else {
           nextStepToUse = 'OUTLINE_EDIT';
         }
@@ -547,23 +507,21 @@ export default function ChatbotCourseCreator({ onClose }) {
 
         // Dynamically override or supplement quick replies based on the NEXT step
         let replies = res.quickReplies || [];
-        const activeStep = nextStepToUse;
+        const activeStep = (res.metadata && res.metadata.next_step) || nextStepToUse;
         if (activeStep === 'ASK_TOPIC') {
           replies = SUGGESTED_CHIPS;
-        } else if (activeStep === 'ASK_AUDIENCE') {
-          replies = ["Beginners", "College Students", "Working Professionals", "Developers", "Anyone interested"];
-        } else if (activeStep === 'ASK_DIFFICULTY') {
-          replies = ["Beginner", "Intermediate", "Advanced"];
-        } else if (activeStep === 'ASK_OBJECTIVE') {
-          replies = getObjectiveSuggestions(nextCourseData.details?.subject || nextCourseData.details?.courseName || '');
-        } else if (activeStep === 'ASK_LANGUAGE') {
-          replies = ["English", "Tamil", "Hindi", "Custom"];
+        } else if (activeStep === 'ASK_GOAL') {
+          replies = ["Get a job", "Career switch", "Build projects", "Crack interviews", "Personal interest"];
+        } else if (activeStep === 'ASK_LEVEL') {
+          replies = ["Completely new", "Know the basics", "Intermediate", "Advanced"];
+        } else if (activeStep === 'ASK_STYLE') {
+          replies = ["Theory focused", "Practical hands-on", "Project based", "Balanced"];
         } else if (activeStep === 'ASK_DURATION') {
           replies = ["5 Hours", "10 Hours", "20 Hours", "40 Hours"];
-        } else if (activeStep === 'ASK_REFERENCE') {
-          replies = [];
         } else if (activeStep === 'CONFIRM_DETAILS') {
-          replies = ["Continue", "Edit Details"];
+          replies = ["Yes, Looks Good!", "Edit Details"];
+        } else if (activeStep === 'ASK_GENERATE_SKELETON') {
+          replies = ["Yes, Generate Modules", "No"];
         } else if (activeStep === 'OUTLINE_EDIT') {
           replies = ["Looks Good, Confirm Outline!", "Add a module", "Make it shorter"];
         } else if (activeStep === 'CONFIRM_GENERATE') {
@@ -573,13 +531,28 @@ export default function ChatbotCourseCreator({ onClose }) {
         }
         setQuickReplies(replies);
 
+        // Update currentStep state if returned in metadata
+        if (res.metadata && res.metadata.next_step) {
+          setCurrentStep(res.metadata.next_step);
+        }
+
         // Safe merging of metadata suggestions into courseData
         if (res.metadata) {
           setCourseData(prev => {
             const updated = { ...prev };
             if (res.type === 'details') {
-              updated.details = { ...(prev.details || {}), ...res.metadata, price: "0" };
-              setActiveCardDetails({ ...res.metadata, price: "0" });
+              const normalizedMetadata = {
+                ...res.metadata,
+                subject: res.metadata.subject || res.metadata.topic || res.metadata.courseName || prev.details?.subject,
+                courseName: res.metadata.courseName || res.metadata.subject || res.metadata.topic || prev.details?.courseName,
+                description: res.metadata.description || res.metadata.goal || res.metadata.objective || prev.details?.description,
+                level: res.metadata.level || res.metadata.currentLevel || res.metadata.experience || prev.details?.level,
+                requirements: res.metadata.requirements || res.metadata.learningStyle || res.metadata.style || prev.details?.requirements,
+                duration: String(res.metadata.duration || res.metadata.courseDuration || res.metadata.hours || prev.details?.duration || "")
+              };
+
+              updated.details = { ...(prev.details || {}), ...normalizedMetadata, price: "0" };
+              setActiveCardDetails({ ...normalizedMetadata, price: "0" });
             } else if (res.type === 'structure') {
               const normalizedModules = (res.metadata?.modules || []).map(m => {
                 if (!m) return null;
@@ -1309,42 +1282,37 @@ export default function ChatbotCourseCreator({ onClose }) {
   const renderInlineDetails = (details) => {
     if (!details) return null;
     
-    // Read-only static layout matching the outline card style
     return (
-      <div className="mt-4 bg-white border border-slate-200 shadow-lg rounded-2xl p-5 space-y-4 text-left animate-fade-in text-slate-800">
+      <div className="mt-4 bg-white border border-slate-200/80 shadow-md rounded-2xl p-5 space-y-4 text-left animate-fade-in text-slate-800 max-w-lg w-full">
         <div className="flex justify-between items-center border-b border-slate-100 pb-2.5">
           <h4 className="font-extrabold text-xs text-indigo-650 flex items-center gap-1.5 uppercase tracking-wider">
-            <FileText className="w-3.5 h-3.5" /> Course Parameters
+            <FileText className="w-3.5 h-3.5" /> Learning Goals Summary
           </h4>
           <span className="text-[9px] bg-emerald-50 text-emerald-600 border border-emerald-100 px-2 py-0.5 rounded font-black uppercase tracking-wider">
-            Details Summary
+            Personalized
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+        <div className="grid grid-cols-1 gap-3 text-xs">
           <div className="bg-slate-50 border border-slate-100/60 p-3 rounded-xl">
-            <span className="text-[8px] uppercase tracking-widest text-slate-400 font-extrabold block mb-0.5">Topic</span>
-            <span className="font-bold text-slate-800">{details.subject || details.courseName}</span>
+            <span className="text-[8px] uppercase tracking-widest text-slate-400 font-extrabold block mb-0.5">Learning Topic</span>
+            <span className="font-bold text-slate-800">{details.subject || details.courseName || details.topic || 'Not specified'}</span>
           </div>
           <div className="bg-slate-50 border border-slate-100/60 p-3 rounded-xl">
-            <span className="text-[8px] uppercase tracking-widest text-slate-400 font-extrabold block mb-0.5">Learner Profile</span>
-            <span className="font-bold text-slate-800">{details.requirements || 'Beginners'}</span>
+            <span className="text-[8px] uppercase tracking-widest text-slate-400 font-extrabold block mb-0.5">Learning Goal</span>
+            <span className="font-bold text-slate-800">{details.description || details.goal || details.objective || 'Not specified'}</span>
           </div>
           <div className="bg-slate-50 border border-slate-100/60 p-3 rounded-xl">
-            <span className="text-[8px] uppercase tracking-widest text-slate-400 font-extrabold block mb-0.5">Difficulty Level</span>
-            <span className="font-bold text-slate-800 uppercase">{details.level || 'Beginner'}</span>
+            <span className="text-[8px] uppercase tracking-widest text-slate-400 font-extrabold block mb-0.5">Current Level</span>
+            <span className="font-bold text-slate-800">{details.level || details.currentLevel || details.experience || 'Not specified'}</span>
           </div>
           <div className="bg-slate-50 border border-slate-100/60 p-3 rounded-xl">
-            <span className="text-[8px] uppercase tracking-widest text-slate-400 font-extrabold block mb-0.5">Your Objective</span>
-            <span className="font-bold text-slate-800">{details.description || 'Learn from Scratch'}</span>
+            <span className="text-[8px] uppercase tracking-widest text-slate-400 font-extrabold block mb-0.5">Learning Style</span>
+            <span className="font-bold text-slate-800">{details.requirements || details.learningStyle || details.style || 'Not specified'}</span>
           </div>
           <div className="bg-slate-50 border border-slate-100/60 p-3 rounded-xl">
-            <span className="text-[8px] uppercase tracking-widest text-slate-400 font-extrabold block mb-0.5">Language</span>
-            <span className="font-bold text-slate-800">{details.language || 'English'}</span>
-          </div>
-          <div className="bg-slate-50 border border-slate-100/60 p-3 rounded-xl">
-            <span className="text-[8px] uppercase tracking-widest text-slate-400 font-extrabold block mb-0.5">Duration</span>
-            <span className="font-bold text-slate-800">{details.duration ? `${details.duration} Hours` : '10 Hours'}</span>
+            <span className="text-[8px] uppercase tracking-widest text-slate-400 font-extrabold block mb-0.5">Course Duration</span>
+            <span className="font-bold text-slate-800">{(details.duration || details.courseDuration || details.hours) ? `${details.duration || details.courseDuration || details.hours} Hours` : 'Not specified'}</span>
           </div>
         </div>
       </div>
@@ -1389,6 +1357,22 @@ export default function ChatbotCourseCreator({ onClose }) {
       `Master advanced techniques and tools in ${capitalized}`,
       `Build practical real-world projects with ${capitalized}`
     ];
+  };
+
+  const cleanStructureText = (text) => {
+    if (!text) return "";
+    const lines = text.split('\n');
+    const filteredLines = lines.filter(line => {
+      const trimmed = line.trim();
+      // Filter out lines starting with numbers (e.g. "1. ", "2) ")
+      if (/^\d+[\.\)]/.test(trimmed)) return false;
+      // Filter out bullet points
+      if (/^[\-\*•]/.test(trimmed)) return false;
+      // Filter out empty lines or outline headers
+      if (trimmed.toLowerCase().startsWith('module') || trimmed.toLowerCase().startsWith('chapter')) return false;
+      return true;
+    });
+    return filteredLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
   };
 
   // Basic markdown text formatter for chat bubble rendering
@@ -1440,15 +1424,19 @@ export default function ChatbotCourseCreator({ onClose }) {
   // 2. Safe Syllabus tree renderer
   const renderInlineStructure = (structure) => {
     if (!structure || !structure.modules || !Array.isArray(structure.modules) || structure.modules.length === 0) return null;
+    const courseTitle = courseData?.details?.courseName || "Custom Course Outline";
     return (
       <div className="mt-4 bg-white border border-slate-200 shadow-lg rounded-2xl p-5 space-y-4 text-left animate-fade-in">
-        <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-          <h4 className="font-bold text-xs text-indigo-600 flex items-center gap-1.5 uppercase tracking-wider">
-            <Layers className="w-3.5 h-3.5" /> Syllabus Proposal
-          </h4>
-          <span className="text-[9px] bg-indigo-50 text-indigo-600 border border-indigo-100 px-2.5 py-0.5 rounded font-black uppercase tracking-wider">
-            {structure.modules.length} Modules
-          </span>
+        <div className="flex flex-col border-b border-slate-100 pb-3 gap-1">
+          <div className="flex justify-between items-center">
+            <h4 className="font-bold text-xs text-indigo-600 flex items-center gap-1.5 uppercase tracking-wider">
+              <Layers className="w-3.5 h-3.5" /> Syllabus Proposal
+            </h4>
+            <span className="text-[9px] bg-indigo-50 text-indigo-600 border border-indigo-100 px-2.5 py-0.5 rounded font-black uppercase tracking-wider">
+              {structure.modules.length} Modules
+            </span>
+          </div>
+          <h3 className="text-sm font-black text-slate-800 mt-1">{courseTitle}</h3>
         </div>
         <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-200">
           {structure.modules.map((m, mIdx) => {
@@ -1959,11 +1947,12 @@ export default function ChatbotCourseCreator({ onClose }) {
                             : 'bg-white border border-slate-200/80 text-slate-800 rounded-2xl rounded-bl-none'
                         }`}>
                            {msg.content && msg.content.trim() && (
-                             <div className="space-y-0.5">{formatChatMessage(msg.content)}</div>
+                             <div className="space-y-0.5">
+                               {formatChatMessage(msg.metadataType === 'structure' ? cleanStructureText(msg.content) : msg.content)}
+                             </div>
                            )}
 
                            {/* Render custom metadata cards inline inside the bubble */}
-                           {!isUser && msg.metadataType === 'details' && renderInlineDetails(msg.metadata)}
                            {!isUser && msg.metadataType === 'structure' && renderInlineStructure(msg.metadata)}
                           
                           <div className="text-[9px] text-right mt-1.5 opacity-60">
@@ -2097,7 +2086,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                           </button>
                           {courseData.mysql_id ? (
                             <div className="flex-1 bg-emerald-50 text-emerald-600 border border-emerald-250 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-inner">
-                              <CheckCircle className="w-3.5 h-3.5" /> Published to Academy
+                              <CheckCircle className="w-3.5 h-3.5" /> Course Published
                             </div>
                           ) : (
                             <button
@@ -2117,7 +2106,8 @@ export default function ChatbotCourseCreator({ onClose }) {
               </div>
             </div>
 
-            {/* Inline suggested replies quick chips */}
+            {/* Inline suggested replies quick chips (Completely removed per user request) */}
+            {/*
             {quickReplies.length > 0 && (
               <div className="bg-transparent py-2">
                 <div className="max-w-4xl mx-auto w-full px-6 flex flex-wrap gap-2 items-center">
@@ -2134,6 +2124,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                 </div>
               </div>
             )}
+            */}
 
             {/* Bottom active Chat Input Console */}
             <div className="p-4 bg-transparent border-t border-slate-200/20 backdrop-blur-sm">
