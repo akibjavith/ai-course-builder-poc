@@ -235,7 +235,8 @@ export default function ChatbotCourseCreator({ onClose }) {
     const prepareMsg = {
       role: 'assistant',
       content: "Outline confirmed! Proposing prompt blueprints and generating all lesson contents sequentially. Please wait...",
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isProgressCard: true
     };
     setMessages(prev => [...prev, prepareMsg]);
 
@@ -684,7 +685,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                 ...res.metadata,
                 subject: res.metadata.subject || res.metadata.topic || res.metadata.courseName || prev.details?.subject,
                 courseName: res.metadata.courseName || res.metadata.subject || res.metadata.topic || prev.details?.courseName,
-                description: res.metadata.description || res.metadata.goal || res.metadata.objective || prev.details?.description,
+                description: res.metadata.description || res.metadata.learningGoal || res.metadata.goal || res.metadata.objective || prev.details?.description,
                 level: res.metadata.level || res.metadata.currentLevel || res.metadata.experience || prev.details?.level,
                 requirements: res.metadata.requirements || res.metadata.learningStyle || res.metadata.style || prev.details?.requirements,
                 duration: String(res.metadata.duration || res.metadata.courseDuration || res.metadata.hours || prev.details?.duration || "")
@@ -2095,6 +2096,90 @@ export default function ChatbotCourseCreator({ onClose }) {
                           </div>
                         </div>
 
+                        {/* Render Inline Progress Card if flagged */}
+                        {!isUser && msg.isProgressCard && (isBatchGenerating || generationStatus === 'completed') && (
+                          <div className="bg-white border border-slate-200 shadow-md p-5 rounded-2xl rounded-bl-none w-full flex flex-col gap-4 text-slate-800 mt-3 animate-fade-in">
+                            <div className="flex items-center gap-4">
+                              <div className="relative w-12 h-12 flex-shrink-0">
+                                {/* Background circle */}
+                                <svg className="w-full h-full transform -rotate-90">
+                                  <circle
+                                    cx="24"
+                                    cy="24"
+                                    r="20"
+                                    strokeWidth="3.5"
+                                    stroke="#f1f5f9"
+                                    fill="transparent"
+                                  />
+                                  {/* Animated progress circle */}
+                                  <circle
+                                    cx="24"
+                                    cy="24"
+                                    r="20"
+                                    strokeWidth="3.5"
+                                    stroke={generationStatus === 'completed' ? '#10b981' : '#6366f1'}
+                                    fill="transparent"
+                                    strokeDasharray={125.6}
+                                    strokeDashoffset={generationStatus === 'completed' ? 0 : (125.6 - (125.6 * Math.min(batchCompleted, batchTotal)) / batchTotal)}
+                                    strokeLinecap="round"
+                                    className="transition-all duration-500 ease-out"
+                                  />
+                                </svg>
+                                {/* Percentage text */}
+                                <div className={`absolute inset-0 flex items-center justify-center text-[10px] font-black ${generationStatus === 'completed' ? 'text-emerald-600' : 'text-indigo-600'}`}>
+                                  {generationStatus === 'completed' ? '100%' : `${Math.round((batchCompleted / batchTotal) * 100)}%`}
+                                </div>
+                              </div>
+                              <div className="flex-1 space-y-1">
+                                <span className={`text-[9px] uppercase tracking-widest font-black block ${generationStatus === 'completed' ? 'text-emerald-600' : 'text-indigo-600'}`}>
+                                  {generationStatus === 'completed' ? 'Content Generation Complete' : 'Writing Course Material'}
+                                </span>
+                                <h5 className="text-xs font-bold text-slate-800 line-clamp-1">
+                                  {generationStatus === 'completed' ? 'All lessons generated successfully!' : batchCurrentTitle}
+                                </h5>
+                                <p className="text-[10px] text-slate-500 font-medium">
+                                  Completed {batchCompleted} of {batchTotal} chapters...
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Action Buttons inside Card */}
+                            {isBatchGenerating && (
+                              <div className="border-t border-slate-100 pt-3">
+                                <button
+                                  onClick={() => handleCancelGeneration()}
+                                  className="w-full bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/50 font-bold py-2 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1 shadow-sm"
+                                >
+                                  <X className="w-3.5 h-3.5" /> Cancel Course Generation
+                                </button>
+                              </div>
+                            )}
+
+                            {generationStatus === 'completed' && (
+                              <div className="border-t border-slate-100 pt-3 flex gap-2.5">
+                                <button
+                                  onClick={() => setIsPreviewOpen(true)}
+                                  className="flex-1 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/60 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm"
+                                >
+                                  <Eye className="w-3.5 h-3.5" /> Preview Course
+                                </button>
+                                {courseData.mysql_id ? (
+                                  <div className="flex-1 bg-emerald-50 text-emerald-600 border border-emerald-250 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-inner">
+                                    <CheckCircle className="w-3.5 h-3.5" /> Course Published
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => handlePublish()}
+                                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-indigo-900/10"
+                                  >
+                                    <CheckCircle className="w-3.5 h-3.5" /> Publish Course
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         {/* Assistant Actions Bar */}
                         {!isUser && (
                           <div className="flex items-center justify-between px-1 text-slate-400 mt-2">
@@ -2152,90 +2237,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                   </div>
                 )}
 
-                {(isBatchGenerating || generationStatus === 'completed') && (
-                  <div className="flex justify-start animate-fade-in mt-4">
-                    <div className="bg-white border border-slate-200 shadow-md p-5 rounded-2xl rounded-bl-none max-w-[85%] w-full flex flex-col gap-4 text-slate-800">
-                      <div className="flex items-center gap-4">
-                        <div className="relative w-12 h-12 flex-shrink-0">
-                          {/* Background circle */}
-                          <svg className="w-full h-full transform -rotate-90">
-                            <circle
-                              cx="24"
-                              cy="24"
-                              r="20"
-                              strokeWidth="3.5"
-                              stroke="#f1f5f9"
-                              fill="transparent"
-                            />
-                            {/* Animated progress circle */}
-                            <circle
-                              cx="24"
-                              cy="24"
-                              r="20"
-                              strokeWidth="3.5"
-                              stroke={generationStatus === 'completed' ? '#10b981' : '#6366f1'}
-                              fill="transparent"
-                              strokeDasharray={125.6}
-                              strokeDashoffset={generationStatus === 'completed' ? 0 : (125.6 - (125.6 * Math.min(batchCompleted, batchTotal)) / batchTotal)}
-                              strokeLinecap="round"
-                              className="transition-all duration-500 ease-out"
-                            />
-                          </svg>
-                          {/* Percentage text */}
-                          <div className={`absolute inset-0 flex items-center justify-center text-[10px] font-black ${generationStatus === 'completed' ? 'text-emerald-600' : 'text-indigo-600'}`}>
-                            {generationStatus === 'completed' ? '100%' : `${Math.round((batchCompleted / batchTotal) * 100)}%`}
-                          </div>
-                        </div>
-                        <div className="flex-1 space-y-1">
-                          <span className={`text-[9px] uppercase tracking-widest font-black block ${generationStatus === 'completed' ? 'text-emerald-600' : 'text-indigo-600'}`}>
-                            {generationStatus === 'completed' ? 'Content Generation Complete' : 'Writing Course Material'}
-                          </span>
-                          <h5 className="text-xs font-bold text-slate-800 line-clamp-1">
-                            {generationStatus === 'completed' ? 'All lessons generated successfully!' : batchCurrentTitle}
-                          </h5>
-                          <p className="text-[10px] text-slate-500 font-medium">
-                            Completed {batchCompleted} of {batchTotal} chapters...
-                          </p>
-                        </div>
-                      </div>
 
-                      {/* Action Buttons inside Card */}
-                      {isBatchGenerating && (
-                        <div className="border-t border-slate-100 pt-3">
-                          <button
-                            onClick={() => handleCancelGeneration()}
-                            className="w-full bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/50 font-bold py-2 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1 shadow-sm"
-                          >
-                            <X className="w-3.5 h-3.5" /> Cancel Course Generation
-                          </button>
-                        </div>
-                      )}
-
-                      {generationStatus === 'completed' && (
-                        <div className="border-t border-slate-100 pt-3 flex gap-2.5">
-                          <button
-                            onClick={() => setIsPreviewOpen(true)}
-                            className="flex-1 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/60 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm"
-                          >
-                            <Eye className="w-3.5 h-3.5" /> Preview Course
-                          </button>
-                          {courseData.mysql_id ? (
-                            <div className="flex-1 bg-emerald-50 text-emerald-600 border border-emerald-250 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-inner">
-                              <CheckCircle className="w-3.5 h-3.5" /> Course Published
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => handlePublish()}
-                              className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-indigo-900/10"
-                            >
-                              <CheckCircle className="w-3.5 h-3.5" /> Publish Course
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
 
                 <div ref={messagesEndRef} />
               </div>

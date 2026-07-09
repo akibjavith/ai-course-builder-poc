@@ -741,38 +741,106 @@ Expected JSON output format exactly:
             raise HTTPException(status_code=500, detail=str(e))
 
     # -------------------------------------------------------------------------
-    # All other steps: standard conversational flow
+    # All other steps: standard conversational slot-filling flow
     # -------------------------------------------------------------------------
-    system_prompt = build_builder_system_prompt(
-        current_step=req.currentStep,
-        course_data=req.courseData
+    from chatbot_builder_service import (
+        extract_slots_from_message,
+        determine_next_step,
+        build_builder_system_prompt,
+        parse_quick_replies
     )
-
-    messages = [{"role": "system", "content": system_prompt}] + req.messages
+    from chat_service import parse_metadata
 
     try:
+        # Extract user last message
+        user_message = ""
+        if req.messages:
+            for msg in reversed(req.messages):
+                if msg.get("role") == "user":
+                    user_message = msg.get("content", "")
+                    break
+
+        # Map legacy details key/values to clean slot values
+        details = req.courseData.get("details", {}) or {}
+        current_slots = {
+            "topic": details.get("topic") or details.get("subject") or details.get("courseName") or "",
+            "learningGoal": details.get("learningGoal") or details.get("description") or "",
+            "currentLevel": details.get("currentLevel") or details.get("level") or "",
+            "learningStyle": details.get("learningStyle") or details.get("requirements") or "",
+            "duration": details.get("duration") or "",
+            "language": details.get("language") or "English"
+        }
+
+        # Stage 1: Run NLU Slot Extraction
+        updated_slots = extract_slots_from_message(user_message, current_slots)
+
+        # Stage 2: Programmatic Dialog Solver
+        next_step, validation_error = determine_next_step(req.currentStep, updated_slots, user_message)
+
+        # Stage 3: Dynamic NLG Prompt Generation
+        system_prompt = build_builder_system_prompt(next_step, updated_slots, validation_error)
+
+        messages = [{"role": "system", "content": system_prompt}] + req.messages
+
         response = openai_client.chat.completions.create(
             model=LLM_MODEL,
             messages=messages,
             temperature=0.7,
-            max_tokens=6000
+            max_tokens=4000
         )
         
         ai_reply = response.choices[0].message.content
 
-        # Parse metadata suggestions (details, structure, content prompts)
+        # Determine scope based on next_step
         scope = "Details"
-        if req.currentStep in ("CONTENT_GEN", "QUIZ_GEN"):
+        if next_step == "PROMPT_GEN":
             scope = "Content"
+        elif next_step == "OUTLINE_EDIT":
+            scope = "Structure"
 
+        # Parse metadata suggestions
         reply_text, metadata, type_val = parse_metadata(
             ai_reply=ai_reply,
             scope=scope,
-            details=req.courseData.get("details", {})
+            details=updated_slots
         )
+
+        # Overwrite or inject next_step and clean slots into details metadata block
+        if next_step == "PROMPT_GEN":
+            type_val = "content"
+            if metadata:
+                metadata["next_step"] = "CONFIRM_GENERATE"
+            else:
+                metadata = {
+                    "next_step": "CONFIRM_GENERATE",
+                    "prompts": []
+                }
+        elif next_step == "OUTLINE_EDIT":
+            type_val = "structure"
+            if metadata:
+                metadata["next_step"] = "CONFIRM_GENERATE"
+            else:
+                metadata = {
+                    "next_step": "CONFIRM_GENERATE",
+                    "modules": []
+                }
+        else:
+            type_val = "details"
+            if metadata:
+                metadata["next_step"] = next_step
+                for k, v in updated_slots.items():
+                    metadata[k] = v
+            else:
+                # Minimal fallback metadata so frontend receives step transitions & slot values
+                metadata = {
+                    "next_step": next_step,
+                    **updated_slots
+                }
 
         # Parse quick-replies lists
         reply_text, quick_replies = parse_quick_replies(reply_text)
+
+        logger.info(f"[Chatbot Solver] Step transition: {req.currentStep} -> {next_step} | Metadata: {metadata}")
 
         return {
             "status": "success",

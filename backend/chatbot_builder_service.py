@@ -1,237 +1,316 @@
 import json
 import re
+import os
 import logging
-from chat_service import parse_metadata, clean_reply_text
+from openai import OpenAI
+from typing import Dict, Any, Tuple, Optional
 
 logger = logging.getLogger("chatbot_builder_service")
 
-def build_builder_system_prompt(current_step: str, course_data: dict) -> str:
+# Initialize OpenAI client locally using environment variables
+def get_openai_client() -> OpenAI:
+    return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+
+def extract_slots_from_message(user_message: str, current_slots: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Builds a system prompt specifically tailored for the step-by-step Conversational Course Creator.
+    Invokes OpenAI in structured JSON mode to extract slot values from the latest user message
+    and merge them with existing slot values.
     """
-    details = course_data.get("details", {})
-    structure = course_data.get("structure", {})
+    client = get_openai_client()
     
-    progress_context = f"""
-# CURRENT COURSE DRAFT STATE:
-- Details: {json.dumps(details)}
-- Structure: {json.dumps(structure)}
-"""
-    
-    step_instructions = ""
-    
-    if current_step == "ASK_TOPIC":
-        step_instructions = """
-Goal: Ask the user what subject or topic they would like to create a course on.
-Question: "What would you like to learn?"
-Instructions:
-- Ask exactly: "What would you like to learn?"
-- If the user provides a valid topic (e.g., "Python", "Basics of Algebra"), update "subject" and "courseName" to match, set "next_step" to "ASK_GOAL", output the Details metadata JSON, and ask exactly: "What is your learning goal?"
-- If the user does NOT provide a valid topic (e.g. says "Hi", "Hello", "not interested", "none", or types gibberish), politely redirect them back to specify a topic, do NOT output any metadata block, and remain on ASK_TOPIC by asking exactly: "What would you like to learn?"
-"""
-    elif current_step == "ASK_GOAL":
-        step_instructions = """
-Goal: Ask what the user hopes to achieve by learning this topic.
-Question: "What is your learning goal?"
-Instructions:
-- Ask exactly: "What is your learning goal?"
-- If the user provides a valid goal, extract the core concise intent from their message (E.g., "Become a Web Developer"). Store this in "description". Set "next_step" to "ASK_LEVEL", output the Details metadata JSON, and transition by asking exactly: "How familiar are you with <Topic>?" (replacing <Topic> with the subject/course name).
-- If the response does not answer the question, politely guide them back to specifying their goal, do NOT output any metadata block, and remain on ASK_GOAL by asking exactly: "What is your learning goal?"
-"""
-    elif current_step == "ASK_LEVEL":
-        # Determine the topic from details
-        topic_name = details.get("subject") or details.get("courseName") or "this subject"
-        step_instructions = f"""
-Goal: Ask the user how familiar they are with the subject right now.
-Question: "How familiar are you with {topic_name}?"
-Instructions:
-- Ask exactly: "How familiar are you with {topic_name}?"
-- If the user answers, infer the correct meaning (E.g., "Beginner", "Intermediate", "Advanced"). Store this in "level". Set "next_step" to "ASK_STYLE", output the Details metadata JSON, and transition by asking exactly: "How would you prefer your lessons to be structured? For example, do you learn best with hands-on code exercises, visual diagrams & videos, interactive quizzes, structured tables, detailed text explanations, or a balanced combination of all of these?"
-- If the response does not answer the question, politely guide them back to specifying their level, do NOT output any metadata block, and remain on ASK_LEVEL by asking exactly: "How familiar are you with {topic_name}?"
-"""
-    elif current_step == "ASK_STYLE":
-        step_instructions = """
-Goal: Ask the user how they would prefer their lessons to be structured.
-Question: "How would you prefer your lessons to be structured? For example, do you learn best with hands-on code exercises, visual diagrams & videos, interactive quizzes, structured tables, detailed text explanations, or a balanced combination of all of these?"
-Instructions:
-- Ask exactly: "How would you prefer your lessons to be structured? For example, do you learn best with hands-on code exercises, visual diagrams & videos, interactive quizzes, structured tables, detailed text explanations, or a balanced combination of all of these?"
-- If the user provides a preference, extract it as a concise value (e.g., "hands-on code exercises", "visual diagrams & videos", "interactive quizzes", "structured tables", "detailed text explanations", or "balanced combination") and store in "requirements". Set "next_step" to "ASK_DURATION", output the Details metadata JSON, and transition by asking exactly: "How many hours are you looking to dedicate to this course? For example, you can choose a short duration like 1 hour or 2 hours, or something more comprehensive like 5 hours, 10 hours, 15 hours, or 20 hours. Let me know what duration works best for you!"
-- If the response does not answer the question, politely guide them back, do NOT output any metadata block, and remain on ASK_STYLE by asking exactly: "How would you prefer your lessons to be structured? For example, do you learn best with hands-on code exercises, visual diagrams & videos, interactive quizzes, structured tables, detailed text explanations, or a balanced combination of all of these?"
-"""
-    elif current_step == "ASK_DURATION":
-        step_instructions = """
-Goal: Ask the user how many hours they would like the course to be, and enforce that it cannot exceed 20 hours.
-Question: "How many hours are you looking to dedicate to this course? For example, you can choose a short duration like 1 hour or 2 hours, or something more comprehensive like 5 hours, 10 hours, 15 hours, or 20 hours. Let me know what duration works best for you!"
-Instructions:
-- Ask exactly: "How many hours are you looking to dedicate to this course? For example, you can choose a short duration like 1 hour or 2 hours, or something more comprehensive like 5 hours, 10 hours, 15 hours, or 20 hours. Let me know what duration works best for you!"
-- Validate the duration hours provided by the user:
-  * Extract the numeric number of hours from their response.
-  * If the requested hours duration is strictly greater than 20 (e.g. > 20, such as 21, 25, 40 hours):
-    - Do NOT transition to CONFIRM_DETAILS. Keep "next_step" as "ASK_DURATION".
-    - Politely refuse by outputting exactly: "I can only create a course that is 20 hours or less. Please select or type a duration within that limit."
-    - Do NOT output any details metadata JSON block.
-  * If the requested hours duration is 20 hours or less (e.g. <= 20, such as 1, 2, 5, 10, 15, 20):
-    - Extract the numeric value (e.g., "5") and store it in "duration".
-    - Set "next_step" to "CONFIRM_DETAILS".
-    - Output the Details metadata JSON block.
-    - Transition by outputting exactly the summary in the layout below:
+    system_prompt = """You are a slot extraction module for a course builder assistant.
+Your task is to analyze the user's latest message and extract values for the following slots:
+1. topic (the subject matter, e.g. "Python Programming", "World War II History")
+2. learningGoal (what they want to achieve, e.g. "get a job", "build an app", "pass my exams")
+3. currentLevel (familiarity with the topic, e.g. "beginner", "intermediate", "advanced", "novice")
+4. learningStyle (how they prefer lessons to be structured, e.g. "hands-on coding", "videos & diagrams", "interactive quizzes", "structured tables", "detailed text explanations", "balanced combination")
+5. duration (how detailed or long they want the course, e.g. "10 hours", "quick", "comprehensive", "3 hours")
+6. language (e.g. "English", "Spanish", defaults to "English")
 
-      Here's a summary of your course requirements:
-
-      Topic: <subject>
-      Your Profile: <requirements>
-      Difficulty Level: <level>
-      Your Objective: <description>
-      Language: English
-      Duration: <duration> Hours
-
-      Would you like to modify any of these details before I create the course structure for you?
-
-- If the response does not answer the question or does not specify hours, politely guide them back, do NOT output any metadata block, and remain on ASK_DURATION.
+Rules:
+- Output a single JSON object with keys: "topic", "learningGoal", "currentLevel", "learningStyle", "duration", "language".
+- Only extract a value if the user clearly mentions it or strongly implies it in their latest message. Otherwise, return null for that key.
+- Do NOT carry over slots from the current slots unless the user modifies/updates them in the latest message. We will merge them in code.
 """
-    elif current_step == "CONFIRM_DETAILS":
-        step_instructions = """
-Goal: Summarize all collected goals/details and ask for confirmation.
-Instructions:
-- Output ONLY a normal chat message (plain conversational text) summarizing the learner's inputs exactly in this format:
-  Here's a summary of your course requirements:
 
-  Topic: <subject>
-  Your Profile: <requirements>
-  Difficulty Level: <level>
-  Your Objective: <description>
-  Language: English
-  Duration: <duration> Hours
-
-  Would you like to modify any of these details before I create the course structure for you?
-
-- CRITICAL: DO NOT output any Learning Goal Summary Card or Details metadata card. The summary MUST be shown ONLY as a normal text message.
-- If the user confirms (e.g., says "Yes", "Continue", "Looks good", "Proceed", "Generate", "Correct", "Confirm"), set "next_step" to "ASK_GENERATE_SKELETON", do NOT output any details or structure metadata card block, and transition by asking exactly: "Shall I start by creating the modules for you?"
+    user_prompt = f"""Latest User Message: "{user_message}"
+Previously Extracted Slots: {json.dumps(current_slots)}
 """
+
+    try:
+        response = client.chat.completions.create(
+            model=LLM_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.0,
+            response_format={"type": "json_object"}
+        )
+        extracted = json.loads(response.choices[0].message.content)
+        
+        # Merge logic: if extracted key is not null, overwrite current slot.
+        merged = {**current_slots}
+        for k in ["topic", "learningGoal", "currentLevel", "learningStyle", "duration", "language"]:
+            val = extracted.get(k)
+            if val is not None and str(val).strip() != "" and str(val).lower() != "null":
+                merged[k] = val
+                
+        logger.info(f"[NLU Extraction] Extracted: {extracted} | Merged: {merged}")
+        return merged
+    except Exception as e:
+        logger.error(f"[NLU Extraction] Error extracting slots: {e}")
+        return current_slots
+
+def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: str) -> Tuple[str, Optional[str]]:
+    """
+    Programmatic solver that determines the next step in the dialog based on slot status and transitions.
+    Returns (next_step, validation_error_message).
+    """
+    # 1. Normalize Slots First (ensures slot values are safe before any transitions)
+    # Normalize Level
+    level_val = slots.get("currentLevel")
+    if level_val:
+        lvl_lower = str(level_val).lower()
+        if "begin" in lvl_lower or "new" in lvl_lower or "start" in lvl_lower or "novice" in lvl_lower or "zero" in lvl_lower:
+            slots["currentLevel"] = "beginner"
+        elif "intermed" in lvl_lower or "medium" in lvl_lower or "some" in lvl_lower or "familiar" in lvl_lower:
+            slots["currentLevel"] = "intermediate"
+        elif "advanc" in lvl_lower or "expert" in lvl_lower or "proficient" in lvl_lower or "high" in lvl_lower:
+            slots["currentLevel"] = "advanced"
+        else:
+            slots["currentLevel"] = "beginner" # Fallback
+
+    # Normalize Style
+    style_val = slots.get("learningStyle")
+    if style_val:
+        st_lower = str(style_val).lower()
+        if "code" in st_lower or "hands" in st_lower or "practical" in st_lower or "exercise" in st_lower:
+            slots["learningStyle"] = "hands-on coding"
+        elif "video" in st_lower or "visual" in st_lower or "diagram" in st_lower or "movie" in st_lower:
+            slots["learningStyle"] = "videos & diagrams"
+        elif "quiz" in st_lower or "test" in st_lower or "question" in st_lower or "check" in st_lower:
+            slots["learningStyle"] = "interactive quizzes"
+        elif "table" in st_lower or "structured" in st_lower or "chart" in st_lower or "matrix" in st_lower:
+            slots["learningStyle"] = "structured tables"
+        elif "text" in st_lower or "read" in st_lower or "theory" in st_lower or "explain" in st_lower:
+            slots["learningStyle"] = "detailed text explanations"
+        else:
+            slots["learningStyle"] = "balanced combination"
+
+    # Normalize and Validate Duration (must be <= 20)
+    duration_val = slots.get("duration")
+    if duration_val:
+        dur_lower = str(duration_val).lower()
+        if "quick" in dur_lower or "short" in dur_lower or "crash" in dur_lower:
+            slots["duration"] = "3"
+        elif "standard" in dur_lower or "medium" in dur_lower or "moderate" in dur_lower:
+            slots["duration"] = "8"
+        elif "comprehensive" in dur_lower or "long" in dur_lower or "deep" in dur_lower:
+            slots["duration"] = "15"
+        else:
+            digits = re.findall(r'\d+', str(duration_val))
+            if digits:
+                hours = int(digits[0])
+                if hours > 20:
+                    slots["duration"] = None # Clear invalid duration
+                    return "ASK_DURATION", "I can only create a course that is 20 hours or less. Please select or type a duration within that limit."
+                slots["duration"] = str(hours)
+            else:
+                slots["duration"] = "8" # default standard
+
+    # 2. Check validations or re-confirmations for special steps
+    if current_step == "CONFIRM_DETAILS":
+        lowercase_msg = user_message.lower()
+        confirm_words = [
+            "looks good", "looks fine", "looks ok", "continue", "confirm", "yes", "yep", "yeah",
+            "correct", "fine", "ok", "sure", "proceed", "generate", "create", "structure", "start",
+            "go ahead", "do it", "let's go", "great", "perfect", "sounds good", "alright"
+        ]
+        if any(w in lowercase_msg for w in confirm_words):
+            return "ASK_GENERATE_SKELETON", None
+        return "CONFIRM_DETAILS", None
+
     elif current_step == "ASK_GENERATE_SKELETON":
-        step_instructions = """
-Goal: Ask the user if they want to generate modules.
-Question: "Shall I start by creating the modules for you?"
-Instructions:
-- Ask exactly: "Shall I start by creating the modules for you?"
-- DO NOT output any details or structure metadata card block for this step.
-- If the user confirms (e.g., says "Yes", "Continue", "Looks good", "Proceed", "Generate", "Correct", "Confirm", "do it"), set "next_step" to "OUTLINE_EDIT" and transition.
-"""
+        lowercase_msg = user_message.lower()
+        confirm_words = ["yes", "continue", "looks good", "proceed", "generate", "correct", "confirm", "do it", "sure", "yep", "yeah"]
+        if any(w in lowercase_msg for w in confirm_words):
+            return "OUTLINE_EDIT", None
+        return "ASK_GENERATE_SKELETON", None
 
-    if current_step in ("ASK_TOPIC", "ASK_GOAL", "ASK_LEVEL", "ASK_STYLE", "ASK_DURATION", "CONFIRM_DETAILS", "ASK_GENERATE_SKELETON"):
-        system_prompt = f"""You are the AI Course Architect, a friendly and professional instructional designer acting as an intelligent AI Learning Mentor. 
+    elif current_step == "OUTLINE_EDIT":
+        lowercase_msg = user_message.lower()
+        confirm_words = ["yes", "continue", "looks good", "proceed", "generate", "correct", "confirm", "happy", "fine", "ok", "go ahead"]
+        if any(w in lowercase_msg for w in confirm_words):
+            return "CONFIRM_GENERATE", None
+        return "OUTLINE_EDIT", None
+
+    elif current_step == "CONFIRM_GENERATE":
+        return "CONFIRM_GENERATE", None
+
+    elif current_step == "PROMPT_GEN":
+        return "PROMPT_GEN", None
+
+    elif current_step == "READY":
+        return "READY", None
+
+    # 3. Determine the next empty slot in priority order
+    if not slots.get("topic"):
+        return "ASK_TOPIC", None
+    if not slots.get("learningGoal"):
+        return "ASK_GOAL", None
+    if not slots.get("currentLevel"):
+        return "ASK_LEVEL", None
+    if not slots.get("learningStyle"):
+        return "ASK_STYLE", None
+    if not slots.get("duration"):
+        return "ASK_DURATION", None
+
+    return "CONFIRM_DETAILS", None
+
+def build_builder_system_prompt(next_step: str, slots: Dict[str, Any], validation_error: Optional[str] = None) -> str:
+    """
+    Constructs a highly focused system prompt for the NLG step to ask the user
+    for the next slot value in a natural way.
+    """
+    topic_name = slots.get("topic") or "this subject"
+    
+    prompt = """You are the AI Course Architect, a warm, professional, and friendly AI Learning Mentor.
 Your job is to interactively guide the user step-by-step through creating a personalized learning roadmap.
+The user is creating this course for THEMSELVES to learn from. Frame all questions directly to the user (e.g., "for you", "your level", "your background").
 
-CRITICAL PERSPECTIVE RULES:
-- The user is creating this course for THEMSELVES to learn from. They are the student/learner.
-- Frame discussions and questions directly to the user (e.g., "for you", "what you would like to learn", "your level", "your background").
-- NEVER behave like a rigid form. Be conversational and understand natural language.
-
-WIZARD STAGE TRANSITION FLOW:
-1. ASK_TOPIC -> transition to ASK_GOAL (after user specifies a topic/subject).
-2. ASK_GOAL -> transition to ASK_LEVEL (after user specifies their learning goal).
-3. ASK_LEVEL -> transition to ASK_STYLE (after user specifies their current familiarity level).
-4. ASK_STYLE -> transition to ASK_DURATION (after user specifies their preferred learning style).
-5. ASK_DURATION -> transition to CONFIRM_DETAILS (after user specifies course duration in hours).
-6. CONFIRM_DETAILS -> transition to ASK_GENERATE_SKELETON (after user confirms the details summary).
-7. ASK_GENERATE_SKELETON -> transition to OUTLINE_EDIT (after user confirms to generate the outline modules).
-
-CRITICAL CONVERSATIONAL VALIDATION & TRANSITION RULES:
-- You must evaluate the user's latest response to see if it is a valid answer to the current stage's question.
-- If the user's message is irrelevant, off-topic, gibberish, or a rejection/refusal (e.g., "not interested", "no thanks", "exit", "stop", "no"):
-  * Do NOT transition to the next stage.
-  * Politely acknowledge the input and redirect the user back to the current question without using robotic error messages like "Invalid input".
-  * Do NOT output any [METADATA] block.
-- If the user's message is a valid answer:
-  * Transition to the next stage in the flow.
-
-You are currently in the stage: **{current_step}**.
-{step_instructions}
-
-{progress_context}
-
-CRITICAL RULES FOR METADATA SUGGESTION CARDS:
-- For ASK_TOPIC, ASK_GOAL, ASK_LEVEL, ASK_STYLE, ASK_DURATION, you MUST output the Details JSON metadata block wrapped in [METADATA]...[/METADATA] tags in EVERY response. Include the "next_step" key indicating the active step or transition step.
-- For CONFIRM_DETAILS and ASK_GENERATE_SKELETON, you MUST NOT output any metadata block.
-- NEVER include raw JSON or markdown code blocks (like ```json) in your conversational reply text. Any JSON structure must reside ONLY inside [METADATA]...[/METADATA].
-- You MUST NOT output any Course Structure or modules/chapters JSON schema.
-- Schema for Details:
-  {{ "next_step": "...", "courseType": "Custom Course", "subject": "...", "courseName": "...", "description": "...", "price": "0", "duration": "...", "requirements": "...", "level": "...", "language": "English", "scriptingLanguage": "NA", "evaluator": "Sarah Johnson" }}
-
-Keep your response conversational, friendly, encouraging, and brief.
+GLOBAL RULES:
+1. Warm Persona: Be conversational and natural. Do not be a rigid form.
+2. Structured Data Wrap: You MUST wrap the JSON metadata block in [METADATA]...[/METADATA] tags in your response.
+3. No Raw JSON: Never output raw JSON, curly braces, or markdown code blocks (like ```json) in your conversational reply text.
+4. Schema Mapping: The JSON metadata block must conform EXACTLY to the Details Schema:
+   {
+     "next_step": "<step_value>",
+     "courseType": "Custom Course",
+     "topic": "<topic_val>",
+     "learningGoal": "<goal_val>",
+     "currentLevel": "<level_val>",
+     "learningStyle": "<style_val>",
+     "duration": "<duration_val>",
+     "language": "<language_val>",
+     "scriptingLanguage": "NA",
+     "evaluator": "Sarah Johnson"
+   }
+   (Ensure all slot values matching the current state are populated; use empty strings "" if not yet gathered).
 """
-        return system_prompt
 
-    # For OUTLINE_EDIT stage, build a highly simplified, isolated prompt.
-    if current_step == "OUTLINE_EDIT":
-        system_prompt = f"""You are the AI Course Architect, a friendly and professional instructional designer acting as an intelligent AI Learning Mentor.
-Your job is to generate the personalized learning roadmap outline for the user.
-
-CRITICAL CONVERSATIONAL FLOW RULES:
-- The user has confirmed they want to generate the modules roadmap. DO NOT ask any additional questions about what topics they want to cover first.
-- Immediately generate the course roadmap structure outline based on the confirmed details:
-  * Course Name: {details.get("courseName")}
-  * Subject: {details.get("subject")}
-  * Goal: {details.get("description")}
-  * Level: {details.get("level")}
-  * Requirements: {details.get("requirements")}
-  * Duration: {details.get("duration")} Hours
-
-- Generate a comprehensive, natural, and educationally appropriate number of modules and chapters based on the course topic, goal, level, and requirements. Do NOT scale, limit, or restrict the number of modules based on the course duration hours; generate whatever structure is most appropriate for the subject.
-
-- ABSOLUTE OUTPUT RULES — ZERO TOLERANCE VIOLATIONS:
-  1. ALL module and chapter data MUST be placed ONLY inside [METADATA]...[/METADATA] tags. NOWHERE ELSE.
-  2. Your conversational reply text MUST BE EXACTLY (copy this word for word): "Here is your personalized learning roadmap outline. Do you have anything to change in this, or would you like to add any modules?"
-  3. You MUST NOT write any module names, chapter names, numbered lists, bullet lists, or syllabus headings ANYWHERE in the conversational reply text. Not even a summary.
-  4. Do NOT write greetings, explanations, or commentary in the conversational reply. Only the exact sentence above.
-  5. Set "next_step" to "CONFIRM_GENERATE" inside the metadata.
-
-{progress_context}
-
-CRITICAL RULES FOR METADATA SUGGESTION CARDS:
-- You MUST output the Course Structure JSON block wrapped in [METADATA]...[/METADATA] tags in every response in this step. Include all modules and chapters based on the confirmed details.
-- You MUST NOT output the Details JSON block or Details metadata card.
-- Schema for Course Structure:
-  {{ "next_step": "CONFIRM_GENERATE", "modules": [{{ "title": "...", "chapters": [{{ "title": "..." }}] }}] }}
+    state_instructions = ""
+    if next_step == "ASK_TOPIC":
+        state_instructions = """
+Current State: ASK_TOPIC
+Goal: Ask the user what subject or topic they would like to learn.
+Conversational Guidance: Ask a natural, welcoming question to discover their desired topic. Example: "What subject or topic would you like to explore today?"
 """
-        return system_prompt
-
-    # For CONFIRM_GENERATE stage, build a simplified prompt.
-    if current_step == "CONFIRM_GENERATE":
-        system_prompt = f"""You are the AI Course Architect, a friendly and professional AI Learning Mentor.
-Your job is to get final confirmation before generating the complete course content.
-
-You are currently in the stage: **CONFIRM_GENERATE**.
-Goal: Final confirmation before batch content generation.
-Instructions:
-- Ask EXACTLY this question (word for word, nothing more, nothing less): "The course structure has been finalized. Would you like me to start generating the complete course content?"
-- Do NOT output any JSON metadata block (neither Details card nor Structure card).
-- Do NOT output any list of modules, chapters, or syllabus outline in the conversational reply text.
-- Keep the message clean and short — just the question above.
-
-{progress_context}
-
-Keep your response conversational, friendly, encouraging, and brief.
+    elif next_step == "ASK_GOAL":
+        state_instructions = f"""
+Current State: ASK_GOAL
+Goal: Discover the user's objective or goal for studying {topic_name}.
+Conversational Guidance: Ask a natural, friendly question about what they hope to achieve (e.g. "What is your main goal for learning {topic_name}? Are you looking to build a specific project, prepare for a job, or just satisfy your curiosity?").
 """
-        return system_prompt
-
-    # For READY stage, build a simplified prompt.
-    system_prompt = f"""You are the AI Course Architect, a friendly and professional AI Learning Mentor.
-Your job is to confirm course publication.
-
-You are currently in the stage: **READY**.
-Goal: Publishing confirmation.
-Instructions:
-- Congratulate the user on generating the course. Explain that they can preview the course using the "Preview Course" button, or publish it using the "Publish Course" button.
-- Do NOT output any JSON metadata block.
-
-{progress_context}
-
-Keep your response conversational, friendly, encouraging, and brief.
+    elif next_step == "ASK_LEVEL":
+        state_instructions = f"""
+Current State: ASK_LEVEL
+Goal: Discover their current level of experience or familiarity with {topic_name}.
+Conversational Guidance: Ask a friendly question to gauge their current familiarity (e.g. "How much experience do you already have with {topic_name}? Are you a complete beginner, or do you have some experience?").
 """
-    return system_prompt
+    elif next_step == "ASK_STYLE":
+        state_instructions = f"""
+Current State: ASK_STYLE
+Goal: Learn their preferred style of lesson structure.
+Conversational Guidance: Ask a friendly, concise question (e.g., "How do you enjoy learning the most? Do you prefer hands-on coding, video and diagrams, structured tables, or a balanced combination?").
+"""
+    elif next_step == "ASK_DURATION":
+        error_addition = f"\nValidation Alert: {validation_error}\n" if validation_error else ""
+        state_instructions = f"""
+Current State: ASK_DURATION{error_addition}
+Goal: Gather the duration they want to dedicate to this course.
+Conversational Guidance: Ask how detailed they want the course to be. Example: "How detailed would you like this course to be? You can choose a Quick course (2–5 hrs), a Standard course (5–10 hrs), or a Comprehensive course (10–20 hrs)."
+If the validation alert is present, politely explain the 20-hour limit and guide them back.
+"""
+    elif next_step == "CONFIRM_DETAILS":
+        state_instructions = f"""
+Current State: CONFIRM_DETAILS
+Goal: Show a clean, summary report of their requirements and ask for confirmation.
+CRITICAL FORMATTING: You must output EXACTLY the text layout below in your conversational reply:
+---
+Here's a summary of your course requirements:
 
-def parse_quick_replies(ai_reply: str) -> tuple:
+Topic: {slots.get('topic')}
+Your Profile: {slots.get('learningStyle')}
+Difficulty Level: {slots.get('currentLevel')}
+Your Objective: {slots.get('learningGoal')}
+Language: {slots.get('language', 'English')}
+Duration: {slots.get('duration')} Hours
+
+Would you like to modify any of these details before I create the course structure for you?
+---
+Do NOT output any metadata block for CONFIRM_DETAILS. Keep it purely as a conversational reply in the format above.
+"""
+    elif next_step == "ASK_GENERATE_SKELETON":
+        state_instructions = """
+Current State: ASK_GENERATE_SKELETON
+Goal: Ask for confirmation to generate outline modules.
+Conversational Guidance: Output exactly: "Shall I start by creating the modules for you?"
+Do NOT output any metadata block for this step.
+"""
+    elif next_step == "OUTLINE_EDIT":
+        state_instructions = """
+Current State: OUTLINE_EDIT
+Goal: Ask the user to review the generated roadmap outline.
+Conversational Guidance: Output exactly: "Here is your personalized learning roadmap outline. Do you have anything to change in this, or would you like to add any modules?"
+Do NOT output the Details metadata card. Output the Course Structure metadata card inside [METADATA]...[/METADATA] conforming to the schema:
+{
+  "next_step": "CONFIRM_GENERATE",
+  "modules": [...]
+}
+"""
+    elif next_step == "CONFIRM_GENERATE":
+        state_instructions = """
+Current State: CONFIRM_GENERATE
+Goal: Final confirmation before generating content.
+Conversational Guidance: Output exactly: "The course structure has been finalized. Would you like me to start generating the complete course content?"
+Do NOT output any JSON metadata block.
+"""
+    elif next_step == "PROMPT_GEN":
+        state_instructions = """
+Current State: PROMPT_GEN
+Goal: Generate a highly detailed content blueprint/prompt for every single chapter in the course structure.
+Conversational Guidance: Keep the conversational reply extremely short and clean (e.g. "Drafting the chapter prompts...").
+Metadata Output Rules:
+1. You MUST generate a "prompts" metadata block wrapped in [METADATA]...[/METADATA] tags.
+2. The JSON schema inside [METADATA] must match:
+   {
+     "next_step": "CONFIRM_GENERATE",
+     "prompts": [
+       {
+         "module": "<module_title>",
+         "title": "<chapter_title>",
+         "prompt": "Highly detailed instructional content prompt..."
+       }
+     ]
+   }
+3. Generate prompts for EVERY chapter. Do not truncate the output list.
+"""
+    elif next_step == "READY":
+        state_instructions = """
+Current State: READY
+Goal: Course creation completed.
+Conversational Guidance: Congratulate the user on generating the course. Explain that they can preview the course using the "Preview Course" button, or publish it using the "Publish Course" button.
+Do NOT output any JSON metadata block.
+"""
+
+    prompt += state_instructions
+    prompt += f"\n\nCURRENT SLOTS CONTEXT: {json.dumps(slots)}"
+    return prompt
+
+def parse_quick_replies(ai_reply: str) -> Tuple[str, list]:
     """
     Extracts quick replies from the AI reply string if present.
     Returns (cleaned_reply, quick_replies_list)
@@ -250,20 +329,17 @@ def parse_quick_replies(ai_reply: str) -> tuple:
         
         if end_idx != -1:
             replies_str = ai_reply[content_start:end_idx].strip()
-            # Remove from reply text
             cleaned_reply = ai_reply[:start_idx] + ai_reply[end_idx + len(end_tag):]
         else:
             replies_str = ai_reply[content_start:].strip()
             cleaned_reply = ai_reply[:start_idx]
             
         try:
-            # Parse the array
             parsed = json.loads(replies_str)
             if isinstance(parsed, list):
                 quick_replies = [str(x) for x in parsed]
         except Exception as e:
-            logger.error(f"Failed to parse quick replies array: {replies_str}. Error: {e}")
+            logger.error(f"Failed to parse quick replies: {e}")
             
-    # Clean tags from text
     cleaned_reply = cleaned_reply.replace('[QUICK_REPLIES]', '').replace('[/QUICK_REPLIES]', '').replace('[quick_replies]', '').replace('[/quick_replies]', '').strip()
     return cleaned_reply, quick_replies

@@ -54,7 +54,29 @@ def save_course_to_mysql(course_data: Dict[str, Any]):
         has_track_excercise = track_col is not None
         has_docwise_flag = docwise_col is not None
 
-        details = course_data.get("details", {})
+        details = course_data.get("details", {}) or {}
+        # Clean Schema Adapter normalization mapping for legacy database support
+        if "topic" in details:
+            details["subject"] = details.get("subject") or details["topic"]
+            details["courseName"] = details.get("courseName") or details["topic"]
+        if "learningGoal" in details:
+            details["description"] = details.get("description") or details["learningGoal"]
+        if "currentLevel" in details:
+            details["level"] = details.get("level") or details["currentLevel"]
+        if "learningStyle" in details:
+            details["requirements"] = details.get("requirements") or details["learningStyle"]
+        
+        # Safely convert duration to integer for no_of_days column
+        duration_raw = details.get("duration")
+        no_of_days = 30
+        if duration_raw:
+            try:
+                import re
+                digits = re.findall(r'\d+', str(duration_raw))
+                if digits:
+                    no_of_days = int(digits[0])
+            except Exception:
+                pass
         structure = course_data.get("structure", {})
         modules = structure.get("modules", [])
         
@@ -98,7 +120,7 @@ def save_course_to_mysql(course_data: Dict[str, Any]):
             """
             course_vals = (
                 details.get("courseName"), details.get("description"), subject_id,
-                details.get("price"), details.get("scriptingLanguage"), details.get("duration") or 30,
+                details.get("price"), details.get("scriptingLanguage"), no_of_days,
                 details.get("requirements"), details.get("level"), details.get("language", "English"),
                 has_content, now_str, mysql_id
             )
@@ -127,7 +149,7 @@ def save_course_to_mysql(course_data: Dict[str, Any]):
             """
             course_vals = (
                 details.get("courseName"), details.get("description"), subject_id,
-                details.get("price"), details.get("scriptingLanguage"), details.get("duration") or 30,
+                details.get("price"), details.get("scriptingLanguage"), no_of_days,
                 details.get("requirements"), details.get("level"), details.get("language", "English"),
                 0, has_content, 1, 2354, 1, now_str
             )
