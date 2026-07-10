@@ -795,7 +795,7 @@ Expected JSON output format exactly:
         # Stage 3: Dynamic NLG Prompt Generation
         system_prompt = build_builder_system_prompt(next_step, updated_slots, validation_error)
 
-        cleaned_history = reinject_quick_replies_into_history(req.messages)
+        cleaned_history = reinject_quick_replies_into_history(req.messages, updated_slots)
         messages = [{"role": "system", "content": system_prompt}] + cleaned_history
 
         response = openai_client.chat.completions.create(

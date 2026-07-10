@@ -262,10 +262,19 @@ Goal: Discover their current level of experience or familiarity with {topic_name
 Conversational Guidance: Ask a friendly question to gauge their current familiarity (e.g. "How much experience do you already have with {topic_name}?").
 """
     elif next_step == "ASK_STYLE":
+        topic_lower = str(slots.get("topic", "")).lower()
+        is_programming = any(x in topic_lower for x in ["python", "java", "c++", "coding", "program", "developer", "react", "javascript", "typescript", "sql", "backend", "frontend", "software", "git", "c#", "html", "css", "database", "node", "express"])
+        if is_programming:
+            style_suggestions = '["Hands-on Coding", "Interactive Quizzes", "Detailed Explanations", "Balanced Combination"]'
+        else:
+            style_suggestions = '["Detailed Explanations", "Interactive Quizzes", "Structured Tables", "Balanced Combination"]'
+
         state_instructions = f"""
 Current State: ASK_STYLE
 Goal: Learn their preferred style of lesson structure.
 Conversational Guidance: Ask a friendly, concise question (e.g. "How do you enjoy learning the most?").
+Suggest styles below immediately in a quick replies block:
+[quick_replies]{style_suggestions}[/quick_replies]
 """
     elif next_step == "ASK_DURATION":
         error_addition = f"\nValidation Alert: {validation_error}\n" if validation_error else ""
@@ -384,8 +393,11 @@ def parse_quick_replies(ai_reply: str) -> Tuple[str, list]:
     cleaned_reply = cleaned_reply.replace('[QUICK_REPLIES]', '').replace('[/QUICK_REPLIES]', '').replace('[quick_replies]', '').replace('[/quick_replies]', '').strip()
     return cleaned_reply, quick_replies
 
-def reinject_quick_replies_into_history(messages: list) -> list:
+def reinject_quick_replies_into_history(messages: list, slots: dict) -> list:
     rebuilt = []
+    topic_lower = str(slots.get("topic", "")).lower()
+    is_programming = any(x in topic_lower for x in ["python", "java", "c++", "coding", "program", "developer", "react", "javascript", "typescript", "sql", "backend", "frontend", "software", "git", "c#", "html", "css", "database", "node", "express"])
+
     for msg in messages:
         if msg.get("role") == "assistant":
             content = msg.get("content", "")
@@ -399,7 +411,10 @@ def reinject_quick_replies_into_history(messages: list) -> list:
                 elif "level" in content_lower or "experience" in content_lower or "familiar" in content_lower:
                     content += '\n\n[quick_replies]["Complete Beginner / Start Fresh", "Intermediate / Some experience", "Advanced / Deep Dive"][/quick_replies]'
                 elif "style" in content_lower or "prefer" in content_lower or "enjoy learning" in content_lower:
-                    content += '\n\n[quick_replies]["Hands-on Coding", "Interactive Quizzes", "Detailed Explanations", "Balanced Combination"][/quick_replies]'
+                    if is_programming:
+                        content += '\n\n[quick_replies]["Hands-on Coding", "Interactive Quizzes", "Detailed Explanations", "Balanced Combination"][/quick_replies]'
+                    else:
+                        content += '\n\n[quick_replies]["Detailed Explanations", "Interactive Quizzes", "Structured Tables", "Balanced Combination"][/quick_replies]'
                 elif "duration" in content_lower or "hours" in content_lower or "hour" in content_lower or "time" in content_lower:
                     content += '\n\n[quick_replies]["1 Hour", "2 Hours", "5 Hours", "10 Hours", "15 Hours", "20 Hours"][/quick_replies]'
                 elif "summary" in content_lower or "requirements" in content_lower or "modify any of these" in content_lower:

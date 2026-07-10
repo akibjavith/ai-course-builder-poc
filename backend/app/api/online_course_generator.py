@@ -106,14 +106,49 @@ async def generate_lesson_blocks(req: LessonRequest):
         - CRITICAL: Avoid short summaries. You will be penalized if the content is short or brief.
         """
 
+        # Extract style to adapt content block priorities
+        style_lower = str(objectives).lower()
+        style_guidelines = ""
+        if "coding" in style_lower or "programming" in style_lower or "code" in style_lower:
+            style_guidelines = """
+        LEARNING STYLE PREFERENCE: The user has selected 'Hands-on Coding'.
+        - You MUST prioritize generating high-quality, functional, and detailed "code" blocks.
+        - Every code block must contain fully-featured, functional programs or deep-dive modules (avoid short, trivial, or basic snippets).
+        - Accompany the code with thorough line-by-line explanation paragraphs explaining how the code runs.
+        """
+        elif "explain" in style_lower or "text" in style_lower or "detailed" in style_lower:
+            style_guidelines = """
+        LEARNING STYLE PREFERENCE: The user has selected 'Detailed Explanations'.
+        - You MUST prioritize detailed, in-depth theoretical textbook explanations using "paragraph" blocks.
+        - Elaborate on the core concepts, historical background, and design rationales exhaustively.
+        """
+        elif "quiz" in style_lower or "question" in style_lower or "check" in style_lower:
+            style_guidelines = """
+        LEARNING STYLE PREFERENCE: The user has selected 'Interactive Quizzes'.
+        - You MUST increase the frequency of self-assessment blocks.
+        - Generate multiple interactive "quiz" and "knowledge_check" blocks to test comprehension at each stage.
+        """
+        elif "table" in style_lower or "structure" in style_lower or "chart" in style_lower:
+            style_guidelines = """
+        LEARNING STYLE PREFERENCE: The user has selected 'Structured Tables'.
+        - You MUST prioritize structured visual summaries.
+        - Compile comparison tables, vocabulary lists, feature matrices, and key statistics using "table" blocks.
+        """
+        else:
+            style_guidelines = """
+        LEARNING STYLE PREFERENCE: The user has selected 'Balanced Combination'.
+        - Provide a rich, balanced mix of text paragraphs, structured comparison tables, quizzes, and code blocks (where relevant).
+        """
+
         prompt_str = f"""
         Generate structured block-based educational content for the lesson '{req.title}' in the module '{req.module_title}' for the course '{course_title}'.
         Course Description: {course_desc}
         Subject: {subject}
         Difficulty: {difficulty}
-        Audience: {objectives}
+        Audience/Style: {objectives}
         
         {duration_guidelines}
+        {style_guidelines}
         
         Additional prompt instructions / focus areas: {req.prompt or 'None'}
 
