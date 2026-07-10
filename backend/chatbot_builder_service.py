@@ -32,6 +32,9 @@ Your task is to analyze the user's latest message and extract values for the fol
 Rules for Level:
 - If the user mentions "basic to advance", "from scratch", "from zero", "for beginners", "no prior experience", or similar, the currentLevel must be "beginner". Do NOT set it to "advanced". Only extract "advanced" if they clearly say they already possess advanced experience/knowledge in the topic.
 
+Rules for Topic:
+- Do NOT overwrite the "topic" slot once it has already been established, unless the user explicitly requests to change the topic. If the user mentions a topic name inside their objective/goal (e.g. "learn Python to build a web app" when the topic is already established as Python or similar), do NOT extract it as a new topic.
+
 Rules for Goal:
 - For learningGoal, if the user doesn't specify a project or career objective, but says they want to learn the topic (e.g. "learn Python from basic to advanced" or "just learn the basics"), extract their goal (e.g. "Learn Python from basic to advanced"). Do NOT leave it null if they expressed their learning intent.
 
@@ -168,9 +171,20 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
     elif current_step == "READY":
         return "READY", None
 
-    # 3. Determine the next empty slot in priority order
+    # 3. Fallback recoveries to prevent getting stuck in early slots if user skips ahead
     if not slots.get("topic"):
         return "ASK_TOPIC", None
+
+    if not slots.get("learningGoal") and (slots.get("learningStyle") or slots.get("duration")):
+        slots["learningGoal"] = f"Learn {slots.get('topic')}"
+
+    if not slots.get("currentLevel") and (slots.get("learningStyle") or slots.get("duration")):
+        slots["currentLevel"] = "beginner"
+
+    if not slots.get("learningStyle") and slots.get("duration"):
+        slots["learningStyle"] = "balanced combination"
+
+    # 4. Determine the next empty slot in priority order
     if not slots.get("learningGoal"):
         return "ASK_GOAL", None
     if not slots.get("currentLevel"):
@@ -265,19 +279,19 @@ If the validation alert is present, politely explain the 20-hour limit and guide
         state_instructions = f"""
 Current State: CONFIRM_DETAILS
 Goal: Show a clean, summary report of their requirements and ask for confirmation.
-CRITICAL FORMATTING: You must output EXACTLY the text layout below in your conversational reply:
+CRITICAL FORMATTING: You must output EXACTLY the text layout below in your conversational reply, followed immediately by the dynamic quick replies block:
 ---
 Here's a summary of your course requirements:
 
-Topic: {slots.get('topic')}
-Your Profile: {slots.get('learningStyle')}
-Difficulty Level: {slots.get('currentLevel')}
-Your Objective: {slots.get('learningGoal')}
-Duration: {slots.get('duration')} Hours
+- **Topic:** {slots.get('topic')}
+- **Learning Goal:** {slots.get('learningGoal')}
+- **Difficulty Level:** {slots.get('currentLevel')}
+- **Learning Style:** {slots.get('learningStyle')}
+- **Duration:** {slots.get('duration')} Hours
 
 Would you like to modify any of these details before I create the course structure for you?
 ---
-Do NOT output any metadata block for CONFIRM_DETAILS. Keep it purely as a conversational reply in the format above.
+Do NOT output any metadata block for CONFIRM_DETAILS. Keep it purely as a conversational reply in the format above, immediately followed by the [quick_replies] block.
 """
     elif next_step == "ASK_GENERATE_SKELETON":
         state_instructions = """
@@ -378,17 +392,17 @@ def reinject_quick_replies_into_history(messages: list) -> list:
             # check if it already has quick replies
             if "[quick_replies]" not in content:
                 content_lower = content.lower()
-                if "what subject or topic" in content_lower or "what course topic" in content_lower:
+                if "subject" in content_lower or "topic" in content_lower or "what would you like to explore" in content_lower:
                     content += '\n\n[quick_replies]["Python Programming", "English Grammar", "Digital Marketing", "Machine Learning"][/quick_replies]'
-                elif "main goal for learning" in content_lower or "what is your objective" in content_lower:
+                elif "goal" in content_lower or "objective" in content_lower or "hope to achieve" in content_lower:
                     content += '\n\n[quick_replies]["Build a Web App", "Automate Excel Tasks", "Data Analysis & AI", "Get a Developer Job"][/quick_replies]'
-                elif "experience do you already have" in content_lower or "current level of knowledge" in content_lower or "experience with" in content_lower:
+                elif "level" in content_lower or "experience" in content_lower or "familiar" in content_lower:
                     content += '\n\n[quick_replies]["Complete Beginner / Start Fresh", "Intermediate / Some experience", "Advanced / Deep Dive"][/quick_replies]'
-                elif "enjoy learning the most" in content_lower or "preferred learning style" in content_lower:
+                elif "style" in content_lower or "prefer" in content_lower or "enjoy learning" in content_lower:
                     content += '\n\n[quick_replies]["Hands-on Coding", "Interactive Quizzes", "Detailed Explanations", "Balanced Combination"][/quick_replies]'
-                elif "detailed would you like this course to be" in content_lower or "duration you have in mind" in content_lower or "how much time" in content_lower:
+                elif "duration" in content_lower or "hours" in content_lower or "hour" in content_lower or "time" in content_lower:
                     content += '\n\n[quick_replies]["1 Hour", "2 Hours", "5 Hours", "10 Hours", "15 Hours", "20 Hours"][/quick_replies]'
-                elif "summary of your course requirements" in content_lower:
+                elif "summary" in content_lower or "requirements" in content_lower or "modify any of these" in content_lower:
                     content += '\n\n[quick_replies]["Confirm details & proceed", "Change topic", "Change duration", "Change level"][/quick_replies]'
             
             rebuilt.append({**msg, "content": content})

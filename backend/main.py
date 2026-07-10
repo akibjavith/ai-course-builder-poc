@@ -665,7 +665,21 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
     # -------------------------------------------------------------------------
     # OUTLINE_EDIT: Use a dedicated JSON-mode call to guarantee structure output
     # -------------------------------------------------------------------------
+    is_outline_edit_req = False
     if req.currentStep == "OUTLINE_EDIT":
+        user_message = ""
+        if req.messages:
+            for msg in reversed(req.messages):
+                if msg.get("role") == "user":
+                    user_message = msg.get("content", "")
+                    break
+        lowercase_msg = user_message.lower()
+        confirm_words = ["yes", "continue", "looks good", "proceed", "generate", "correct", "confirm", "happy", "fine", "ok", "go ahead"]
+        is_confirmation = any(w in lowercase_msg for w in confirm_words) and not any(neg in lowercase_msg for neg in ["not", "dont", "change", "add", "remove", "delete", "reduce"])
+        if not is_confirmation:
+            is_outline_edit_req = True
+
+    if is_outline_edit_req:
         try:
             current_structure = req.courseData.get("structure", {})
             details = req.courseData.get("details", {})

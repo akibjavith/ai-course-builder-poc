@@ -568,6 +568,13 @@ export default function ChatbotCourseCreator({ onClose }) {
         const generateKeywords = ["generate course", "generate content", "generate", "yes", "continue", "start", "proceed", "let's go", "go ahead", "sure", "ok", "yep", "yeah"];
         const wantsGenerate = generateKeywords.some(kw => lowercaseText.includes(kw));
         if (wantsGenerate) {
+          const userMsg = {
+            role: 'user',
+            content: textToSend,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          setMessages(prev => [...prev, userMsg]);
+          setInputMessage('');
           startBatchGeneration(courseData);
           return;
         } else {
