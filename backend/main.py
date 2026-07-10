@@ -868,7 +868,10 @@ Expected JSON output format exactly:
                         "modules": current_structure_modules
                     }
         else:
-            type_val = "details"
+            if next_step == "CONFIRM_DETAILS":
+                type_val = "details_card"
+            else:
+                type_val = "details"
             if metadata:
                 metadata["next_step"] = next_step
                 for k, v in updated_slots.items():

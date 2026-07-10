@@ -139,6 +139,8 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
     # 2. Check validations or re-confirmations for special steps
     if current_step == "CONFIRM_DETAILS":
         lowercase_msg = user_message.lower()
+        if "edit" in lowercase_msg or "change" in lowercase_msg or "modify" in lowercase_msg:
+            return "EDIT_DETAILS_CHOICE", None
         confirm_words = [
             "looks good", "looks fine", "looks ok", "continue", "confirm", "yes", "yep", "yeah",
             "correct", "fine", "ok", "sure", "proceed", "generate", "create", "structure", "start",
@@ -147,6 +149,25 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
         if any(w in lowercase_msg for w in confirm_words):
             return "ASK_GENERATE_SKELETON", None
         return "CONFIRM_DETAILS", None
+
+    elif current_step == "EDIT_DETAILS_CHOICE":
+        lowercase_msg = user_message.lower()
+        if "topic" in lowercase_msg or "subject" in lowercase_msg:
+            slots["topic"] = None
+            return "ASK_TOPIC", None
+        elif "goal" in lowercase_msg or "objective" in lowercase_msg:
+            slots["learningGoal"] = None
+            return "ASK_GOAL", None
+        elif "level" in lowercase_msg or "difficulty" in lowercase_msg:
+            slots["currentLevel"] = None
+            return "ASK_LEVEL", None
+        elif "style" in lowercase_msg:
+            slots["learningStyle"] = None
+            return "ASK_STYLE", None
+        elif "duration" in lowercase_msg or "time" in lowercase_msg or "hours" in lowercase_msg:
+            slots["duration"] = None
+            return "ASK_DURATION", None
+        return "EDIT_DETAILS_CHOICE", None
 
     elif current_step == "ASK_GENERATE_SKELETON":
         lowercase_msg = user_message.lower()
@@ -240,6 +261,7 @@ GLOBAL RULES:
 6. CONCISENESS & NO RECAPS: Keep your conversational responses extremely brief, clean, and direct. Do NOT repeat or recap the user's previous answers in every turn. Ask only the current question directly.
 7. NO DEVELOPER TERMINOLOGY: Do NOT output sentences like "Let me summarize this in the metadata format" or "Here is the metadata". Simply output the conversational text and the [METADATA] block silently.
 8. LANGUAGE: Do NOT ask any questions about language. Language is always English.
+9. NO EARLY ROADMAP GENERATION: Do NOT generate or list the course outline modules, chapters, or syllabus structure in your conversational text at any point during the questionnaire phase (ASK_TOPIC, ASK_GOAL, ASK_LEVEL, ASK_STYLE, ASK_DURATION, CONFIRM_DETAILS). Only answer the user, ask the corresponding slot question, or recap details. You will generate the outline structure only when you transition to the OUTLINE_EDIT step.
 """
 
     state_instructions = ""
@@ -288,19 +310,20 @@ If the validation alert is present, politely explain the 20-hour limit and guide
         state_instructions = f"""
 Current State: CONFIRM_DETAILS
 Goal: Show a clean, summary report of their requirements and ask for confirmation.
-CRITICAL FORMATTING: You must output EXACTLY the text layout below in your conversational reply, followed immediately by the dynamic quick replies block:
----
-Here's a summary of your course requirements:
-
-- **Topic:** {slots.get('topic')}
-- **Learning Goal:** {slots.get('learningGoal')}
-- **Difficulty Level:** {slots.get('currentLevel')}
-- **Learning Style:** {slots.get('learningStyle')}
-- **Duration:** {slots.get('duration')} Hours
-
-Would you like to modify any of these details before I create the course structure for you?
----
+Conversational Guidance: Ask the user to review their requirements in the summary card below. Ask if they look good or if they want to modify anything.
+Example: "Here is a summary of your course requirements. Would you like to modify any of these details before I create the course structure for you?"
+Do NOT output the bullet points list in your conversational text, as the card will display them.
 Do NOT output any metadata block for CONFIRM_DETAILS. Keep it purely as a conversational reply in the format above, immediately followed by the [quick_replies] block.
+
+Refusal Rule: If the user requests to modify the syllabus structure, add/remove modules, or edit chapters while they are in the CONFIRM_DETAILS step, politely refuse. Explain that they must confirm the details first to generate the syllabus outline.
+"""
+    elif next_step == "EDIT_DETAILS_CHOICE":
+        state_instructions = """
+Current State: EDIT_DETAILS_CHOICE
+Goal: Ask the user which detail they would like to modify.
+Conversational Guidance: Ask a friendly question (e.g. "What details would you like to edit?").
+Suggest the choices below immediately in a quick replies block:
+[quick_replies]["Edit Topic", "Edit Learning Goal", "Edit Difficulty Level", "Edit Learning Style", "Edit Duration"][/quick_replies]
 """
     elif next_step == "ASK_GENERATE_SKELETON":
         state_instructions = """
@@ -319,6 +342,8 @@ Do NOT output the Details metadata card. Output the Course Structure metadata ca
   "next_step": "CONFIRM_GENERATE",
   "modules": [...]
 }
+
+Refusal Rule: If the user requests to edit course details (like changing the topic, goal, level, style, or duration) while they are in the OUTLINE_EDIT step, politely refuse. Remind them that they must confirm the syllabus outline first, or use the back controls.
 """
     elif next_step == "CONFIRM_GENERATE":
         state_instructions = """
@@ -326,6 +351,8 @@ Current State: CONFIRM_GENERATE
 Goal: Final confirmation before generating content.
 Conversational Guidance: Output exactly: "The course structure has been finalized. Would you like me to start generating the complete course content?"
 Do NOT output any JSON metadata block.
+Suggest the choices below immediately in a quick replies block:
+[quick_replies]["Yes, generate content", "No, go back to outline"][/quick_replies]
 """
     elif next_step == "PROMPT_GEN":
         state_instructions = """
@@ -419,6 +446,10 @@ def reinject_quick_replies_into_history(messages: list, slots: dict) -> list:
                     content += '\n\n[quick_replies]["1 Hour", "2 Hours", "5 Hours", "10 Hours", "15 Hours", "20 Hours"][/quick_replies]'
                 elif "summary" in content_lower or "requirements" in content_lower or "modify any of these" in content_lower:
                     content += '\n\n[quick_replies]["Confirm details & proceed", "Change topic", "Change duration", "Change level"][/quick_replies]'
+                elif "what details would you like to edit" in content_lower or "what would you like to edit" in content_lower:
+                    content += '\n\n[quick_replies]["Edit Topic", "Edit Learning Goal", "Edit Difficulty Level", "Edit Learning Style", "Edit Duration"][/quick_replies]'
+                elif "generating the complete course content" in content_lower or "start generating the complete" in content_lower or "finalized. would you like me" in content_lower or "confirm and proceed" in content_lower:
+                    content += '\n\n[quick_replies]["Yes, generate content", "No, go back to outline"][/quick_replies]'
             
             rebuilt.append({**msg, "content": content})
         else:

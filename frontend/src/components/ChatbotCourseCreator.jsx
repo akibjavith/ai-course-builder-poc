@@ -4,7 +4,7 @@ import {
   HelpCircle, Eye, Sparkles, ChevronRight, ChevronLeft, 
   Trash2, Loader2, Award, FileText, Check, Paperclip, 
   Mic, Lightbulb, Compass, ThumbsUp, ThumbsDown, Copy, 
-  RotateCcw, X, Search, Bell, Info, Plus, PanelLeft
+  RotateCcw, X, Search, Bell, Info, Plus, PanelLeft, Edit
 } from 'lucide-react';
 import { chatWithChatbotBuilder, createCourse, uploadDoc, generateLessonContent, saveChatbotDraft, getChatbotDrafts, getChatbotDraft, deleteChatbotDraft, renameChatbotDraft, getSubjects, getCourseById, generateStructure } from '../api';
 import logo from '../assets/logo.png';
@@ -666,15 +666,19 @@ export default function ChatbotCourseCreator({ onClose }) {
         if (res.metadata) {
           setCourseData(prev => {
             const updated = { ...prev };
-            if (res.type === 'details') {
+            if (res.type === 'details' || res.type === 'details_card') {
               const normalizedMetadata = {
                 ...res.metadata,
+                topic: res.metadata.topic || res.metadata.subject || res.metadata.courseName || prev.details?.topic,
+                learningGoal: res.metadata.learningGoal || res.metadata.description || res.metadata.goal || res.metadata.objective || prev.details?.learningGoal,
+                currentLevel: res.metadata.currentLevel || res.metadata.level || res.metadata.experience || prev.details?.currentLevel,
+                learningStyle: res.metadata.learningStyle || res.metadata.requirements || res.metadata.style || prev.details?.learningStyle,
+                duration: String(res.metadata.duration || res.metadata.courseDuration || res.metadata.hours || prev.details?.duration || ""),
                 subject: res.metadata.subject || res.metadata.topic || res.metadata.courseName || prev.details?.subject,
                 courseName: res.metadata.courseName || res.metadata.subject || res.metadata.topic || prev.details?.courseName,
                 description: res.metadata.description || res.metadata.learningGoal || res.metadata.goal || res.metadata.objective || prev.details?.description,
                 level: res.metadata.level || res.metadata.currentLevel || res.metadata.experience || prev.details?.level,
                 requirements: res.metadata.requirements || res.metadata.learningStyle || res.metadata.style || prev.details?.requirements,
-                duration: String(res.metadata.duration || res.metadata.courseDuration || res.metadata.hours || prev.details?.duration || "")
               };
 
               updated.details = { ...(prev.details || {}), ...normalizedMetadata, price: "0" };
@@ -1599,15 +1603,84 @@ export default function ChatbotCourseCreator({ onClose }) {
             <p className="text-[10px] text-slate-400 text-center leading-relaxed">
               Great! Here's the updated course structure outline. Please take a moment to review it. Would you like to make any further modifications, or are you happy with this outline?
             </p>
+            <div className="flex gap-2.5">
+              <button
+                onClick={() => {
+                  handleSendMessage("Edit outline", 'OUTLINE_EDIT', courseData);
+                }}
+                className="flex-1 bg-white hover:bg-slate-50 text-slate-700 font-bold py-2 rounded-xl text-xs border border-slate-200 shadow-sm transition active:scale-95 flex items-center justify-center gap-1.5"
+              >
+                <Edit className="w-3.5 h-3.5" /> Edit Outline
+              </button>
+              <button
+                onClick={() => {
+                  // Transition to CONFIRM_GENERATE so AI asks for final confirmation before generation
+                  setCurrentStep('CONFIRM_GENERATE');
+                  handleSendMessage("I am happy with this outline. Please confirm and proceed.", 'CONFIRM_GENERATE', courseData);
+                }}
+                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md"
+              >
+                Confirm Outline <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // 2.5 Details Summary Card Tree Renderer
+  const renderInlineDetailsCard = (metadata) => {
+    if (!metadata) return null;
+    return (
+      <div className="mt-4 bg-white border border-slate-200 shadow-lg rounded-2xl p-5 space-y-4 text-left animate-fade-in">
+        <div className="flex flex-col border-b border-slate-100 pb-3 gap-1">
+          <h4 className="font-bold text-xs text-indigo-600 flex items-center gap-1.5 uppercase tracking-wider">
+            <FileText className="w-3.5 h-3.5" /> Course Details Summary
+          </h4>
+          <p className="text-[10px] text-slate-400 leading-relaxed">
+            Please review the details below. You can proceed to generate the outline or modify any value.
+          </p>
+        </div>
+        <div className="space-y-2.5 text-xs text-slate-700">
+          <div className="flex gap-2">
+            <span className="font-bold text-slate-500 w-28 flex-shrink-0">Topic:</span>
+            <span className="text-slate-800 font-semibold">{metadata.topic || 'Not set'}</span>
+          </div>
+          <div className="flex gap-2">
+            <span className="font-bold text-slate-500 w-28 flex-shrink-0">Learning Goal:</span>
+            <span className="text-slate-800 font-medium">{metadata.learningGoal || 'Not set'}</span>
+          </div>
+          <div className="flex gap-2">
+            <span className="font-bold text-slate-500 w-28 flex-shrink-0">Difficulty Level:</span>
+            <span className="text-slate-800 capitalize font-medium">{metadata.currentLevel || 'beginner'}</span>
+          </div>
+          <div className="flex gap-2">
+            <span className="font-bold text-slate-500 w-28 flex-shrink-0">Learning Style:</span>
+            <span className="text-slate-800 capitalize font-medium">{metadata.learningStyle || 'balanced combination'}</span>
+          </div>
+          <div className="flex gap-2">
+            <span className="font-bold text-slate-500 w-28 flex-shrink-0">Duration:</span>
+            <span className="text-slate-800 font-semibold">{metadata.duration ? `${metadata.duration} Hours` : 'Not set'}</span>
+          </div>
+        </div>
+        {(currentStep === 'CONFIRM_DETAILS' || currentStep === 'EDIT_DETAILS_CHOICE') && (
+          <div className="border-t border-slate-100 pt-3 flex gap-2.5">
             <button
               onClick={() => {
-                // Transition to CONFIRM_GENERATE so AI asks for final confirmation before generation
-                setCurrentStep('CONFIRM_GENERATE');
-                handleSendMessage("I am happy with this outline. Please confirm and proceed.", 'CONFIRM_GENERATE', courseData);
+                handleSendMessage("Edit details");
               }}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1 shadow-md"
+              className="flex-1 bg-white hover:bg-slate-50 text-slate-700 font-bold py-2 rounded-xl text-xs border border-slate-200 shadow-sm transition active:scale-95 flex items-center justify-center gap-1.5"
             >
-              Confirm Syllabus Outline <ChevronRight className="w-3.5 h-3.5" />
+              <Edit className="w-3.5 h-3.5" /> Edit Details
+            </button>
+            <button
+              onClick={() => {
+                handleSendMessage("Confirm details & proceed");
+              }}
+              className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md"
+            >
+              Confirm Details <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
         )}
@@ -2068,7 +2141,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                             ? 'bg-indigo-600 text-white rounded-2xl rounded-br-none' 
                             : 'bg-white border border-slate-200/80 text-slate-800 rounded-2xl rounded-bl-none'
                         }`}>
-                           {msg.content && msg.content.trim() && (
+                           {msg.content && msg.content.trim() && msg.metadataType !== 'details_card' && (
                              <div className="space-y-0.5">
                                {formatChatMessage(msg.metadataType === 'structure' ? cleanStructureText(msg.content) : msg.content)}
                              </div>
@@ -2076,6 +2149,7 @@ export default function ChatbotCourseCreator({ onClose }) {
 
                            {/* Render custom metadata cards inline inside the bubble */}
                            {!isUser && msg.metadataType === 'structure' && renderInlineStructure(msg.metadata)}
+                           {!isUser && msg.metadataType === 'details_card' && renderInlineDetailsCard(msg.metadata)}
                           
                           <div className="text-[9px] text-right mt-1.5 opacity-60">
                             {msg.timestamp}
