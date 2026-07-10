@@ -1,6 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from typing import Optional
 from schemas import (
     CourseStructureRequest,
@@ -692,6 +693,53 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                     if msg.get("role") == "user":
                         user_message = msg.get("content", "")
                         break
+            lowercase_msg = user_message.lower()
+
+            # 1. Programmatic Shuffle Interceptor
+            if "shuffle" in lowercase_msg or "reorder" in lowercase_msg:
+                modules = current_structure.get("modules", [])
+                import random
+                if "submodule" in lowercase_msg or "chapter" in lowercase_msg:
+                    # Shuffle chapters inside modules
+                    for m in modules:
+                        if "chapters" in m and isinstance(m["chapters"], list):
+                            random.shuffle(m["chapters"])
+                    return JSONResponse({
+                        "status": "success",
+                        "reply": "I have randomly shuffled the chapters (submodules) inside all modules for you. How does the new order look?",
+                        "metadata": {
+                            "next_step": "OUTLINE_EDIT",
+                            "modules": modules
+                        },
+                        "type": "structure"
+                    })
+                else:
+                    # Shuffle main modules list
+                    random.shuffle(modules)
+                    return JSONResponse({
+                        "status": "success",
+                        "reply": "I have randomly shuffled the order of the modules for you. How does the new order look?",
+                        "metadata": {
+                            "next_step": "OUTLINE_EDIT",
+                            "modules": modules
+                        },
+                        "type": "structure"
+                    })
+
+            # 2. Reduction Limit Interceptor (Refuse if len(modules) <= 1)
+            modules = current_structure.get("modules", [])
+            if len(modules) <= 1:
+                is_reduce_req = any(w in lowercase_msg for w in ["reduce", "shrink", "delete", "remove", "cut", "decrease"])
+                if is_reduce_req and any(w in lowercase_msg for w in ["module", "modules", "syllabus", "roadmap"]):
+                    return JSONResponse({
+                        "status": "success",
+                        "reply": "I cannot reduce the course to less than 1 module. You must have at least 1 module in your course.",
+                        "metadata": {
+                            "next_step": "OUTLINE_EDIT",
+                            "modules": modules
+                        },
+                        "type": "structure"
+                    })
 
             edit_prompt = f"""You are an expert curriculum designer.
 Your task is to modify the current course outline based strictly on the user's request.
@@ -710,7 +758,7 @@ User's Modification Request:
 "{user_message}"
 
 Rules:
-- Apply the user's modification request (e.g. reduce to 2 modules, rename chapters, add a new module, etc.) directly on the current course outline.
+- Apply the user's modification request (e.g. reduce modules, rename chapters, add a new module, etc.) directly on the current course outline. You can reduce modules to 1 module if requested.
 - Output the ENTIRE updated course outline structure.
 - Do NOT prepend numbers, chapter numbers, or index prefixes (like "Module 1", "Chapter 1 -", "1.1") to module or chapter titles.
 - Keep other unchanged modules and chapters as they are.
@@ -855,8 +903,14 @@ Expected JSON output format exactly:
                 quick_replies = ["Yes, generate modules!", "Go back"]
             elif next_step == "OUTLINE_EDIT":
                 quick_replies = ["Confirm Outline", "Reduce modules", "Add new module", "Rename modules/chapters"]
+                current_modules = req.courseData.get("structure", {}).get("modules", [])
+                if len(current_modules) <= 1:
+                    quick_replies = ["Confirm Outline", "Add new module", "Rename modules/chapters"]
             elif next_step == "EDIT_OUTLINE_CHOICE":
                 quick_replies = ["Reduce modules", "Add new module", "Rename modules/chapters", "Reorder modules"]
+                current_modules = req.courseData.get("structure", {}).get("modules", [])
+                if len(current_modules) <= 1:
+                    quick_replies = ["Add new module", "Rename modules/chapters", "Reorder modules"]
             elif next_step == "CONFIRM_GENERATE":
                 quick_replies = ["Yes, generate content", "No, go back to outline"]
 

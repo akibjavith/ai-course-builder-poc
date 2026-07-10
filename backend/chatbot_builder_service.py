@@ -37,6 +37,7 @@ Rules for Topic:
 
 Rules for Goal:
 - For learningGoal, if the user doesn't specify a project or career objective, but says they want to learn the topic (e.g. "learn Python from basic to advanced" or "just learn the basics"), extract their goal (e.g. "Learn Python from basic to advanced"). Do NOT leave it null if they expressed their learning intent.
+- If the user is answering the goal question (currentStep is ASK_GOAL) and mentions subject names or topics (e.g. "Data Analysis & AI"), extract them as learningGoal (e.g. "Learn Data Analysis & AI"). Do NOT classify or extract them as the topic slot.
 
 Rules for Duration:
 - Convert any duration description to numeric hours (e.g., "quick" -> "3", "standard" -> "8", "comprehensive" -> "15"). If they specify a number of hours, extract just the digit (e.g. "2"). If they mention weeks, ignore it or convert to hours.
@@ -47,7 +48,8 @@ Rules:
 - Do NOT carry over slots from the current slots unless the user modifies/updates them in the latest message. We will merge them in code.
 """
 
-    user_prompt = f"""Latest User Message: "{user_message}"
+    user_prompt = f"""Current Step: {current_step}
+Latest User Message: "{user_message}"
 Previously Extracted Slots: {json.dumps(current_slots)}
 """
 

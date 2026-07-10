@@ -403,108 +403,7 @@ export default function ChatbotCourseCreator({ onClose }) {
     let nextCourseData = { ...courseData };
 
     if (!overrideStep) {
-      if (currentStep === 'CONFIRM_DETAILS') {
-        // Wide net of confirmation keywords — including "proceed", "structure", "create", "generate", "yes"
-        const isConfirm = [
-          "looks good", "looks fine", "looks ok", "continue", "confirm", "yes", "yep", "yeah",
-          "correct", "fine", "ok", "sure", "proceed", "generate", "create", "structure", "start",
-          "go ahead", "do it", "let's go", "great", "perfect", "sounds good", "alright"
-        ].some(kw => lowercaseText.includes(kw));
-
-        if (isConfirm) {
-          // Add user message to chat immediately, then generate structure
-          const userMsg = {
-            role: 'user',
-            content: textToSend,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          };
-          setMessages(prev => [...prev, userMsg]);
-          setInputMessage('');
-          setLoading(true);
-          setQuickReplies([]);
-
-          try {
-            const details = nextCourseData.details || {};
-            const safeDetails = {
-              courseType: details.courseType || 'Custom Course',
-              subject: details.subject || details.courseName || 'General',
-              courseName: details.courseName || details.subject || 'Custom Course',
-              description: details.description || details.goal || 'Learn the subject',
-              price: details.price || '0',
-              duration: String(details.duration || '5'),
-              requirements: details.requirements || '',
-              level: details.level || 'beginner',
-              language: details.language || 'English',
-              scriptingLanguage: details.scriptingLanguage || 'NA',
-              evaluator: details.evaluator || ''
-            };
-            console.log('[ChatbotBuilder] Generating structure with:', safeDetails);
-            const structureRes = await generateStructure('external', safeDetails);
-            console.log('[ChatbotBuilder] Structure response:', structureRes);
-
-            const rawModules = structureRes?.data?.modules || structureRes?.modules;
-
-            if (rawModules && rawModules.length > 0) {
-              const normalizedModules = rawModules.map(m => {
-                if (!m) return null;
-                const normalizedChapters = (m.chapters || []).map(c => {
-                  if (!c) return null;
-                  return {
-                    ...c,
-                    contents: c.contents || [],
-                    content: c.content || { content_type: 'html', html_content: '', completed: false }
-                  };
-                }).filter(Boolean);
-                return { ...m, chapters: normalizedChapters };
-              }).filter(Boolean);
-
-              const flatChapters = [];
-              normalizedModules.forEach(m => {
-                m.chapters?.forEach(c => flatChapters.push({ module: m.title || '', title: c.title || '' }));
-              });
-
-              const structureMetadata = { next_step: 'OUTLINE_EDIT', modules: normalizedModules };
-              const structureMsg = {
-                role: 'assistant',
-                content: 'Here is your personalized learning roadmap outline. Do you have anything to change in this, or would you like to add any modules?',
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                metadata: structureMetadata,
-                metadataType: 'structure'
-              };
-
-              setMessages(prev => [...prev, structureMsg]);
-              setCurrentStep('OUTLINE_EDIT');
-              setCourseData(prev => ({
-                ...prev,
-                structure: { modules: normalizedModules },
-                content: flatChapters.map(fc => {
-                  const existing = prev.content?.find(ex => ex.module_title === fc.module && ex.chapter_title === fc.title);
-                  return existing || { module_title: fc.module, chapter_title: fc.title, contents: [] };
-                })
-              }));
-            } else {
-              console.error('[ChatbotBuilder] Empty modules in structure response:', structureRes);
-              setMessages(prev => [...prev, {
-                role: 'assistant',
-                content: 'Sorry, I had trouble generating the course outline. Please try again.',
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-              }]);
-            }
-          } catch (structureErr) {
-            console.error('[ChatbotBuilder] Structure generation error:', structureErr);
-            setMessages(prev => [...prev, {
-              role: 'assistant',
-              content: 'Sorry, I encountered an error generating the course outline. Please try again.',
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            }]);
-          } finally {
-            setLoading(false);
-          }
-          return; // Skip the normal chatbot API call entirely
-        } else {
-          nextStepToUse = 'CONFIRM_DETAILS';
-        }
-      } else if (currentStep === 'ASK_GENERATE_SKELETON') {
+      if (currentStep === 'ASK_GENERATE_SKELETON') {
         // Any message here triggers direct structure generation (legacy fallback)
         const userMsg = {
           role: 'user',
@@ -1638,9 +1537,6 @@ export default function ChatbotCourseCreator({ onClose }) {
           <h4 className="font-bold text-xs text-indigo-600 flex items-center gap-1.5 uppercase tracking-wider">
             <FileText className="w-3.5 h-3.5" /> Course Details Summary
           </h4>
-          <p className="text-[10px] text-slate-400 leading-relaxed">
-            Please review the details below. You can proceed to generate the outline or modify any value.
-          </p>
         </div>
         <div className="space-y-2.5 text-xs text-slate-700">
           <div className="flex gap-2">
@@ -2141,7 +2037,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                             ? 'bg-indigo-600 text-white rounded-2xl rounded-br-none' 
                             : 'bg-white border border-slate-200/80 text-slate-800 rounded-2xl rounded-bl-none'
                         }`}>
-                           {msg.content && msg.content.trim() && msg.metadataType !== 'details_card' && (
+                           {msg.content && msg.content.trim() && (
                              <div className="space-y-0.5">
                                {formatChatMessage(msg.metadataType === 'structure' ? cleanStructureText(msg.content) : msg.content)}
                              </div>
