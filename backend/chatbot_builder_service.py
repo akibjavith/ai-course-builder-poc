@@ -13,7 +13,7 @@ def get_openai_client() -> OpenAI:
 
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
 
-def extract_slots_from_message(user_message: str, current_slots: Dict[str, Any]) -> Dict[str, Any]:
+def extract_slots_from_message(user_message: str, current_slots: Dict[str, Any], current_step: str = "ASK_TOPIC") -> Dict[str, Any]:
     """
     Invokes OpenAI in structured JSON mode to extract slot values from the latest user message
     and merge them with existing slot values.
@@ -68,6 +68,10 @@ Previously Extracted Slots: {json.dumps(current_slots)}
         for k in ["topic", "learningGoal", "currentLevel", "learningStyle", "duration", "language"]:
             val = extracted.get(k)
             if val is not None and str(val).strip() != "" and str(val).lower() != "null":
+                # Programmatically lock topic from being overwritten in later steps
+                if k == "topic" and current_step not in ["ASK_TOPIC", "EDIT_DETAILS_CHOICE"]:
+                    logger.info(f"[NLU Extraction] Ignored extracted topic '{val}' since step is '{current_step}' (Topic Locked)")
+                    continue
                 merged[k] = val
                 
         logger.info(f"[NLU Extraction] Extracted: {extracted} | Merged: {merged}")
@@ -178,9 +182,16 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
 
     elif current_step == "OUTLINE_EDIT":
         lowercase_msg = user_message.lower()
+        if "edit" in lowercase_msg or "change" in lowercase_msg or "modify" in lowercase_msg:
+            specifies_change = any(w in lowercase_msg for w in ["add", "remove", "delete", "reduce", "rename", "reorder", "chapter", "module"])
+            if not specifies_change:
+                return "EDIT_OUTLINE_CHOICE", None
         confirm_words = ["yes", "continue", "looks good", "proceed", "generate", "correct", "confirm", "happy", "fine", "ok", "go ahead"]
         if any(w in lowercase_msg for w in confirm_words):
             return "CONFIRM_GENERATE", None
+        return "OUTLINE_EDIT", None
+
+    elif current_step == "EDIT_OUTLINE_CHOICE":
         return "OUTLINE_EDIT", None
 
     elif current_step == "CONFIRM_GENERATE":
@@ -345,6 +356,14 @@ Do NOT output the Details metadata card. Output the Course Structure metadata ca
 
 Refusal Rule: If the user requests to edit course details (like changing the topic, goal, level, style, or duration) while they are in the OUTLINE_EDIT step, politely refuse. Remind them that they must confirm the syllabus outline first, or use the back controls.
 """
+    elif next_step == "EDIT_OUTLINE_CHOICE":
+        state_instructions = """
+Current State: EDIT_OUTLINE_CHOICE
+Goal: Ask the user what modifications they want to make to the syllabus outline.
+Conversational Guidance: Ask a friendly question (e.g. "What would you like to change in the syllabus outline?").
+Suggest the choices below immediately in a quick replies block:
+[quick_replies]["Reduce modules", "Add new module", "Rename modules/chapters", "Reorder modules"][/quick_replies]
+"""
     elif next_step == "CONFIRM_GENERATE":
         state_instructions = """
 Current State: CONFIRM_GENERATE
@@ -448,6 +467,8 @@ def reinject_quick_replies_into_history(messages: list, slots: dict) -> list:
                     content += '\n\n[quick_replies]["Confirm details & proceed", "Change topic", "Change duration", "Change level"][/quick_replies]'
                 elif "what details would you like to edit" in content_lower or "what would you like to edit" in content_lower:
                     content += '\n\n[quick_replies]["Edit Topic", "Edit Learning Goal", "Edit Difficulty Level", "Edit Learning Style", "Edit Duration"][/quick_replies]'
+                elif "change in the syllabus outline" in content_lower or "what would you like to change" in content_lower:
+                    content += '\n\n[quick_replies]["Reduce modules", "Add new module", "Rename modules/chapters", "Reorder modules"][/quick_replies]'
                 elif "generating the complete course content" in content_lower or "start generating the complete" in content_lower or "finalized. would you like me" in content_lower or "confirm and proceed" in content_lower:
                     content += '\n\n[quick_replies]["Yes, generate content", "No, go back to outline"][/quick_replies]'
             

@@ -669,16 +669,16 @@ export default function ChatbotCourseCreator({ onClose }) {
             if (res.type === 'details' || res.type === 'details_card') {
               const normalizedMetadata = {
                 ...res.metadata,
-                topic: res.metadata.topic || res.metadata.subject || res.metadata.courseName || prev.details?.topic,
-                learningGoal: res.metadata.learningGoal || res.metadata.description || res.metadata.goal || res.metadata.objective || prev.details?.learningGoal,
-                currentLevel: res.metadata.currentLevel || res.metadata.level || res.metadata.experience || prev.details?.currentLevel,
-                learningStyle: res.metadata.learningStyle || res.metadata.requirements || res.metadata.style || prev.details?.learningStyle,
-                duration: String(res.metadata.duration || res.metadata.courseDuration || res.metadata.hours || prev.details?.duration || ""),
-                subject: res.metadata.subject || res.metadata.topic || res.metadata.courseName || prev.details?.subject,
-                courseName: res.metadata.courseName || res.metadata.subject || res.metadata.topic || prev.details?.courseName,
-                description: res.metadata.description || res.metadata.learningGoal || res.metadata.goal || res.metadata.objective || prev.details?.description,
-                level: res.metadata.level || res.metadata.currentLevel || res.metadata.experience || prev.details?.level,
-                requirements: res.metadata.requirements || res.metadata.learningStyle || res.metadata.style || prev.details?.requirements,
+                topic: res.metadata.topic !== undefined ? res.metadata.topic : (res.metadata.subject || res.metadata.courseName || prev.details?.topic),
+                learningGoal: res.metadata.learningGoal !== undefined ? res.metadata.learningGoal : (res.metadata.description || res.metadata.goal || res.metadata.objective || prev.details?.learningGoal),
+                currentLevel: res.metadata.currentLevel !== undefined ? res.metadata.currentLevel : (res.metadata.level || res.metadata.experience || prev.details?.currentLevel),
+                learningStyle: res.metadata.learningStyle !== undefined ? res.metadata.learningStyle : (res.metadata.requirements || res.metadata.style || prev.details?.learningStyle),
+                duration: res.metadata.duration !== undefined ? String(res.metadata.duration) : (res.metadata.courseDuration || res.metadata.hours || prev.details?.duration || ""),
+                subject: res.metadata.topic !== undefined ? res.metadata.topic : prev.details?.subject,
+                courseName: res.metadata.topic !== undefined ? res.metadata.topic : prev.details?.courseName,
+                description: res.metadata.learningGoal !== undefined ? res.metadata.learningGoal : prev.details?.description,
+                level: res.metadata.currentLevel !== undefined ? res.metadata.currentLevel : prev.details?.level,
+                requirements: res.metadata.learningStyle !== undefined ? res.metadata.learningStyle : prev.details?.requirements,
               };
 
               updated.details = { ...(prev.details || {}), ...normalizedMetadata, price: "0" };
@@ -994,9 +994,9 @@ export default function ChatbotCourseCreator({ onClose }) {
         courseName: '',
         description: '',
         price: '0',
-        duration: '14',
+        duration: '',
         requirements: '',
-        level: 'beginner',
+        level: '',
         language: 'English',
         scriptingLanguage: 'NA',
         evaluator: 'Sarah Johnson'

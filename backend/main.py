@@ -666,7 +666,7 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
     # OUTLINE_EDIT: Use a dedicated JSON-mode call to guarantee structure output
     # -------------------------------------------------------------------------
     is_outline_edit_req = False
-    if req.currentStep == "OUTLINE_EDIT":
+    if req.currentStep in ["OUTLINE_EDIT", "EDIT_OUTLINE_CHOICE"]:
         user_message = ""
         if req.messages:
             for msg in reversed(req.messages):
@@ -677,7 +677,8 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
         confirm_words = ["yes", "continue", "looks good", "proceed", "generate", "correct", "confirm", "happy", "fine", "ok", "go ahead"]
         is_confirmation = any(w in lowercase_msg for w in confirm_words) and not any(neg in lowercase_msg for neg in ["not", "dont", "change", "add", "remove", "delete", "reduce"])
         if not is_confirmation:
-            is_outline_edit_req = True
+            if lowercase_msg.strip() != "edit outline":
+                is_outline_edit_req = True
 
     if is_outline_edit_req:
         try:
@@ -786,8 +787,19 @@ Expected JSON output format exactly:
             "language": "English"
         }
 
+        # If the user is starting a new course (step is ASK_TOPIC), discard any old slot values
+        if req.currentStep == "ASK_TOPIC":
+            current_slots = {
+                "topic": "",
+                "learningGoal": "",
+                "currentLevel": "",
+                "learningStyle": "",
+                "duration": "",
+                "language": "English"
+            }
+
         # Stage 1: Run NLU Slot Extraction
-        updated_slots = extract_slots_from_message(user_message, current_slots)
+        updated_slots = extract_slots_from_message(user_message, current_slots, req.currentStep)
 
         # Stage 2: Programmatic Dialog Solver
         next_step, validation_error = determine_next_step(req.currentStep, updated_slots, user_message)
@@ -816,6 +828,37 @@ Expected JSON output format exactly:
 
         # Parse quick-replies lists first to prevent clean_reply_text in parse_metadata from stripping them
         ai_reply, quick_replies = parse_quick_replies(ai_reply)
+
+        # If LLM failed to output quick replies, apply fallback safety net choices based on next_step
+        if not quick_replies:
+            topic_lower = str(updated_slots.get("topic", "")).lower()
+            is_programming = any(x in topic_lower for x in ["python", "java", "c++", "coding", "program", "developer", "react", "javascript", "typescript", "sql", "backend", "frontend", "software", "git", "c#", "html", "css", "database", "node", "express"])
+            
+            if next_step == "ASK_TOPIC":
+                quick_replies = ["Python Programming", "English Grammar", "Digital Marketing", "Machine Learning"]
+            elif next_step == "ASK_GOAL":
+                quick_replies = ["Build a Web App", "Automate Excel Tasks", "Data Analysis & AI", "Get a Developer Job"]
+            elif next_step == "ASK_LEVEL":
+                quick_replies = ["Complete Beginner / Start Fresh", "Intermediate / Some experience", "Advanced / Deep Dive"]
+            elif next_step == "ASK_STYLE":
+                if is_programming:
+                    quick_replies = ["Hands-on Coding", "Interactive Quizzes", "Detailed Explanations", "Balanced Combination"]
+                else:
+                    quick_replies = ["Detailed Explanations", "Interactive Quizzes", "Structured Tables", "Balanced Combination"]
+            elif next_step == "ASK_DURATION":
+                quick_replies = ["1 Hour", "2 Hours", "5 Hours", "10 Hours", "15 Hours", "20 Hours"]
+            elif next_step == "CONFIRM_DETAILS":
+                quick_replies = ["Confirm details & proceed", "Change topic", "Change duration", "Change level"]
+            elif next_step == "EDIT_DETAILS_CHOICE":
+                quick_replies = ["Edit Topic", "Edit Learning Goal", "Edit Difficulty Level", "Edit Learning Style", "Edit Duration"]
+            elif next_step == "ASK_GENERATE_SKELETON":
+                quick_replies = ["Yes, generate modules!", "Go back"]
+            elif next_step == "OUTLINE_EDIT":
+                quick_replies = ["Confirm Outline", "Reduce modules", "Add new module", "Rename modules/chapters"]
+            elif next_step == "EDIT_OUTLINE_CHOICE":
+                quick_replies = ["Reduce modules", "Add new module", "Rename modules/chapters", "Reorder modules"]
+            elif next_step == "CONFIRM_GENERATE":
+                quick_replies = ["Yes, generate content", "No, go back to outline"]
 
         # Parse metadata suggestions
         reply_text, metadata, type_val = parse_metadata(
