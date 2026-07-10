@@ -27,7 +27,13 @@ Your task is to analyze the user's latest message and extract values for the fol
 3. currentLevel (familiarity with the topic, e.g. "beginner", "intermediate", "advanced", "novice")
 4. learningStyle (how they prefer lessons to be structured, e.g. "hands-on coding", "videos & diagrams", "interactive quizzes", "structured tables", "detailed text explanations", "balanced combination")
 5. duration (how detailed or long they want the course, e.g. "10 hours", "quick", "comprehensive", "3 hours")
-6. language (e.g. "English", "Spanish", defaults to "English")
+6. language (defaults to "English")
+
+Rules for Level:
+- If the user mentions "basic to advance", "from scratch", "from zero", "for beginners", "no prior experience", or similar, the currentLevel must be "beginner". Do NOT set it to "advanced". Only extract "advanced" if they clearly say they already possess advanced experience/knowledge in the topic.
+
+Rules for Duration:
+- Convert any duration description to numeric hours (e.g., "quick" -> "3", "standard" -> "8", "comprehensive" -> "15"). If they specify a number of hours, extract just the digit (e.g. "2"). If they mention weeks, ignore it or convert to hours.
 
 Rules:
 - Output a single JSON object with keys: "topic", "learningGoal", "currentLevel", "learningStyle", "duration", "language".
@@ -74,12 +80,15 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
     level_val = slots.get("currentLevel")
     if level_val:
         lvl_lower = str(level_val).lower()
-        if "begin" in lvl_lower or "new" in lvl_lower or "start" in lvl_lower or "novice" in lvl_lower or "zero" in lvl_lower:
+        if "begin" in lvl_lower or "new" in lvl_lower or "start" in lvl_lower or "novice" in lvl_lower or "zero" in lvl_lower or "scratch" in lvl_lower:
             slots["currentLevel"] = "beginner"
         elif "intermed" in lvl_lower or "medium" in lvl_lower or "some" in lvl_lower or "familiar" in lvl_lower:
             slots["currentLevel"] = "intermediate"
         elif "advanc" in lvl_lower or "expert" in lvl_lower or "proficient" in lvl_lower or "high" in lvl_lower:
-            slots["currentLevel"] = "advanced"
+            if "basic" in lvl_lower or "scratch" in lvl_lower:
+                slots["currentLevel"] = "beginner"
+            else:
+                slots["currentLevel"] = "advanced"
         else:
             slots["currentLevel"] = "beginner" # Fallback
 
@@ -182,7 +191,7 @@ Your job is to interactively guide the user step-by-step through creating a pers
 The user is creating this course for THEMSELVES to learn from. Frame all questions directly to the user (e.g., "for you", "your level", "your background").
 
 GLOBAL RULES:
-1. Warm Persona: Be conversational and natural. Do not be a rigid form.
+1. Warm Persona: Be conversational, natural, and friendly. Do not behave like a rigid form.
 2. Structured Data Wrap: You MUST wrap the JSON metadata block in [METADATA]...[/METADATA] tags in your response.
 3. No Raw JSON: Never output raw JSON, curly braces, or markdown code blocks (like ```json) in your conversational reply text.
 4. Schema Mapping: The JSON metadata block must conform EXACTLY to the Details Schema:
@@ -194,11 +203,26 @@ GLOBAL RULES:
      "currentLevel": "<level_val>",
      "learningStyle": "<style_val>",
      "duration": "<duration_val>",
-     "language": "<language_val>",
+     "language": "English",
      "scriptingLanguage": "NA",
      "evaluator": "Sarah Johnson"
    }
    (Ensure all slot values matching the current state are populated; use empty strings "" if not yet gathered).
+
+5. DYNAMIC QUICK REPLIES: You MUST ALWAYS append dynamic quick replies at the very end of your conversational response (outside [METADATA] tags). Use EXACTLY the tag format: [quick_replies]["Option 1", "Option 2", ...][/quick_replies]. Generate 3 to 6 contextually appropriate suggestions.
+   - For ASK_TOPIC: Suggest popular subjects (e.g. ["Python Programming", "English Grammar", "Digital Marketing", "Machine Learning"]).
+   - For ASK_GOAL: Suggest 3-4 goals specific to their chosen topic (e.g. if topic is Python: ["Build a Web App", "Automate Excel Tasks", "Data Analysis & AI", "Get a Developer Job"]).
+   - For ASK_LEVEL: Suggest level selections: ["Complete Beginner / Start Fresh", "Intermediate / Some experience", "Advanced / Deep Dive"].
+   - For ASK_STYLE: Suggest style options based on our blocks: ["Hands-on Coding", "Interactive Quizzes", "Detailed Explanations", "Balanced Combination"].
+   - For ASK_DURATION: Suggest hour limits: ["1 Hour", "2 Hours", "5 Hours", "10 Hours", "15 Hours", "20 Hours"].
+   - For CONFIRM_DETAILS: Suggest confirmation: ["Confirm details & proceed", "Change topic", "Change duration", "Change level"].
+   - For ASK_GENERATE_SKELETON: Suggest: ["Yes, generate modules!", "Go back"].
+   - For OUTLINE_EDIT: Suggest: ["Looks good! Proceed to content", "Reduce modules", "Add new module", "Rename modules/chapters"].
+   - For CONFIRM_GENERATE: Suggest: ["Generate Course Content", "Go back to outline"].
+
+6. CONCISENESS & NO RECAPS: Keep your conversational responses extremely brief, clean, and direct. Do NOT repeat or recap the user's previous answers in every turn. Ask only the current question directly.
+7. NO DEVELOPER TERMINOLOGY: Do NOT output sentences like "Let me summarize this in the metadata format" or "Here is the metadata". Simply output the conversational text and the [METADATA] block silently.
+8. LANGUAGE: Do NOT ask any questions about language. Language is always English.
 """
 
     state_instructions = ""
@@ -212,26 +236,26 @@ Conversational Guidance: Ask a natural, welcoming question to discover their des
         state_instructions = f"""
 Current State: ASK_GOAL
 Goal: Discover the user's objective or goal for studying {topic_name}.
-Conversational Guidance: Ask a natural, friendly question about what they hope to achieve (e.g. "What is your main goal for learning {topic_name}? Are you looking to build a specific project, prepare for a job, or just satisfy your curiosity?").
+Conversational Guidance: Ask a natural, friendly question about what they hope to achieve (e.g. "What is your main goal for learning {topic_name}?").
 """
     elif next_step == "ASK_LEVEL":
         state_instructions = f"""
 Current State: ASK_LEVEL
 Goal: Discover their current level of experience or familiarity with {topic_name}.
-Conversational Guidance: Ask a friendly question to gauge their current familiarity (e.g. "How much experience do you already have with {topic_name}? Are you a complete beginner, or do you have some experience?").
+Conversational Guidance: Ask a friendly question to gauge their current familiarity (e.g. "How much experience do you already have with {topic_name}?").
 """
     elif next_step == "ASK_STYLE":
         state_instructions = f"""
 Current State: ASK_STYLE
 Goal: Learn their preferred style of lesson structure.
-Conversational Guidance: Ask a friendly, concise question (e.g., "How do you enjoy learning the most? Do you prefer hands-on coding, video and diagrams, structured tables, or a balanced combination?").
+Conversational Guidance: Ask a friendly, concise question (e.g. "How do you enjoy learning the most?").
 """
     elif next_step == "ASK_DURATION":
         error_addition = f"\nValidation Alert: {validation_error}\n" if validation_error else ""
         state_instructions = f"""
 Current State: ASK_DURATION{error_addition}
 Goal: Gather the duration they want to dedicate to this course.
-Conversational Guidance: Ask how detailed they want the course to be. Example: "How detailed would you like this course to be? You can choose a Quick course (2–5 hrs), a Standard course (5–10 hrs), or a Comprehensive course (10–20 hrs)."
+Conversational Guidance: Ask how detailed they want the course to be. Example: "How detailed would you like this course to be (up to 20 hours)?"
 If the validation alert is present, politely explain the 20-hour limit and guide them back.
 """
     elif next_step == "CONFIRM_DETAILS":
@@ -246,7 +270,6 @@ Topic: {slots.get('topic')}
 Your Profile: {slots.get('learningStyle')}
 Difficulty Level: {slots.get('currentLevel')}
 Your Objective: {slots.get('learningGoal')}
-Language: {slots.get('language', 'English')}
 Duration: {slots.get('duration')} Hours
 
 Would you like to modify any of these details before I create the course structure for you?

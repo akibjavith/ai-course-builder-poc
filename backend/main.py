@@ -732,7 +732,7 @@ Expected JSON output format exactly:
             return {
                 "status": "success",
                 "reply": "Here is the updated course structure outline. Please take a moment to review it. Would you like to make any further modifications, or are you happy with this outline?",
-                "quickReplies": [],
+                "quickReplies": ["Confirm Outline", "Reduce modules", "Add new module", "Rename modules/chapters"],
                 "metadata": structure_json,
                 "type": "structure"
             }
@@ -768,7 +768,7 @@ Expected JSON output format exactly:
             "currentLevel": details.get("currentLevel") or details.get("level") or "",
             "learningStyle": details.get("learningStyle") or details.get("requirements") or "",
             "duration": details.get("duration") or "",
-            "language": details.get("language") or "English"
+            "language": "English"
         }
 
         # Stage 1: Run NLU Slot Extraction
@@ -817,13 +817,37 @@ Expected JSON output format exactly:
                 }
         elif next_step == "OUTLINE_EDIT":
             type_val = "structure"
-            if metadata:
-                metadata["next_step"] = "CONFIRM_GENERATE"
+            
+            # If structure modules are empty, generate the initial outline using generate_course_structure!
+            current_structure_modules = req.courseData.get("structure", {}).get("modules", [])
+            if not current_structure_modules:
+                try:
+                    logger.info("Generating initial syllabus structure using generate_course_structure...")
+                    structure_res = generate_course_structure(
+                        courseName=updated_slots.get("topic") or "Custom Course",
+                        description=updated_slots.get("learningGoal") or "Course Content",
+                        subject=updated_slots.get("topic") or "General",
+                        level=updated_slots.get("currentLevel") or "beginner"
+                    )
+                    modules = structure_res.get("modules", [])
+                    metadata = {
+                        "next_step": "OUTLINE_EDIT",
+                        "modules": modules
+                    }
+                except Exception as structure_err:
+                    logger.error(f"Failed to generate initial structure on the fly: {structure_err}")
+                    metadata = {
+                        "next_step": "OUTLINE_EDIT",
+                        "modules": []
+                    }
             else:
-                metadata = {
-                    "next_step": "CONFIRM_GENERATE",
-                    "modules": []
-                }
+                if metadata:
+                    metadata["next_step"] = "CONFIRM_GENERATE"
+                else:
+                    metadata = {
+                        "next_step": "CONFIRM_GENERATE",
+                        "modules": current_structure_modules
+                    }
         else:
             type_val = "details"
             if metadata:

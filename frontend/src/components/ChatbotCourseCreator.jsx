@@ -74,7 +74,7 @@ export default function ChatbotCourseCreator({ onClose }) {
       courseName: '',
       description: '',
       price: '299',
-      duration: '14',
+      duration: '',
       requirements: '',
       level: 'beginner',
       language: 'English',
@@ -383,25 +383,6 @@ export default function ChatbotCourseCreator({ onClose }) {
 
     const lowercaseText = textToSend.trim().toLowerCase();
 
-    // Intercept generic greetings in Step 1
-    const greetings = ["hi", "hello", "hey", "hola", "greetings", "start", "get started", "new course"];
-    if (currentStep === 'ASK_TOPIC' && greetings.includes(lowercaseText)) {
-      if (!started) setStarted(true);
-      const userMsg = {
-        role: 'user',
-        content: textToSend,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      const assistantMsg = {
-        role: 'assistant',
-        content: "Hello! I am your AI course architect. What subject or topic would you like to create a course on?",
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      setMessages(prev => [...prev, userMsg, assistantMsg]);
-      setInputMessage('');
-      setQuickReplies([]);
-      return;
-    }
 
     // Direct interceptions for preview, publish and reset
     if (lowercaseText === "preview course") {
@@ -644,9 +625,7 @@ export default function ChatbotCourseCreator({ onClose }) {
         // Dynamically override or supplement quick replies based on the NEXT step
         let replies = res.quickReplies || [];
         const activeStep = (res.metadata && res.metadata.next_step) || nextStepToUse;
-        // Quick replies are completely disabled per user request
-        replies = [];
-        setQuickReplies([]);
+        setQuickReplies(replies);
 
         // Update currentStep state if returned in metadata, otherwise use robust keyword fallbacks
         if (res.metadata && res.metadata.next_step) {
@@ -2243,8 +2222,7 @@ export default function ChatbotCourseCreator({ onClose }) {
               </div>
             </div>
 
-            {/* Inline suggested replies quick chips (Completely removed per user request) */}
-            {/*
+            {/* Inline suggested replies quick chips */}
             {quickReplies.length > 0 && (
               <div className="bg-transparent py-2">
                 <div className="max-w-4xl mx-auto w-full px-6 flex flex-wrap gap-2 items-center">
@@ -2261,7 +2239,6 @@ export default function ChatbotCourseCreator({ onClose }) {
                 </div>
               </div>
             )}
-            */}
 
             {/* Bottom active Chat Input Console */}
             <div className="p-4 bg-transparent border-t border-slate-200/20 backdrop-blur-sm">
