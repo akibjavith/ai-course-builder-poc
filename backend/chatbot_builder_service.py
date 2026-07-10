@@ -32,6 +32,9 @@ Your task is to analyze the user's latest message and extract values for the fol
 Rules for Level:
 - If the user mentions "basic to advance", "from scratch", "from zero", "for beginners", "no prior experience", or similar, the currentLevel must be "beginner". Do NOT set it to "advanced". Only extract "advanced" if they clearly say they already possess advanced experience/knowledge in the topic.
 
+Rules for Goal:
+- For learningGoal, if the user doesn't specify a project or career objective, but says they want to learn the topic (e.g. "learn Python from basic to advanced" or "just learn the basics"), extract their goal (e.g. "Learn Python from basic to advanced"). Do NOT leave it null if they expressed their learning intent.
+
 Rules for Duration:
 - Convert any duration description to numeric hours (e.g., "quick" -> "3", "standard" -> "8", "comprehensive" -> "15"). If they specify a number of hours, extract just the digit (e.g. "2"). If they mention weeks, ignore it or convert to hours.
 
@@ -366,3 +369,29 @@ def parse_quick_replies(ai_reply: str) -> Tuple[str, list]:
             
     cleaned_reply = cleaned_reply.replace('[QUICK_REPLIES]', '').replace('[/QUICK_REPLIES]', '').replace('[quick_replies]', '').replace('[/quick_replies]', '').strip()
     return cleaned_reply, quick_replies
+
+def reinject_quick_replies_into_history(messages: list) -> list:
+    rebuilt = []
+    for msg in messages:
+        if msg.get("role") == "assistant":
+            content = msg.get("content", "")
+            # check if it already has quick replies
+            if "[quick_replies]" not in content:
+                content_lower = content.lower()
+                if "what subject or topic" in content_lower or "what course topic" in content_lower:
+                    content += '\n\n[quick_replies]["Python Programming", "English Grammar", "Digital Marketing", "Machine Learning"][/quick_replies]'
+                elif "main goal for learning" in content_lower or "what is your objective" in content_lower:
+                    content += '\n\n[quick_replies]["Build a Web App", "Automate Excel Tasks", "Data Analysis & AI", "Get a Developer Job"][/quick_replies]'
+                elif "experience do you already have" in content_lower or "current level of knowledge" in content_lower or "experience with" in content_lower:
+                    content += '\n\n[quick_replies]["Complete Beginner / Start Fresh", "Intermediate / Some experience", "Advanced / Deep Dive"][/quick_replies]'
+                elif "enjoy learning the most" in content_lower or "preferred learning style" in content_lower:
+                    content += '\n\n[quick_replies]["Hands-on Coding", "Interactive Quizzes", "Detailed Explanations", "Balanced Combination"][/quick_replies]'
+                elif "detailed would you like this course to be" in content_lower or "duration you have in mind" in content_lower or "how much time" in content_lower:
+                    content += '\n\n[quick_replies]["1 Hour", "2 Hours", "5 Hours", "10 Hours", "15 Hours", "20 Hours"][/quick_replies]'
+                elif "summary of your course requirements" in content_lower:
+                    content += '\n\n[quick_replies]["Confirm details & proceed", "Change topic", "Change duration", "Change level"][/quick_replies]'
+            
+            rebuilt.append({**msg, "content": content})
+        else:
+            rebuilt.append(msg)
+    return rebuilt

@@ -747,7 +747,8 @@ Expected JSON output format exactly:
         extract_slots_from_message,
         determine_next_step,
         build_builder_system_prompt,
-        parse_quick_replies
+        parse_quick_replies,
+        reinject_quick_replies_into_history
     )
     from chat_service import parse_metadata
 
@@ -780,7 +781,8 @@ Expected JSON output format exactly:
         # Stage 3: Dynamic NLG Prompt Generation
         system_prompt = build_builder_system_prompt(next_step, updated_slots, validation_error)
 
-        messages = [{"role": "system", "content": system_prompt}] + req.messages
+        cleaned_history = reinject_quick_replies_into_history(req.messages)
+        messages = [{"role": "system", "content": system_prompt}] + cleaned_history
 
         response = openai_client.chat.completions.create(
             model=LLM_MODEL,
@@ -797,6 +799,9 @@ Expected JSON output format exactly:
             scope = "Content"
         elif next_step == "OUTLINE_EDIT":
             scope = "Structure"
+
+        # Parse quick-replies lists first to prevent clean_reply_text in parse_metadata from stripping them
+        ai_reply, quick_replies = parse_quick_replies(ai_reply)
 
         # Parse metadata suggestions
         reply_text, metadata, type_val = parse_metadata(
@@ -861,8 +866,8 @@ Expected JSON output format exactly:
                     **updated_slots
                 }
 
-        # Parse quick-replies lists
-        reply_text, quick_replies = parse_quick_replies(reply_text)
+        # Quick replies are already parsed and extracted above
+        reply_text = reply_text.strip()
 
         logger.info(f"[Chatbot Solver] Step transition: {req.currentStep} -> {next_step} | Metadata: {metadata}")
 
