@@ -92,6 +92,10 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
         lowercase_msg = user_message.lower()
         if any(w in lowercase_msg for w in ["change topic", "change the topic", "different topic", "another topic", "edit topic", "choose topic"]):
             slots["topic"] = None
+            slots["learningGoal"] = None
+            slots["currentLevel"] = None
+            slots["learningStyle"] = None
+            slots["duration"] = None
             return "ASK_TOPIC", None
         if any(w in lowercase_msg for w in ["change goal", "change the goal", "different goal", "another goal", "edit goal", "edit learning goal"]):
             slots["learningGoal"] = None
@@ -179,6 +183,10 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
         lowercase_msg = user_message.lower()
         if "topic" in lowercase_msg or "subject" in lowercase_msg:
             slots["topic"] = None
+            slots["learningGoal"] = None
+            slots["currentLevel"] = None
+            slots["learningStyle"] = None
+            slots["duration"] = None
             return "ASK_TOPIC", None
         elif "goal" in lowercase_msg or "objective" in lowercase_msg:
             slots["learningGoal"] = None
@@ -196,6 +204,8 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
 
     elif current_step == "ASK_GENERATE_SKELETON":
         lowercase_msg = user_message.lower()
+        if "back" in lowercase_msg or "no" in lowercase_msg:
+            return "CONFIRM_DETAILS", None
         confirm_words = ["yes", "continue", "looks good", "proceed", "generate", "correct", "confirm", "do it", "sure", "yep", "yeah"]
         if any(w in lowercase_msg for w in confirm_words):
             return "OUTLINE_EDIT", None
@@ -205,7 +215,7 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
         lowercase_msg = user_message.lower()
         
         # Check if user wants to change details
-        if any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration"]):
+        if any(w in lowercase_msg for w in ["change", "edit", "modify", "update", "correct"]) and any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration", "objective", "requirements", "hours"]):
             return "CONFIRM_DETAILS", None
             
         # Check if they click/say "Reduce modules"

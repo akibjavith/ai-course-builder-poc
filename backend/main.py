@@ -688,7 +688,7 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                 is_clarifying_redirect = True
 
         # Check if we should change details (go-back to CONFIRM_DETAILS)
-        is_details_redirect = any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration"])
+        is_details_redirect = any(w in lowercase_msg for w in ["change", "edit", "modify", "update", "correct"]) and any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration", "objective", "requirements", "hours"])
 
         if not is_confirmation and not is_clarifying_redirect and not is_details_redirect:
             if lowercase_msg.strip() != "edit outline":
@@ -797,7 +797,7 @@ User's Modification Request:
 Rules:
 1. STRICT COMPLETE OUTPUT RULE: You MUST output the ENTIRE updated course syllabus JSON including all unchanged modules. Never omit, truncate, or drop any module or chapter from the current outline.
 2. CHAPTERS GENERATION RULE: Every module in the output (including newly added ones) MUST contain a list of relevant chapters. The 'chapters' list must NEVER be empty. If a new module is added, you MUST generate at least 3-4 relevant chapters (subtopics) for it.
-3. EXACT COUNT RULE: If the user request specifies an exact number of modules to reduce (e.g. "Reduce by N modules" or "Reduce by 1 module"), you MUST remove exactly N modules. If the user request specifies an exact number of modules to add, you MUST add exactly that number of modules.
+3. EXACT COUNT RULE (CALCULATE TARGET COUNT): If the user request specifies an exact number of modules to reduce (e.g. "Reduce by N modules" or "Reduce by 1 module"), calculate target count = (Current number of modules - N). The output outline MUST have EXACTLY that target count of modules. For example, if current outline has 7 modules and request is to reduce by 1, output outline MUST have exactly 6 modules. If the request is to add N modules, output outline MUST have exactly (Current number of modules + N) modules.
 4. RENAME STRUCTURAL PRESERVATION RULE: If the request is to rename modules or chapters, you MUST keep the exact same number of modules and chapters, and only change/rename their titles. Do NOT alter the course structure or count of modules/chapters.
 5. NO INDEXES RULE: Do NOT prepend numbers, chapter numbers, or index prefixes (like "Module 1", "Chapter 1 -", "1.1") to module or chapter titles.
 6. JSON ONLY RULE: Output ONLY valid JSON conforming to the schema. No markdown code blocks, no text explanations.

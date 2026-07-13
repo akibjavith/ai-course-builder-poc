@@ -571,18 +571,31 @@ export default function ChatbotCourseCreator({ onClose }) {
           setCourseData(prev => {
             const updated = { ...prev };
             if (res.type === 'details' || res.type === 'details_card') {
+              const tVal = res.metadata.topic !== undefined ? res.metadata.topic : (res.metadata.subject || res.metadata.courseName || prev.details?.topic);
+              const gVal = res.metadata.learningGoal !== undefined ? res.metadata.learningGoal : (res.metadata.description || res.metadata.goal || res.metadata.objective || prev.details?.learningGoal);
+              const lVal = res.metadata.currentLevel !== undefined ? res.metadata.currentLevel : (res.metadata.level || res.metadata.experience || prev.details?.currentLevel);
+              const sVal = res.metadata.learningStyle !== undefined ? res.metadata.learningStyle : (res.metadata.requirements || res.metadata.style || prev.details?.learningStyle);
+              const dVal = res.metadata.duration !== undefined ? (res.metadata.duration !== null ? String(res.metadata.duration) : null) : (res.metadata.courseDuration || res.metadata.hours || prev.details?.duration || "");
+
               const normalizedMetadata = {
                 ...res.metadata,
-                topic: res.metadata.topic !== undefined ? res.metadata.topic : (res.metadata.subject || res.metadata.courseName || prev.details?.topic),
-                learningGoal: res.metadata.learningGoal !== undefined ? res.metadata.learningGoal : (res.metadata.description || res.metadata.goal || res.metadata.objective || prev.details?.learningGoal),
-                currentLevel: res.metadata.currentLevel !== undefined ? res.metadata.currentLevel : (res.metadata.level || res.metadata.experience || prev.details?.currentLevel),
-                learningStyle: res.metadata.learningStyle !== undefined ? res.metadata.learningStyle : (res.metadata.requirements || res.metadata.style || prev.details?.learningStyle),
-                duration: res.metadata.duration !== undefined ? String(res.metadata.duration) : (res.metadata.courseDuration || res.metadata.hours || prev.details?.duration || ""),
-                subject: res.metadata.topic !== undefined ? res.metadata.topic : prev.details?.subject,
-                courseName: res.metadata.topic !== undefined ? res.metadata.topic : prev.details?.courseName,
-                description: res.metadata.learningGoal !== undefined ? res.metadata.learningGoal : prev.details?.description,
-                level: res.metadata.currentLevel !== undefined ? res.metadata.currentLevel : prev.details?.level,
-                requirements: res.metadata.learningStyle !== undefined ? res.metadata.learningStyle : prev.details?.requirements,
+                topic: tVal,
+                learningGoal: gVal,
+                currentLevel: lVal,
+                learningStyle: sVal,
+                duration: dVal,
+                
+                subject: tVal,
+                courseName: tVal,
+                description: gVal,
+                goal: gVal,
+                objective: gVal,
+                level: lVal,
+                experience: lVal,
+                requirements: sVal,
+                style: sVal,
+                courseDuration: dVal,
+                hours: dVal,
               };
 
               updated.details = { ...(prev.details || {}), ...normalizedMetadata, price: "0" };
