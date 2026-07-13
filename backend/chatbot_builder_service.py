@@ -70,8 +70,8 @@ Previously Extracted Slots: {json.dumps(current_slots)}
         for k in ["topic", "learningGoal", "currentLevel", "learningStyle", "duration", "language"]:
             val = extracted.get(k)
             if val is not None and str(val).strip() != "" and str(val).lower() != "null":
-                # Programmatically lock topic from being overwritten in later steps
-                if k == "topic" and current_step not in ["ASK_TOPIC", "EDIT_DETAILS_CHOICE"]:
+                # Programmatically lock topic from being overwritten in later steps (unless currently empty/cleared)
+                if k == "topic" and current_slots.get("topic") is not None and str(current_slots.get("topic")).strip() != "" and current_step not in ["ASK_TOPIC", "EDIT_DETAILS_CHOICE"]:
                     logger.info(f"[NLU Extraction] Ignored extracted topic '{val}' since step is '{current_step}' (Topic Locked)")
                     continue
                 merged[k] = val
@@ -87,6 +87,25 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
     Programmatic solver that determines the next step in the dialog based on slot status and transitions.
     Returns (next_step, validation_error_message).
     """
+    # 0. Conversational slot change requests override (only active during details questionnaire phase)
+    if current_step in ["ASK_TOPIC", "ASK_GOAL", "ASK_LEVEL", "ASK_STYLE", "ASK_DURATION", "CONFIRM_DETAILS", "EDIT_DETAILS_CHOICE", "ASK_GENERATE_SKELETON"]:
+        lowercase_msg = user_message.lower()
+        if any(w in lowercase_msg for w in ["change topic", "change the topic", "different topic", "another topic", "edit topic", "choose topic"]):
+            slots["topic"] = None
+            return "ASK_TOPIC", None
+        if any(w in lowercase_msg for w in ["change goal", "change the goal", "different goal", "another goal", "edit goal", "edit learning goal"]):
+            slots["learningGoal"] = None
+            return "ASK_GOAL", None
+        if any(w in lowercase_msg for w in ["change level", "change the level", "different level", "another level", "edit level", "edit difficulty level", "change experience"]):
+            slots["currentLevel"] = None
+            return "ASK_LEVEL", None
+        if any(w in lowercase_msg for w in ["change style", "change the style", "different style", "another style", "edit style", "edit learning style"]):
+            slots["learningStyle"] = None
+            return "ASK_STYLE", None
+        if any(w in lowercase_msg for w in ["change duration", "change the duration", "different duration", "another duration", "edit duration", "edit time", "edit hours"]):
+            slots["duration"] = None
+            return "ASK_DURATION", None
+
     # 1. Normalize Slots First (ensures slot values are safe before any transitions)
     # Normalize Level
     level_val = slots.get("currentLevel")
@@ -182,21 +201,45 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
             return "OUTLINE_EDIT", None
         return "ASK_GENERATE_SKELETON", None
 
-    elif current_step == "OUTLINE_EDIT":
+    elif current_step in ["OUTLINE_EDIT", "EDIT_OUTLINE_CHOICE"]:
         lowercase_msg = user_message.lower()
-        if "edit" in lowercase_msg or "change" in lowercase_msg or "modify" in lowercase_msg:
-            specifies_change = any(w in lowercase_msg for w in ["add", "remove", "delete", "reduce", "rename", "reorder", "chapter", "module"])
-            if not specifies_change:
-                return "EDIT_OUTLINE_CHOICE", None
-        confirm_words = ["yes", "continue", "looks good", "proceed", "generate", "correct", "confirm", "happy", "fine", "ok", "go ahead"]
-        if any(w in lowercase_msg for w in confirm_words):
-            return "CONFIRM_GENERATE", None
+        
+        # Check if user wants to change details
+        if any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration"]):
+            return "CONFIRM_DETAILS", None
+            
+        # Check if they click/say "Reduce modules"
+        is_reduce_req = any(w in lowercase_msg for w in ["reduce", "shrink", "delete", "remove", "cut", "decrease"])
+        if is_reduce_req and any(w in lowercase_msg for w in ["module", "modules", "syllabus", "roadmap"]):
+            return "ASK_REDUCE_COUNT", None
+            
+        # Check if they click/say "Add new module"
+        is_add_req = "add" in lowercase_msg and any(w in lowercase_msg for w in ["module", "modules", "syllabus", "roadmap"])
+        if is_add_req:
+            return "ASK_ADD_TOPIC", None
+
+        if current_step == "OUTLINE_EDIT":
+            if "edit" in lowercase_msg or "change" in lowercase_msg or "modify" in lowercase_msg:
+                specifies_change = any(w in lowercase_msg for w in ["add", "remove", "delete", "reduce", "rename", "reorder", "chapter", "module"])
+                if not specifies_change:
+                    return "EDIT_OUTLINE_CHOICE", None
+            confirm_words = ["yes", "continue", "looks good", "proceed", "generate", "correct", "confirm", "happy", "fine", "ok", "go ahead"]
+            if any(w in lowercase_msg for w in confirm_words):
+                return "CONFIRM_GENERATE", None
+            return "OUTLINE_EDIT", None
+        else:
+            return "OUTLINE_EDIT", None
+
+    elif current_step == "ASK_REDUCE_COUNT":
         return "OUTLINE_EDIT", None
 
-    elif current_step == "EDIT_OUTLINE_CHOICE":
+    elif current_step == "ASK_ADD_TOPIC":
         return "OUTLINE_EDIT", None
 
     elif current_step == "CONFIRM_GENERATE":
+        lowercase_msg = user_message.lower()
+        if "back" in lowercase_msg or "no" in lowercase_msg or "change" in lowercase_msg or "edit" in lowercase_msg:
+            return "OUTLINE_EDIT", None
         return "CONFIRM_GENERATE", None
 
     elif current_step == "PROMPT_GEN":
@@ -325,7 +368,7 @@ Current State: CONFIRM_DETAILS
 Goal: Show a clean, summary report of their requirements and ask for confirmation.
 Conversational Guidance: Ask the user to review their requirements in the summary card below. Ask if they look good or if they want to modify anything.
 Example: "Here is a summary of your course requirements. Would you like to modify any of these details before I create the course structure for you?"
-Do NOT output the bullet points list in your conversational text, as the card will display them.
+CRITICAL RULE: Do NOT list, repeat, or output the course details (Topic, Goal, Level, Style, Duration) inside your conversational text. Keep it strictly to a short confirmation question.
 Do NOT output any metadata block for CONFIRM_DETAILS. Keep it purely as a conversational reply in the format above, immediately followed by the [quick_replies] block.
 
 Refusal Rule: If the user requests to modify the syllabus structure, add/remove modules, or edit chapters while they are in the CONFIRM_DETAILS step, politely refuse. Explain that they must confirm the details first to generate the syllabus outline.
@@ -345,6 +388,24 @@ Goal: Ask for confirmation to generate outline modules.
 Conversational Guidance: Output exactly: "Shall I start by creating the modules for you?"
 Do NOT output any metadata block for this step.
 """
+    elif next_step == "ASK_REDUCE_COUNT":
+        state_instructions = """
+Current State: ASK_REDUCE_COUNT
+Goal: Ask the user how many modules they would like to reduce.
+Conversational Guidance: Ask a friendly question: "How many modules are you looking to reduce?"
+Suggest the choices below immediately in a quick replies block:
+[quick_replies]["Reduce by 1 module", "Reduce by 2 modules", "Your choice (Reduce by 2)"][/quick_replies]
+Do NOT output any JSON metadata block.
+"""
+    elif next_step == "ASK_ADD_TOPIC":
+        state_instructions = """
+Current State: ASK_ADD_TOPIC
+Goal: Ask the user if they have a specific topic in mind for the new module or if they prefer the AI's choice.
+Conversational Guidance: Ask a friendly question: "Do you have any specific topic in mind for the new module, or should I add one of my choice?"
+Suggest the choices below immediately in a quick replies block:
+[quick_replies]["Your choice", "Add specific topic"][/quick_replies]
+Do NOT output any JSON metadata block.
+"""
     elif next_step == "OUTLINE_EDIT":
         state_instructions = """
 Current State: OUTLINE_EDIT
@@ -356,7 +417,7 @@ Do NOT output the Details metadata card. Output the Course Structure metadata ca
   "modules": [...]
 }
 
-Refusal Rule: If the user requests to edit course details (like changing the topic, goal, level, style, or duration) while they are in the OUTLINE_EDIT step, politely refuse. Remind them that they must confirm the syllabus outline first, or use the back controls.
+Guidance: If the user requests to edit course details (like changing the topic, goal, level, style, or duration), they will be taken back to the CONFIRM_DETAILS step.
 """
     elif next_step == "EDIT_OUTLINE_CHOICE":
         state_instructions = """
@@ -469,6 +530,10 @@ def reinject_quick_replies_into_history(messages: list, slots: dict) -> list:
                     content += '\n\n[quick_replies]["Confirm details & proceed", "Change topic", "Change duration", "Change level"][/quick_replies]'
                 elif "what details would you like to edit" in content_lower or "what would you like to edit" in content_lower:
                     content += '\n\n[quick_replies]["Edit Topic", "Edit Learning Goal", "Edit Difficulty Level", "Edit Learning Style", "Edit Duration"][/quick_replies]'
+                elif "how many modules are you looking to reduce" in content_lower or "how many modules would you like to reduce" in content_lower:
+                    content += '\n\n[quick_replies]["Reduce by 1 module", "Reduce by 2 modules", "Your choice (Reduce by 2)"][/quick_replies]'
+                elif "do you have any specific topic in mind for the new module" in content_lower or "specific topic in mind for the new module" in content_lower:
+                    content += '\n\n[quick_replies]["Your choice", "Add specific topic"][/quick_replies]'
                 elif "change in the syllabus outline" in content_lower or "what would you like to change" in content_lower:
                     content += '\n\n[quick_replies]["Reduce modules", "Add new module", "Rename modules/chapters", "Reorder modules"][/quick_replies]'
                 elif "generating the complete course content" in content_lower or "start generating the complete" in content_lower or "finalized. would you like me" in content_lower or "confirm and proceed" in content_lower:

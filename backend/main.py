@@ -667,7 +667,7 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
     # OUTLINE_EDIT: Use a dedicated JSON-mode call to guarantee structure output
     # -------------------------------------------------------------------------
     is_outline_edit_req = False
-    if req.currentStep in ["OUTLINE_EDIT", "EDIT_OUTLINE_CHOICE"]:
+    if req.currentStep in ["OUTLINE_EDIT", "EDIT_OUTLINE_CHOICE", "ASK_REDUCE_COUNT", "ASK_ADD_TOPIC"]:
         user_message = ""
         if req.messages:
             for msg in reversed(req.messages):
@@ -677,7 +677,20 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
         lowercase_msg = user_message.lower()
         confirm_words = ["yes", "continue", "looks good", "proceed", "generate", "correct", "confirm", "happy", "fine", "ok", "go ahead"]
         is_confirmation = any(w in lowercase_msg for w in confirm_words) and not any(neg in lowercase_msg for neg in ["not", "dont", "change", "add", "remove", "delete", "reduce"])
-        if not is_confirmation:
+        
+        is_clarifying_redirect = False
+        if req.currentStep in ["OUTLINE_EDIT", "EDIT_OUTLINE_CHOICE"]:
+            is_reduce_req = any(w in lowercase_msg for w in ["reduce", "shrink", "delete", "remove", "cut", "decrease"])
+            if is_reduce_req and any(w in lowercase_msg for w in ["module", "modules", "syllabus", "roadmap"]):
+                is_clarifying_redirect = True
+            is_add_req = "add" in lowercase_msg and any(w in lowercase_msg for w in ["module", "modules", "syllabus", "roadmap"])
+            if is_add_req:
+                is_clarifying_redirect = True
+
+        # Check if we should change details (go-back to CONFIRM_DETAILS)
+        is_details_redirect = any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration"])
+
+        if not is_confirmation and not is_clarifying_redirect and not is_details_redirect:
             if lowercase_msg.strip() != "edit outline":
                 is_outline_edit_req = True
 
@@ -694,6 +707,30 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                         user_message = msg.get("content", "")
                         break
             lowercase_msg = user_message.lower()
+
+            # Custom modification prompt builder for clarifying steps
+            if req.currentStep == "ASK_REDUCE_COUNT":
+                import re
+                digits = re.findall(r'\d+', lowercase_msg)
+                if digits:
+                    count = int(digits[0])
+                    user_message = f"Reduce the outline by {count} modules."
+                else:
+                    # Default choice or "your choice"
+                    user_message = "Reduce the outline by 2 modules of your choice."
+                lowercase_msg = user_message.lower()
+            elif req.currentStep == "ASK_ADD_TOPIC":
+                import re
+                if "choice" in lowercase_msg or "your choice" in lowercase_msg:
+                    user_message = "Add 1 new relevant module of your choice to the outline."
+                else:
+                    digits = re.findall(r'\d+', lowercase_msg)
+                    if digits:
+                        count = int(digits[0])
+                        user_message = f"Add {count} new relevant modules to the outline."
+                    else:
+                        user_message = f"Add a new module focused on '{user_message}' to the outline."
+                lowercase_msg = user_message.lower()
 
             # 1. Programmatic Shuffle Interceptor
             if "shuffle" in lowercase_msg or "reorder" in lowercase_msg:
@@ -758,11 +795,12 @@ User's Modification Request:
 "{user_message}"
 
 Rules:
-- Apply the user's modification request (e.g. reduce modules, rename chapters, add a new module, etc.) directly on the current course outline. You can reduce modules to 1 module if requested.
-- Output the ENTIRE updated course outline structure.
-- Do NOT prepend numbers, chapter numbers, or index prefixes (like "Module 1", "Chapter 1 -", "1.1") to module or chapter titles.
-- Keep other unchanged modules and chapters as they are.
-- Output ONLY valid JSON conforming to the schema. No markdown code blocks, no text explanations.
+1. STRICT COMPLETE OUTPUT RULE: You MUST output the ENTIRE updated course syllabus JSON including all unchanged modules. Never omit, truncate, or drop any module or chapter from the current outline.
+2. CHAPTERS GENERATION RULE: Every module in the output (including newly added ones) MUST contain a list of relevant chapters. The 'chapters' list must NEVER be empty. If a new module is added, you MUST generate at least 3-4 relevant chapters (subtopics) for it.
+3. EXACT COUNT RULE: If the user request specifies an exact number of modules to reduce (e.g. "Reduce by N modules" or "Reduce by 1 module"), you MUST remove exactly N modules. If the user request specifies an exact number of modules to add, you MUST add exactly that number of modules.
+4. RENAME STRUCTURAL PRESERVATION RULE: If the request is to rename modules or chapters, you MUST keep the exact same number of modules and chapters, and only change/rename their titles. Do NOT alter the course structure or count of modules/chapters.
+5. NO INDEXES RULE: Do NOT prepend numbers, chapter numbers, or index prefixes (like "Module 1", "Chapter 1 -", "1.1") to module or chapter titles.
+6. JSON ONLY RULE: Output ONLY valid JSON conforming to the schema. No markdown code blocks, no text explanations.
 
 Expected JSON output format exactly:
 {{
@@ -836,7 +874,8 @@ Expected JSON output format exactly:
         }
 
         # If the user is starting a new course (step is ASK_TOPIC), discard any old slot values
-        if req.currentStep == "ASK_TOPIC":
+        is_new_session = len(req.messages) <= 2 or all(m.get("content", "").lower().strip() in ["hi", "hello", "hey", "restart", "start", "create a new course"] for m in req.messages if m.get("role") == "user")
+        if req.currentStep == "ASK_TOPIC" and is_new_session:
             current_slots = {
                 "topic": "",
                 "learningGoal": "",
@@ -901,6 +940,10 @@ Expected JSON output format exactly:
                 quick_replies = ["Edit Topic", "Edit Learning Goal", "Edit Difficulty Level", "Edit Learning Style", "Edit Duration"]
             elif next_step == "ASK_GENERATE_SKELETON":
                 quick_replies = ["Yes, generate modules!", "Go back"]
+            elif next_step == "ASK_REDUCE_COUNT":
+                quick_replies = ["Reduce by 1 module", "Reduce by 2 modules", "Your choice (Reduce by 2)"]
+            elif next_step == "ASK_ADD_TOPIC":
+                quick_replies = ["Your choice", "Add specific topic"]
             elif next_step == "OUTLINE_EDIT":
                 quick_replies = ["Confirm Outline", "Reduce modules", "Add new module", "Rename modules/chapters"]
                 current_modules = req.courseData.get("structure", {}).get("modules", [])
@@ -934,8 +977,40 @@ Expected JSON output format exactly:
         elif next_step == "OUTLINE_EDIT":
             type_val = "structure"
             
-            # If structure modules are empty, generate the initial outline using generate_course_structure!
+            # If details changed (e.g. topic, goal, level, style, duration), discard the old structure to trigger regeneration
+            details = req.courseData.get("details", {})
+            details_changed = False
+            if details:
+                old_topic = details.get("topic") or details.get("subject") or details.get("courseName") or ""
+                new_topic = updated_slots.get("topic") or updated_slots.get("subject") or updated_slots.get("courseName") or ""
+                if str(old_topic).lower().strip() != str(new_topic).lower().strip():
+                    details_changed = True
+                    
+                old_goal = details.get("learningGoal") or details.get("description") or details.get("goal") or ""
+                new_goal = updated_slots.get("learningGoal") or updated_slots.get("description") or updated_slots.get("goal") or ""
+                if str(old_goal).lower().strip() != str(new_goal).lower().strip():
+                    details_changed = True
+                    
+                old_level = details.get("currentLevel") or details.get("level") or ""
+                new_level = updated_slots.get("currentLevel") or updated_slots.get("level") or ""
+                if str(old_level).lower().strip() != str(new_level).lower().strip():
+                    details_changed = True
+                    
+                old_style = details.get("learningStyle") or details.get("requirements") or details.get("style") or ""
+                new_style = updated_slots.get("learningStyle") or updated_slots.get("requirements") or updated_slots.get("style") or ""
+                if str(old_style).lower().strip() != str(new_style).lower().strip():
+                    details_changed = True
+                    
+                old_duration = details.get("duration") or details.get("courseDuration") or details.get("hours") or ""
+                new_duration = updated_slots.get("duration") or updated_slots.get("courseDuration") or updated_slots.get("hours") or ""
+                if str(old_duration).lower().strip() != str(new_duration).lower().strip():
+                    details_changed = True
+
             current_structure_modules = req.courseData.get("structure", {}).get("modules", [])
+            if details_changed:
+                logger.info("Course details changed by user. Discarding old outline structure for regeneration.")
+                current_structure_modules = []
+                
             if not current_structure_modules:
                 try:
                     logger.info("Generating initial syllabus structure using generate_course_structure...")
@@ -958,10 +1033,10 @@ Expected JSON output format exactly:
                     }
             else:
                 if metadata:
-                    metadata["next_step"] = "CONFIRM_GENERATE"
+                    metadata["next_step"] = "OUTLINE_EDIT"
                 else:
                     metadata = {
-                        "next_step": "CONFIRM_GENERATE",
+                        "next_step": "OUTLINE_EDIT",
                         "modules": current_structure_modules
                     }
         else:

@@ -404,14 +404,18 @@ export default function ChatbotCourseCreator({ onClose }) {
 
     if (!overrideStep) {
       if (currentStep === 'ASK_GENERATE_SKELETON') {
-        // Any message here triggers direct structure generation (legacy fallback)
-        const userMsg = {
-          role: 'user',
-          content: textToSend,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
-        setMessages(prev => [...prev, userMsg]);
-        setInputMessage('');
+        const lowercaseMsg = textToSend.toLowerCase();
+        const wantsGoBack = lowercaseMsg.includes("back") || lowercaseMsg.includes("no") || lowercaseMsg.includes("change") || lowercaseMsg.includes("edit");
+        if (wantsGoBack) {
+          nextStepToUse = 'ASK_GENERATE_SKELETON';
+        } else {
+          const userMsg = {
+            role: 'user',
+            content: textToSend,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          setMessages(prev => [...prev, userMsg]);
+          setInputMessage('');
         setLoading(true);
         setQuickReplies([]);
         try {
@@ -458,6 +462,7 @@ export default function ChatbotCourseCreator({ onClose }) {
           }
         } catch (e) { console.error('Structure fallback error:', e); }
         finally { setLoading(false); }
+        }
         return;
 
       } else if (currentStep === 'OUTLINE_EDIT') {
@@ -1467,9 +1472,23 @@ export default function ChatbotCourseCreator({ onClose }) {
             <h4 className="font-bold text-xs text-indigo-600 flex items-center gap-1.5 uppercase tracking-wider">
               <Layers className="w-3.5 h-3.5" /> Syllabus Proposal
             </h4>
-            <span className="text-[9px] bg-indigo-50 text-indigo-600 border border-indigo-100 px-2.5 py-0.5 rounded font-black uppercase tracking-wider">
-              {structure.modules.length} Modules
-            </span>
+            <div className="flex items-center gap-2">
+              <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold flex items-center gap-1 ${
+                (currentStep === 'OUTLINE_EDIT' || currentStep === 'EDIT_OUTLINE_CHOICE' || currentStep === 'ASK_REDUCE_COUNT' || currentStep === 'ASK_ADD_TOPIC')
+                  ? 'bg-amber-50 text-amber-600 border border-amber-200'
+                  : 'bg-emerald-50 text-emerald-600 border border-emerald-250'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  (currentStep === 'OUTLINE_EDIT' || currentStep === 'EDIT_OUTLINE_CHOICE' || currentStep === 'ASK_REDUCE_COUNT' || currentStep === 'ASK_ADD_TOPIC')
+                    ? 'bg-amber-500 animate-pulse'
+                    : 'bg-emerald-500'
+                }`} />
+                {(currentStep === 'OUTLINE_EDIT' || currentStep === 'EDIT_OUTLINE_CHOICE' || currentStep === 'ASK_REDUCE_COUNT' || currentStep === 'ASK_ADD_TOPIC') ? 'Reviewing' : 'Confirmed'}
+              </span>
+              <span className="text-[9px] bg-indigo-50 text-indigo-600 border border-indigo-100 px-2.5 py-0.5 rounded font-black uppercase tracking-wider">
+                {structure.modules.length} Modules
+              </span>
+            </div>
           </div>
           <h3 className="text-sm font-black text-slate-800 mt-1">{courseTitle}</h3>
         </div>
@@ -1533,10 +1552,22 @@ export default function ChatbotCourseCreator({ onClose }) {
     if (!metadata) return null;
     return (
       <div className="mt-4 bg-white border border-slate-200 shadow-lg rounded-2xl p-5 space-y-4 text-left animate-fade-in">
-        <div className="flex flex-col border-b border-slate-100 pb-3 gap-1">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
           <h4 className="font-bold text-xs text-indigo-600 flex items-center gap-1.5 uppercase tracking-wider">
             <FileText className="w-3.5 h-3.5" /> Course Details Summary
           </h4>
+          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold flex items-center gap-1 ${
+            (currentStep === 'CONFIRM_DETAILS' || currentStep === 'EDIT_DETAILS_CHOICE')
+              ? 'bg-amber-50 text-amber-600 border border-amber-200'
+              : 'bg-emerald-50 text-emerald-600 border border-emerald-250'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${
+              (currentStep === 'CONFIRM_DETAILS' || currentStep === 'EDIT_DETAILS_CHOICE')
+                ? 'bg-amber-500 animate-pulse'
+                : 'bg-emerald-500'
+            }`} />
+            {(currentStep === 'CONFIRM_DETAILS' || currentStep === 'EDIT_DETAILS_CHOICE') ? 'Awaiting Review' : 'Confirmed'}
+          </span>
         </div>
         <div className="space-y-2.5 text-xs text-slate-700">
           <div className="flex gap-2">
