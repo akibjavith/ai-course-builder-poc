@@ -204,7 +204,7 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
 
     elif current_step == "ASK_GENERATE_SKELETON":
         lowercase_msg = user_message.lower()
-        if "back" in lowercase_msg or "no" in lowercase_msg:
+        if any(w in lowercase_msg for w in ["back", "no"]) or (any(verb in lowercase_msg for verb in ["edit", "change", "modify", "adjust"]) and any(noun in lowercase_msg for noun in ["detail", "summary", "topic", "goal", "level", "style", "duration", "objective", "requirements", "hours"])):
             return "CONFIRM_DETAILS", None
         confirm_words = ["yes", "continue", "looks good", "proceed", "generate", "correct", "confirm", "do it", "sure", "yep", "yeah"]
         if any(w in lowercase_msg for w in confirm_words):
@@ -324,7 +324,7 @@ GLOBAL RULES:
    - For OUTLINE_EDIT: Suggest: ["Looks good! Proceed to content", "Reduce modules", "Add new module", "Rename modules/chapters"].
    - For CONFIRM_GENERATE: Suggest: ["Generate Course Content", "Go back to outline"].
 
-6. CONCISENESS & NO RECAPS: Keep your conversational responses extremely brief, clean, and direct. Do NOT repeat or recap the user's previous answers in every turn. Ask only the current question directly.
+ 6. CONCISENESS & NO RECAPS: Keep your conversational responses extremely brief, clean, and direct. Do NOT repeat, recap, list, or summarize the user's previous answers or course requirements (like Topic, Goal, Level, Style, Duration) in your conversational text under any circumstances. Never output a text-based bullet summary of the requirements. Keep the recap strictly to the interactive Details card, and output only the direct conversational question/response in text.
 7. NO DEVELOPER TERMINOLOGY: Do NOT output sentences like "Let me summarize this in the metadata format" or "Here is the metadata". Simply output the conversational text and the [METADATA] block silently.
 8. LANGUAGE: Do NOT ask any questions about language. Language is always English.
 9. NO EARLY ROADMAP GENERATION: Do NOT generate or list the course outline modules, chapters, or syllabus structure in your conversational text at any point during the questionnaire phase (ASK_TOPIC, ASK_GOAL, ASK_LEVEL, ASK_STYLE, ASK_DURATION, CONFIRM_DETAILS). Only answer the user, ask the corresponding slot question, or recap details. You will generate the outline structure only when you transition to the OUTLINE_EDIT step.
@@ -410,8 +410,8 @@ Do NOT output any JSON metadata block.
     elif next_step == "ASK_ADD_TOPIC":
         state_instructions = """
 Current State: ASK_ADD_TOPIC
-Goal: Ask the user if they have a specific topic in mind for the new module or if they prefer the AI's choice.
-Conversational Guidance: Ask a friendly question: "Do you have any specific topic in mind for the new module, or should I add one of my choice?"
+Goal: Ask the user if they have specific topics in mind for the new modules or if they prefer the AI's choice.
+Conversational Guidance: Ask a friendly, guiding question letting the user know they can specify custom topics or let the AI automatically generate them. For example: "What topics would you like the new modules to cover? You can specify the topics, or I can automatically generate relevant modules for you."
 Suggest the choices below immediately in a quick replies block:
 [quick_replies]["Your choice", "Add specific topic"][/quick_replies]
 Do NOT output any JSON metadata block.

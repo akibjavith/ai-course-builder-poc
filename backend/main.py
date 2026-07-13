@@ -714,22 +714,42 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                 digits = re.findall(r'\d+', lowercase_msg)
                 if digits:
                     count = int(digits[0])
-                    user_message = f"Reduce the outline by {count} modules."
                 else:
-                    # Default choice or "your choice"
-                    user_message = "Reduce the outline by 2 modules of your choice."
+                    count = 1
+                    for msg in reversed(req.messages[:-1]):
+                        if msg.get("role") == "user":
+                            msg_lower = msg.get("content", "").lower()
+                            if "reduce" in msg_lower or "remove" in msg_lower or "delete" in msg_lower or "shrink" in msg_lower or "decrease" in msg_lower or "cut" in msg_lower:
+                                prev_digits = re.findall(r'\d+', msg_lower)
+                                if prev_digits:
+                                    count = int(prev_digits[0])
+                                    break
+                current_count = len(current_structure.get("modules", []))
+                target_count = max(1, current_count - count)
+                user_message = f"Reduce the outline so it has exactly {target_count} modules of your choice."
                 lowercase_msg = user_message.lower()
             elif req.currentStep == "ASK_ADD_TOPIC":
                 import re
-                if "choice" in lowercase_msg or "your choice" in lowercase_msg:
-                    user_message = "Add 1 new relevant module of your choice to the outline."
+                digits = re.findall(r'\d+', lowercase_msg)
+                if digits:
+                    count = int(digits[0])
                 else:
-                    digits = re.findall(r'\d+', lowercase_msg)
-                    if digits:
-                        count = int(digits[0])
-                        user_message = f"Add {count} new relevant modules to the outline."
-                    else:
-                        user_message = f"Add a new module focused on '{user_message}' to the outline."
+                    count = 1
+                    for msg in reversed(req.messages[:-1]):
+                        if msg.get("role") == "user":
+                            msg_lower = msg.get("content", "").lower()
+                            if "add" in msg_lower:
+                                prev_digits = re.findall(r'\d+', msg_lower)
+                                if prev_digits:
+                                    count = int(prev_digits[0])
+                                    break
+                is_choice = any(w in lowercase_msg for w in ["choice", "anything", "any topic", "ok", "yes", "sure", "proceed", "yep", "yeah", "happy"])
+                current_count = len(current_structure.get("modules", []))
+                target_count = current_count + count
+                if is_choice:
+                    user_message = f"Add new relevant modules of your choice so the outline has exactly {target_count} modules."
+                else:
+                    user_message = f"Add new modules focused on '{user_message}' so the outline has exactly {target_count} modules."
                 lowercase_msg = user_message.lower()
 
             # 1. Programmatic Shuffle Interceptor
@@ -1040,7 +1060,7 @@ Expected JSON output format exactly:
                         "modules": current_structure_modules
                     }
         else:
-            if next_step == "CONFIRM_DETAILS":
+            if next_step in ["CONFIRM_DETAILS", "EDIT_DETAILS_CHOICE"]:
                 type_val = "details_card"
             else:
                 type_val = "details"

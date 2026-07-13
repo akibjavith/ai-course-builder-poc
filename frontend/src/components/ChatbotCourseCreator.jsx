@@ -462,8 +462,8 @@ export default function ChatbotCourseCreator({ onClose }) {
           }
         } catch (e) { console.error('Structure fallback error:', e); }
         finally { setLoading(false); }
-        }
         return;
+      }
 
       } else if (currentStep === 'OUTLINE_EDIT') {
         // In OUTLINE_EDIT, the user edits/refines. Confirming the outline card moves to CONFIRM_GENERATE.
