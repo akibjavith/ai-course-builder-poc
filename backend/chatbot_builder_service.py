@@ -13,10 +13,25 @@ def get_openai_client() -> OpenAI:
 
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
 
-def extract_slots_from_message(user_message: str, current_slots: Dict[str, Any], current_step: str = "ASK_TOPIC") -> Dict[str, Any]:
+def parse_number_from_text(text: str) -> Optional[int]:
+    import re
+    digits = re.findall(r'\d+', text)
+    if digits:
+        return int(digits[0])
+    word_to_num = {
+        "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+        "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10
+    }
+    tokens = text.lower().replace(",", " ").replace(".", " ").split()
+    for t in tokens:
+        if t in word_to_num:
+            return word_to_num[t]
+    return None
+
+def extract_slots_from_message(user_message: str, current_slots: Dict[str, Any], current_step: str = "ASK_TOPIC") -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
     Invokes OpenAI in structured JSON mode to extract slot values from the latest user message
-    and merge them with existing slot values.
+    and merge them with existing slot values. Returns a tuple of (merged_slots, raw_extracted_slots).
     """
     client = get_openai_client()
     
@@ -71,44 +86,51 @@ Previously Extracted Slots: {json.dumps(current_slots)}
             val = extracted.get(k)
             if val is not None and str(val).strip() != "" and str(val).lower() != "null":
                 # Programmatically lock topic from being overwritten in later steps (unless currently empty/cleared)
-                if k == "topic" and current_slots.get("topic") is not None and str(current_slots.get("topic")).strip() != "" and current_step not in ["ASK_TOPIC", "EDIT_DETAILS_CHOICE"]:
+                if k == "topic" and current_slots.get("topic") is not None and str(current_slots.get("topic")).strip() != "" and current_step not in ["ASK_TOPIC", "EDIT_DETAILS_CHOICE", "CONFIRM_DETAILS"]:
                     logger.info(f"[NLU Extraction] Ignored extracted topic '{val}' since step is '{current_step}' (Topic Locked)")
                     continue
                 merged[k] = val
                 
         logger.info(f"[NLU Extraction] Extracted: {extracted} | Merged: {merged}")
-        return merged
+        return merged, extracted
     except Exception as e:
         logger.error(f"[NLU Extraction] Error extracting slots: {e}")
-        return current_slots
+        return current_slots, {}
 
-def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: str) -> Tuple[str, Optional[str]]:
+def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: str, extracted_slots: Optional[Dict[str, Any]] = None) -> Tuple[str, Optional[str]]:
     """
     Programmatic solver that determines the next step in the dialog based on slot status and transitions.
     Returns (next_step, validation_error_message).
     """
+    def is_newly_extracted(slot_key: str) -> bool:
+        if not extracted_slots:
+            return False
+        val = extracted_slots.get(slot_key)
+        return val is not None and str(val).strip() != "" and str(val).lower() != "null"
+
     # 0. Conversational slot change requests override (only active during details questionnaire phase)
     if current_step in ["ASK_TOPIC", "ASK_GOAL", "ASK_LEVEL", "ASK_STYLE", "ASK_DURATION", "CONFIRM_DETAILS", "EDIT_DETAILS_CHOICE", "ASK_GENERATE_SKELETON"]:
         lowercase_msg = user_message.lower()
         if any(w in lowercase_msg for w in ["change topic", "change the topic", "different topic", "another topic", "edit topic", "choose topic"]):
-            slots["topic"] = None
-            slots["learningGoal"] = None
-            slots["currentLevel"] = None
-            slots["learningStyle"] = None
-            slots["duration"] = None
-            return "ASK_TOPIC", None
+            if not is_newly_extracted("topic"):
+                slots["topic"] = None
+                return "ASK_TOPIC", None
         if any(w in lowercase_msg for w in ["change goal", "change the goal", "different goal", "another goal", "edit goal", "edit learning goal"]):
-            slots["learningGoal"] = None
-            return "ASK_GOAL", None
+            if not is_newly_extracted("learningGoal"):
+                slots["learningGoal"] = None
+                return "ASK_GOAL", None
         if any(w in lowercase_msg for w in ["change level", "change the level", "different level", "another level", "edit level", "edit difficulty level", "change experience"]):
-            slots["currentLevel"] = None
-            return "ASK_LEVEL", None
+            if not is_newly_extracted("currentLevel"):
+                slots["currentLevel"] = None
+                return "ASK_LEVEL", None
         if any(w in lowercase_msg for w in ["change style", "change the style", "different style", "another style", "edit style", "edit learning style"]):
-            slots["learningStyle"] = None
-            return "ASK_STYLE", None
+            if not is_newly_extracted("learningStyle"):
+                slots["learningStyle"] = None
+                return "ASK_STYLE", None
         if any(w in lowercase_msg for w in ["change duration", "change the duration", "different duration", "another duration", "edit duration", "edit time", "edit hours"]):
-            slots["duration"] = None
-            return "ASK_DURATION", None
+            if not is_newly_extracted("duration"):
+                slots["duration"] = None
+                return "ASK_DURATION", None
 
     # 1. Normalize Slots First (ensures slot values are safe before any transitions)
     # Normalize Level
@@ -131,7 +153,7 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
     style_val = slots.get("learningStyle")
     if style_val:
         st_lower = str(style_val).lower()
-        if "code" in st_lower or "hands" in st_lower or "practical" in st_lower or "exercise" in st_lower:
+        if "code" in st_lower or "hands" in st_lower or "practical" in st_lower or "exercise" in st_lower or "assignment" in st_lower or "project" in st_lower:
             slots["learningStyle"] = "hands-on coding"
         elif "video" in st_lower or "visual" in st_lower or "diagram" in st_lower or "movie" in st_lower:
             slots["learningStyle"] = "videos & diagrams"
@@ -169,38 +191,41 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
     if current_step == "CONFIRM_DETAILS":
         lowercase_msg = user_message.lower()
         if "edit" in lowercase_msg or "change" in lowercase_msg or "modify" in lowercase_msg:
-            return "EDIT_DETAILS_CHOICE", None
+            # Check if user specified any new slot value directly in the message
+            has_new_val = any(is_newly_extracted(k) for k in ["topic", "learningGoal", "currentLevel", "learningStyle", "duration"])
+            if not has_new_val:
+                return "EDIT_DETAILS_CHOICE", None
         confirm_words = [
             "looks good", "looks fine", "looks ok", "continue", "confirm", "yes", "yep", "yeah",
             "correct", "fine", "ok", "sure", "proceed", "generate", "create", "structure", "start",
             "go ahead", "do it", "let's go", "great", "perfect", "sounds good", "alright"
         ]
         if any(w in lowercase_msg for w in confirm_words):
-            return "ASK_GENERATE_SKELETON", None
+            return "OUTLINE_EDIT", None
         return "CONFIRM_DETAILS", None
 
     elif current_step == "EDIT_DETAILS_CHOICE":
         lowercase_msg = user_message.lower()
-        if "topic" in lowercase_msg or "subject" in lowercase_msg:
-            slots["topic"] = None
-            slots["learningGoal"] = None
-            slots["currentLevel"] = None
-            slots["learningStyle"] = None
-            slots["duration"] = None
-            return "ASK_TOPIC", None
-        elif "goal" in lowercase_msg or "objective" in lowercase_msg:
-            slots["learningGoal"] = None
-            return "ASK_GOAL", None
-        elif "level" in lowercase_msg or "difficulty" in lowercase_msg:
-            slots["currentLevel"] = None
-            return "ASK_LEVEL", None
-        elif "style" in lowercase_msg:
-            slots["learningStyle"] = None
-            return "ASK_STYLE", None
-        elif "duration" in lowercase_msg or "time" in lowercase_msg or "hours" in lowercase_msg:
-            slots["duration"] = None
-            return "ASK_DURATION", None
-        return "EDIT_DETAILS_CHOICE", None
+        has_new_val = any(is_newly_extracted(k) for k in ["topic", "learningGoal", "currentLevel", "learningStyle", "duration"])
+        if has_new_val:
+            pass
+        else:
+            if "topic" in lowercase_msg or "subject" in lowercase_msg:
+                slots["topic"] = None
+                return "ASK_TOPIC", None
+            elif "goal" in lowercase_msg or "objective" in lowercase_msg:
+                slots["learningGoal"] = None
+                return "ASK_GOAL", None
+            elif "level" in lowercase_msg or "difficulty" in lowercase_msg:
+                slots["currentLevel"] = None
+                return "ASK_LEVEL", None
+            elif "style" in lowercase_msg:
+                slots["learningStyle"] = None
+                return "ASK_STYLE", None
+            elif "duration" in lowercase_msg or "time" in lowercase_msg or "hours" in lowercase_msg:
+                slots["duration"] = None
+                return "ASK_DURATION", None
+            return "EDIT_DETAILS_CHOICE", None
 
     elif current_step == "ASK_GENERATE_SKELETON":
         lowercase_msg = user_message.lower()
@@ -217,16 +242,6 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
         # Check if user wants to change details
         if any(w in lowercase_msg for w in ["change", "edit", "modify", "update", "correct"]) and any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration", "objective", "requirements", "hours"]):
             return "CONFIRM_DETAILS", None
-            
-        # Check if they click/say "Reduce modules"
-        is_reduce_req = any(w in lowercase_msg for w in ["reduce", "shrink", "delete", "remove", "cut", "decrease"])
-        if is_reduce_req and any(w in lowercase_msg for w in ["module", "modules", "syllabus", "roadmap"]):
-            return "ASK_REDUCE_COUNT", None
-            
-        # Check if they click/say "Add new module"
-        is_add_req = "add" in lowercase_msg and any(w in lowercase_msg for w in ["module", "modules", "syllabus", "roadmap"])
-        if is_add_req:
-            return "ASK_ADD_TOPIC", None
 
         if current_step == "OUTLINE_EDIT":
             if "edit" in lowercase_msg or "change" in lowercase_msg or "modify" in lowercase_msg:
@@ -324,10 +339,11 @@ GLOBAL RULES:
    - For OUTLINE_EDIT: Suggest: ["Looks good! Proceed to content", "Reduce modules", "Add new module", "Rename modules/chapters"].
    - For CONFIRM_GENERATE: Suggest: ["Generate Course Content", "Go back to outline"].
 
- 6. CONCISENESS & NO RECAPS: Keep your conversational responses extremely brief, clean, and direct. Do NOT repeat, recap, list, or summarize the user's previous answers or course requirements (like Topic, Goal, Level, Style, Duration) in your conversational text under any circumstances. Never output a text-based bullet summary of the requirements. Keep the recap strictly to the interactive Details card, and output only the direct conversational question/response in text.
+ 6. CONCISENESS & NO RECAPS: Keep your conversational responses extremely brief, clean, and direct. Do NOT repeat, recap, list, confirm, or summarize the user's previous answers or course requirements (like Topic, Goal, Level, Style, Duration) in your conversational text under any circumstances. Never output a text-based bullet summary of the requirements. Keep the recap strictly to the interactive Details card, and output only the direct conversational question/response in text.
 7. NO DEVELOPER TERMINOLOGY: Do NOT output sentences like "Let me summarize this in the metadata format" or "Here is the metadata". Simply output the conversational text and the [METADATA] block silently.
 8. LANGUAGE: Do NOT ask any questions about language. Language is always English.
 9. NO EARLY ROADMAP GENERATION: Do NOT generate or list the course outline modules, chapters, or syllabus structure in your conversational text at any point during the questionnaire phase (ASK_TOPIC, ASK_GOAL, ASK_LEVEL, ASK_STYLE, ASK_DURATION, CONFIRM_DETAILS). Only answer the user, ask the corresponding slot question, or recap details. You will generate the outline structure only when you transition to the OUTLINE_EDIT step.
+10. NEVER CONFIRM OR LIST SLOTS IN TEXT: Under no circumstances should you list or print the course details (such as "Topic: ...", "Difficulty: ...", "Duration: ...") as text in your conversational response. This includes confirming updated values when details are edited. Do NOT repeat or print them back to the user. Simply state that you have updated or saved the details, and prompt them to confirm or proceed, relying entirely on the visual Details suggestion card to show the current values.
 """
 
     state_instructions = ""

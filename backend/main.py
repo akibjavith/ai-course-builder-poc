@@ -32,6 +32,8 @@ load_dotenv()
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
 
+from chatbot_builder_service import parse_number_from_text
+
 app = FastAPI()
 
 # Register online course generator router
@@ -676,21 +678,27 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                     break
         lowercase_msg = user_message.lower()
         confirm_words = ["yes", "continue", "looks good", "proceed", "generate", "correct", "confirm", "happy", "fine", "ok", "go ahead"]
-        is_confirmation = any(w in lowercase_msg for w in confirm_words) and not any(neg in lowercase_msg for neg in ["not", "dont", "change", "add", "remove", "delete", "reduce"])
         
-        is_clarifying_redirect = False
-        if req.currentStep in ["OUTLINE_EDIT", "EDIT_OUTLINE_CHOICE"]:
-            is_reduce_req = any(w in lowercase_msg for w in ["reduce", "shrink", "delete", "remove", "cut", "decrease"])
-            if is_reduce_req and any(w in lowercase_msg for w in ["module", "modules", "syllabus", "roadmap"]):
-                is_clarifying_redirect = True
-            is_add_req = "add" in lowercase_msg and any(w in lowercase_msg for w in ["module", "modules", "syllabus", "roadmap"])
-            if is_add_req:
-                is_clarifying_redirect = True
+        # Check if the user is confirming a pending addition from a previous 10-module limit warning
+        is_pending_add_confirm = False
+        if req.messages:
+            last_assistant_msg = ""
+            for msg in reversed(req.messages):
+                if msg.get("role") == "assistant":
+                    last_assistant_msg = msg.get("content", "").lower()
+                    break
+            if "maximum limit of 10" in last_assistant_msg or "i can add" in last_assistant_msg:
+                is_pending_add_confirm = any(w in lowercase_msg for w in confirm_words)
+
+        is_confirmation = any(w in lowercase_msg for w in confirm_words) and not any(neg in lowercase_msg for neg in ["not", "dont", "change", "add", "remove", "delete", "reduce"])
+        if is_pending_add_confirm:
+            is_confirmation = False
 
         # Check if we should change details (go-back to CONFIRM_DETAILS)
         is_details_redirect = any(w in lowercase_msg for w in ["change", "edit", "modify", "update", "correct"]) and any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration", "objective", "requirements", "hours"])
 
-        if not is_confirmation and not is_clarifying_redirect and not is_details_redirect:
+        # No clarifying redirect since we directly edit the outline without asking questions
+        if not is_confirmation and not is_details_redirect:
             if lowercase_msg.strip() != "edit outline":
                 is_outline_edit_req = True
 
@@ -709,48 +717,103 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
             lowercase_msg = user_message.lower()
 
             # Custom modification prompt builder for clarifying steps
-            if req.currentStep == "ASK_REDUCE_COUNT":
-                import re
-                digits = re.findall(r'\d+', lowercase_msg)
-                if digits:
-                    count = int(digits[0])
-                else:
+            current_count = len(current_structure.get("modules", []))
+            
+            # Check if they specified a count directly in the command
+            count = parse_number_from_text(lowercase_msg)
+            
+            # If confirming pending add, override count
+            import re
+            if is_pending_add_confirm and req.messages:
+                last_assistant_msg = ""
+                for msg in reversed(req.messages):
+                    if msg.get("role") == "assistant":
+                        last_assistant_msg = msg.get("content", "").lower()
+                        break
+                match = re.search(r'add (\d+) module', last_assistant_msg)
+                if match:
+                    count = int(match.group(1))
+            
+            # Check reduce vs add
+            is_reduce_req = any(w in lowercase_msg for w in ["reduce", "shrink", "delete", "remove", "cut", "decrease"])
+            is_add_req = ("add" in lowercase_msg and any(w in lowercase_msg for w in ["module", "modules", "syllabus", "roadmap"])) or is_pending_add_confirm
+            
+            if is_add_req:
+                if count is None:
                     count = 1
-                    for msg in reversed(req.messages[:-1]):
-                        if msg.get("role") == "user":
-                            msg_lower = msg.get("content", "").lower()
-                            if "reduce" in msg_lower or "remove" in msg_lower or "delete" in msg_lower or "shrink" in msg_lower or "decrease" in msg_lower or "cut" in msg_lower:
-                                prev_digits = re.findall(r'\d+', msg_lower)
-                                if prev_digits:
-                                    count = int(prev_digits[0])
-                                    break
-                current_count = len(current_structure.get("modules", []))
-                target_count = max(1, current_count - count)
-                user_message = f"Reduce the outline so it has exactly {target_count} modules of your choice."
-                lowercase_msg = user_message.lower()
-            elif req.currentStep == "ASK_ADD_TOPIC":
-                import re
-                digits = re.findall(r'\d+', lowercase_msg)
-                if digits:
-                    count = int(digits[0])
-                else:
-                    count = 1
-                    for msg in reversed(req.messages[:-1]):
-                        if msg.get("role") == "user":
-                            msg_lower = msg.get("content", "").lower()
-                            if "add" in msg_lower:
-                                prev_digits = re.findall(r'\d+', msg_lower)
-                                if prev_digits:
-                                    count = int(prev_digits[0])
-                                    break
-                is_choice = any(w in lowercase_msg for w in ["choice", "anything", "any topic", "ok", "yes", "sure", "proceed", "yep", "yeah", "happy"])
-                current_count = len(current_structure.get("modules", []))
+                
+                # Naming/topic extraction helper
+                topic_focus = "a relevant topic of your choice"
+                for prep in ["focused on", "focusing on", "focus on", "named", "called", "about", "on", "for"]:
+                    if f" {prep} " in f" {lowercase_msg} ":
+                        idx = lowercase_msg.find(prep)
+                        topic_focus = user_message[idx + len(prep):].strip()
+                        topic_focus = topic_focus.strip('."\'? ')
+                        break
+                        
                 target_count = current_count + count
-                if is_choice:
-                    user_message = f"Add new relevant modules of your choice so the outline has exactly {target_count} modules."
+                if target_count > 10:
+                    allowable_add = 10 - current_count
+                    if allowable_add <= 0:
+                        return JSONResponse({
+                            "status": "success",
+                            "reply": "Your course already has 10 modules, which is the maximum limit. I cannot add any more modules.",
+                            "metadata": {
+                                "next_step": "OUTLINE_EDIT",
+                                "modules": current_structure.get("modules", [])
+                            },
+                            "type": "structure"
+                        })
+                    else:
+                        return JSONResponse({
+                            "status": "success",
+                            "reply": f"I can only create up to 10 modules. I can add {allowable_add} modules to bring your course to the maximum limit of 10. Would you like me to do that?",
+                            "quickReplies": ["Yes, add modules", "Cancel"],
+                            "metadata": {
+                                "next_step": "OUTLINE_EDIT",
+                                "modules": current_structure.get("modules", [])
+                            },
+                            "type": "structure"
+                        })
                 else:
-                    user_message = f"Add new modules focused on '{user_message}' so the outline has exactly {target_count} modules."
-                lowercase_msg = user_message.lower()
+                    user_message = f"Add exactly {count} new modules focused on '{topic_focus}' to the outline. The final outline MUST contain exactly {target_count} modules."
+                    lowercase_msg = user_message.lower()
+                    
+            elif is_reduce_req:
+                if count is None:
+                    count = 1
+                    
+                is_reduce_to = "to " in lowercase_msg or "reduce to" in lowercase_msg
+                if is_reduce_to:
+                    target_count = max(0, count)
+                    diff = max(0, current_count - target_count)
+                else:
+                    diff = count
+                    target_count = max(0, current_count - diff)
+                    
+                if target_count == current_count:
+                    return JSONResponse({
+                        "status": "success",
+                        "reply": f"The course outline already contains exactly {current_count} modules. I cannot reduce it to {target_count}.",
+                        "metadata": {
+                            "next_step": "OUTLINE_EDIT",
+                            "modules": current_structure.get("modules", [])
+                        },
+                        "type": "structure"
+                    })
+                elif target_count < 1:
+                    return JSONResponse({
+                        "status": "success",
+                        "reply": "A course outline must contain at least 1 module. I cannot reduce the course below 1 module.",
+                        "metadata": {
+                            "next_step": "OUTLINE_EDIT",
+                            "modules": current_structure.get("modules", [])
+                        },
+                        "type": "structure"
+                    })
+                else:
+                    user_message = f"Reduce exactly {diff} modules of your choice from the outline. The final outline MUST contain exactly {target_count} modules."
+                    lowercase_msg = user_message.lower()
 
             # 1. Programmatic Shuffle Interceptor
             if "shuffle" in lowercase_msg or "reorder" in lowercase_msg:
@@ -783,21 +846,6 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                         "type": "structure"
                     })
 
-            # 2. Reduction Limit Interceptor (Refuse if len(modules) <= 1)
-            modules = current_structure.get("modules", [])
-            if len(modules) <= 1:
-                is_reduce_req = any(w in lowercase_msg for w in ["reduce", "shrink", "delete", "remove", "cut", "decrease"])
-                if is_reduce_req and any(w in lowercase_msg for w in ["module", "modules", "syllabus", "roadmap"]):
-                    return JSONResponse({
-                        "status": "success",
-                        "reply": "I cannot reduce the course to less than 1 module. You must have at least 1 module in your course.",
-                        "metadata": {
-                            "next_step": "OUTLINE_EDIT",
-                            "modules": modules
-                        },
-                        "type": "structure"
-                    })
-
             edit_prompt = f"""You are an expert curriculum designer.
 Your task is to modify the current course outline based strictly on the user's request.
 
@@ -817,7 +865,7 @@ User's Modification Request:
 Rules:
 1. STRICT COMPLETE OUTPUT RULE: You MUST output the ENTIRE updated course syllabus JSON including all unchanged modules. Never omit, truncate, or drop any module or chapter from the current outline.
 2. CHAPTERS GENERATION RULE: Every module in the output (including newly added ones) MUST contain a list of relevant chapters. The 'chapters' list must NEVER be empty. If a new module is added, you MUST generate at least 3-4 relevant chapters (subtopics) for it.
-3. EXACT COUNT RULE (CALCULATE TARGET COUNT): If the user request specifies an exact number of modules to reduce (e.g. "Reduce by N modules" or "Reduce by 1 module"), calculate target count = (Current number of modules - N). The output outline MUST have EXACTLY that target count of modules. For example, if current outline has 7 modules and request is to reduce by 1, output outline MUST have exactly 6 modules. If the request is to add N modules, output outline MUST have exactly (Current number of modules + N) modules.
+3. EXACT COUNT RULE: The final outline in the JSON output MUST have EXACTLY the target count of modules specified in the user request description. Count them carefully. If it says "The final outline MUST contain exactly X modules", your JSON output 'modules' array MUST have exactly X items. Do not output X-1 or X+1 modules.
 4. RENAME STRUCTURAL PRESERVATION RULE: If the request is to rename modules or chapters, you MUST keep the exact same number of modules and chapters, and only change/rename their titles. Do NOT alter the course structure or count of modules/chapters.
 5. NO INDEXES RULE: Do NOT prepend numbers, chapter numbers, or index prefixes (like "Module 1", "Chapter 1 -", "1.1") to module or chapter titles.
 6. JSON ONLY RULE: Output ONLY valid JSON conforming to the schema. No markdown code blocks, no text explanations.
@@ -842,7 +890,7 @@ Expected JSON output format exactly:
                     {"role": "system", "content": "You are a curriculum design expert. Output only valid JSON conforming to the schema. No markdown, no extra text."},
                     {"role": "user", "content": edit_prompt}
                 ],
-                temperature=0.7,
+                temperature=0.1,
                 max_tokens=4000,
                 response_format={"type": "json_object"}
             )
@@ -906,10 +954,10 @@ Expected JSON output format exactly:
             }
 
         # Stage 1: Run NLU Slot Extraction
-        updated_slots = extract_slots_from_message(user_message, current_slots, req.currentStep)
+        updated_slots, raw_extracted = extract_slots_from_message(user_message, current_slots, req.currentStep)
 
         # Stage 2: Programmatic Dialog Solver
-        next_step, validation_error = determine_next_step(req.currentStep, updated_slots, user_message)
+        next_step, validation_error = determine_next_step(req.currentStep, updated_slots, user_message, raw_extracted)
 
         # Stage 3: Dynamic NLG Prompt Generation
         system_prompt = build_builder_system_prompt(next_step, updated_slots, validation_error)
