@@ -996,17 +996,94 @@ Expected JSON output format exactly:
                 elif any(w in lowercase_msg for w in ["no", "cancel", "back", "stop"]):
                     is_topic_cancel = True
 
+        clear_course_data_flag = False
+
         if is_topic_cancel:
             old_topic = details.get("topic") or details.get("subject") or details.get("courseName") or ""
             if old_topic:
                 current_slots["topic"] = old_topic
+            
+            # Route back to previous state
+            has_content = len(req.courseData.get("content", [])) > 0
+            if has_content:
+                meta = {
+                    "next_step": "CONFIRM_GENERATE",
+                    **current_slots
+                }
+                return JSONResponse({
+                    "status": "success",
+                    "reply": "Topic change cancelled. The course structure has been finalized. Would you like me to start generating the complete course content?",
+                    "quickReplies": ["Yes, start generating", "No, go back to outline"],
+                    "metadata": meta,
+                    "type": "details"
+                })
+            else:
+                meta = {
+                    "next_step": "CONFIRM_DETAILS",
+                    **current_slots
+                }
+                return JSONResponse({
+                    "status": "success",
+                    "reply": "Topic change cancelled. Here are your course details. Would you like to review the details again or proceed with the course structure?",
+                    "quickReplies": ["Confirm details & proceed", "Edit Details"],
+                    "metadata": meta,
+                    "type": "details_card"
+                })
 
         pending_topic = details.get("pending_topic")
         if is_topic_confirm and pending_topic:
-            current_slots["topic"] = pending_topic
+            if pending_topic == "CLEAR":
+                current_slots["topic"] = None
+            else:
+                current_slots["topic"] = pending_topic
+            
+            # Clear all other details slots to force re-answering them
+            current_slots["learningGoal"] = ""
+            current_slots["currentLevel"] = ""
+            current_slots["learningStyle"] = ""
+            current_slots["duration"] = ""
+            
             # Also clear the existing structure and content to force regeneration!
             req.courseData["structure"] = {"modules": []}
             req.courseData["content"] = []
+            clear_course_data_flag = True
+
+        # Check if topic change request is triggered
+        has_existing_structure = len(req.courseData.get("structure", {}).get("modules", [])) > 0
+        is_requesting_topic_change = False
+        
+        # Temp NLU run to see if they specified a new topic in message
+        temp_slots = {**current_slots}
+        temp_updated, _ = extract_slots_from_message(user_message, temp_slots, req.currentStep)
+        old_topic_temp = current_slots.get("topic")
+        new_topic_temp = temp_updated.get("topic")
+        
+        if old_topic_temp and new_topic_temp and str(old_topic_temp).lower().strip() != str(new_topic_temp).lower().strip():
+            if has_existing_structure and not is_topic_confirm and not is_topic_cancel:
+                is_requesting_topic_change = True
+                
+        if has_existing_structure and not is_topic_confirm and not is_topic_cancel:
+            if any(w in lowercase_msg for w in ["change topic", "change the topic", "different topic", "another topic", "edit topic", "choose topic", "edit subject", "change subject"]):
+                is_requesting_topic_change = True
+                
+        if is_requesting_topic_change:
+            pending = new_topic_temp if (new_topic_temp and str(old_topic_temp).lower().strip() != str(new_topic_temp).lower().strip()) else "CLEAR"
+            meta = {
+                "next_step": "CONFIRM_DETAILS",
+                "pending_topic": pending,
+                **current_slots
+            }
+            if pending != "CLEAR":
+                reply = f"Changing the course topic from '{old_topic_temp}' to '{pending}' will require regenerating the syllabus outline and course content from scratch. Are you sure you want to proceed with this change?"
+            else:
+                reply = f"Changing the course topic will require regenerating the syllabus outline and course content from scratch. Are you sure you want to proceed?"
+            return JSONResponse({
+                "status": "success",
+                "reply": reply,
+                "quickReplies": ["Yes, change topic", "Cancel"],
+                "metadata": meta,
+                "type": "details_card"
+            })
 
         # Stage 1: Run NLU Slot Extraction
         updated_slots, raw_extracted = extract_slots_from_message(user_message, current_slots, req.currentStep)
@@ -1019,7 +1096,6 @@ Expected JSON output format exactly:
         # Check if topic changed and we already have structure/content
         old_topic = current_slots.get("topic")
         new_topic = updated_slots.get("topic")
-        has_existing_structure = len(req.courseData.get("structure", {}).get("modules", [])) > 0
         
         # If topic changed, clear all subsequent details slots
         if old_topic and new_topic and str(old_topic).lower().strip() != str(new_topic).lower().strip():
@@ -1028,24 +1104,18 @@ Expected JSON output format exactly:
                 updated_slots["currentLevel"] = ""
                 updated_slots["learningStyle"] = ""
                 updated_slots["duration"] = ""
-
-        if old_topic and new_topic and str(old_topic).lower().strip() != str(new_topic).lower().strip() and has_existing_structure and not is_topic_confirm and not is_topic_cancel:
-            # Topic changed, but we haven't warned them yet!
-            meta = {
-                "next_step": "CONFIRM_DETAILS",
-                "pending_topic": new_topic,
-                **current_slots
-            }
-            return JSONResponse({
-                "status": "success",
-                "reply": f"Changing the course topic from '{old_topic}' to '{new_topic}' will require regenerating the syllabus outline and course content from scratch. Are you sure you want to proceed with this change?",
-                "quickReplies": ["Yes, change topic", "Cancel"],
-                "metadata": meta,
-                "type": "details_card"
-            })
+                req.courseData["structure"] = {"modules": []}
+                req.courseData["content"] = []
+                clear_course_data_flag = True
 
         # Stage 2: Programmatic Dialog Solver
-        next_step, validation_error = determine_next_step(req.currentStep, updated_slots, user_message, raw_extracted)
+        next_step, validation_error = determine_next_step(
+            req.currentStep, 
+            updated_slots, 
+            user_message, 
+            raw_extracted,
+            has_existing_structure=has_existing_structure
+        )
 
         # Check if the user is confirming/cancelling existing structure reuse
         is_structure_confirm = False
@@ -1244,13 +1314,10 @@ Expected JSON output format exactly:
                         "modules": []
                     }
             else:
-                if metadata:
-                    metadata["next_step"] = "OUTLINE_EDIT"
-                else:
-                    metadata = {
-                        "next_step": "OUTLINE_EDIT",
-                        "modules": current_structure_modules
-                    }
+                if not metadata:
+                    metadata = {}
+                metadata["next_step"] = "OUTLINE_EDIT"
+                metadata["modules"] = current_structure_modules
         else:
             if next_step in ["CONFIRM_DETAILS", "EDIT_DETAILS_CHOICE"]:
                 type_val = "details_card"
@@ -1271,6 +1338,11 @@ Expected JSON output format exactly:
         reply_text = reply_text.strip()
 
         logger.info(f"[Chatbot Solver] Step transition: {req.currentStep} -> {next_step} | Metadata: {metadata}")
+
+        if clear_course_data_flag:
+            if not metadata:
+                metadata = {}
+            metadata["clear_course_data"] = True
 
         return {
             "status": "success",
@@ -1294,6 +1366,223 @@ def startup_db_init():
         init_draft_table()
     except Exception as e:
         logger.error(f"Failed to auto-initialize drafts MySQL table: {e}")
+
+
+# Active background generation tasks registry
+bg_generation_registry = {}
+
+from pydantic import BaseModel
+import threading
+
+class StartBgGenRequest(BaseModel):
+    draft_id: str
+    courseData: dict
+    messages: list
+
+def run_background_generation(draft_id: str, course_data: dict, messages: list):
+    try:
+        from database import save_chatbot_draft
+        from app.api.online_course_generator import generate_lesson_blocks
+        from schemas import LessonRequest, CourseDetails
+        import asyncio
+        import json
+        import re
+
+        modules = course_data.get("structure", {}).get("modules", [])
+        chapters_to_generate = []
+        for m_idx, m in enumerate(modules):
+            module_title = m.get("title", "")
+            chapters = m.get("chapters", [])
+            for c_idx, c in enumerate(chapters):
+                chapter_title = c.get("title", "")
+                contents = c.get("contents", [])
+                has_content = any(item.get("type") == "lesson-blocks" for item in contents)
+                if not has_content:
+                    chapters_to_generate.append({
+                        "m_idx": m_idx,
+                        "c_idx": c_idx,
+                        "module_title": module_title,
+                        "chapter_title": chapter_title,
+                        "prompt": c.get("prompt") or f"Generate a detailed structured lesson on {chapter_title}"
+                    })
+
+        total = len(chapters_to_generate)
+        if total == 0:
+            bg_generation_registry[draft_id] = {
+                "status": "completed",
+                "completed": 0,
+                "total": 0,
+                "current_title": ""
+            }
+            return
+
+        bg_generation_registry[draft_id] = {
+            "status": "generating",
+            "completed": 0,
+            "total": total,
+            "current_title": chapters_to_generate[0]["chapter_title"],
+            "cancel_requested": False
+        }
+
+        details = course_data.get("details", {})
+        course_details_obj = CourseDetails(
+            courseType=details.get("courseType") or "Custom Course",
+            subject=details.get("subject") or "",
+            courseName=details.get("courseName") or "",
+            description=details.get("description") or "",
+            price=details.get("price") or "",
+            duration=details.get("duration") or "",
+            requirements=details.get("requirements") or "",
+            level=details.get("level") or "beginner",
+            language=details.get("language") or "English",
+            scriptingLanguage=details.get("scriptingLanguage") or "NA",
+            evaluator=details.get("evaluator") or ""
+        )
+
+        updated_course = json.loads(json.dumps(course_data))
+
+        for i, ch in enumerate(chapters_to_generate):
+            if bg_generation_registry.get(draft_id, {}).get("cancel_requested"):
+                bg_generation_registry[draft_id]["status"] = "cancelled"
+                logger.info(f"[BG Generation] Task {draft_id} cancelled.")
+                return
+
+            m_idx = ch["m_idx"]
+            c_idx = ch["c_idx"]
+            chapter_title = ch["chapter_title"]
+            module_title = ch["module_title"]
+            prompt = ch["prompt"]
+
+            bg_generation_registry[draft_id]["current_title"] = chapter_title
+            bg_generation_registry[draft_id]["completed"] = i
+
+            req_obj = LessonRequest(
+                title=chapter_title,
+                module_title=module_title,
+                prompt=prompt,
+                type="html",
+                course_details=course_details_obj
+            )
+
+            # Run async function in a new loop
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                res_block = loop.run_until_complete(generate_lesson_blocks(req_obj))
+            finally:
+                loop.close()
+
+            if res_block and res_block.blocks:
+                latest_modules = updated_course["structure"]["modules"]
+                target_chapter = latest_modules[m_idx]["chapters"][c_idx]
+                target_chapter["contents"] = [{
+                    "type": "lesson-blocks",
+                    "title": getattr(res_block, "title", None) or chapter_title,
+                    "blocks": getattr(res_block, "blocks", []),
+                    "source": "ai",
+                    "completed": True,
+                    "timestamp": ""
+                }]
+                target_chapter["content"] = {
+                    "content_type": "lesson-blocks",
+                    "html_content": "",
+                    "completed": True
+                }
+
+                if "content" not in updated_course:
+                    updated_course["content"] = []
+                
+                content_exist = False
+                for idx, item in enumerate(updated_course["content"]):
+                    if item.get("module_title") == module_title and item.get("chapter_title") == chapter_title:
+                        updated_course["content"][idx] = {
+                            "module_title": module_title,
+                            "chapter_title": chapter_title,
+                            "prompt": prompt,
+                            "type": "html",
+                            "blocks": getattr(res_block, "blocks", [])
+                        }
+                        content_exist = True
+                        break
+                if not content_exist:
+                    updated_course["content"].append({
+                        "module_title": module_title,
+                        "chapter_title": chapter_title,
+                        "prompt": prompt,
+                        "type": "html",
+                        "blocks": getattr(res_block, "blocks", [])
+                    })
+
+            # Save draft database
+            save_chatbot_draft(
+                draft_id=draft_id,
+                course_name=updated_course.get("details", {}).get("courseName") or "Custom Course",
+                current_step="CONFIRM_GENERATE",
+                course_data=updated_course,
+                messages=messages
+            )
+            bg_generation_registry[draft_id]["completed"] = i + 1
+
+        bg_generation_registry[draft_id]["status"] = "completed"
+        # Final transition to READY
+        save_chatbot_draft(
+            draft_id=draft_id,
+            course_name=updated_course.get("details", {}).get("courseName") or "Custom Course",
+            current_step="READY",
+            course_data=updated_course,
+            messages=messages
+        )
+        logger.info(f"[BG Generation] Task {draft_id} completed successfully.")
+
+    except Exception as ex:
+        logger.error(f"[BG Generation] Task {draft_id} failed: {ex}")
+        if draft_id in bg_generation_registry:
+            bg_generation_registry[draft_id]["status"] = "failed"
+
+@app.post("/course/chatbot-builder/generate-content/start")
+async def api_start_content_generation(req: StartBgGenRequest):
+    draft_id = req.draft_id
+    if draft_id in bg_generation_registry and bg_generation_registry[draft_id]["status"] == "generating":
+        return {"status": "success", "message": "Generation already running"}
+    t = threading.Thread(
+        target=run_background_generation,
+        args=(draft_id, req.courseData, req.messages),
+        daemon=True
+    )
+    t.start()
+    return {"status": "success", "message": "Background generation started"}
+
+@app.get("/course/chatbot-builder/generate-content/status/{draft_id}")
+async def api_get_generation_status(draft_id: str):
+    if draft_id not in bg_generation_registry:
+        from database import get_chatbot_draft
+        try:
+            draft = get_chatbot_draft(draft_id)
+            if draft and draft.get("current_step") == "READY":
+                return {
+                    "status": "completed",
+                    "completed": 100,
+                    "total": 100,
+                    "current_title": ""
+                }
+        except Exception:
+            pass
+        return {"status": "idle", "completed": 0, "total": 0, "current_title": ""}
+    status_info = bg_generation_registry[draft_id]
+    return {
+        "status": status_info["status"],
+        "completed": status_info["completed"],
+        "total": status_info["total"],
+        "current_title": status_info["current_title"]
+    }
+
+@app.post("/course/chatbot-builder/generate-content/cancel/{draft_id}")
+async def api_cancel_generation(draft_id: str):
+    if draft_id in bg_generation_registry:
+        bg_generation_registry[draft_id]["cancel_requested"] = True
+        bg_generation_registry[draft_id]["status"] = "cancelled"
+        return {"status": "success", "message": "Cancellation requested"}
+    return {"status": "error", "message": "No active generation task found for this draft"}
 
 # Get all drafts
 @app.get("/course/chatbot-builder/drafts")

@@ -6,7 +6,7 @@ import {
   Mic, Lightbulb, Compass, ThumbsUp, ThumbsDown, Copy, 
   RotateCcw, X, Search, Bell, Info, Plus, PanelLeft, Edit
 } from 'lucide-react';
-import { chatWithChatbotBuilder, createCourse, uploadDoc, generateLessonContent, saveChatbotDraft, getChatbotDrafts, getChatbotDraft, deleteChatbotDraft, renameChatbotDraft, getSubjects, getCourseById, generateStructure } from '../api';
+import { chatWithChatbotBuilder, createCourse, uploadDoc, generateLessonContent, saveChatbotDraft, getChatbotDrafts, getChatbotDraft, deleteChatbotDraft, renameChatbotDraft, getSubjects, getCourseById, generateStructure, startBgGeneration, getBgGenerationStatus, cancelBgGeneration } from '../api';
 import logo from '../assets/logo.png';
 import LessonPreviewEditorModal from './LessonPreviewEditorModal';
 
@@ -39,6 +39,7 @@ export default function ChatbotCourseCreator({ onClose }) {
   const [isBatchGenerating, setIsBatchGenerating] = useState(false);
   const [generationStatus, setGenerationStatus] = useState('idle'); // 'idle' | 'generating' | 'completed' | 'cancelled'
   const cancelGenerationRef = useRef(false);
+  const pollingIntervalRef = useRef(null);
   const chatInputRef = useRef(null);
 
   const focusInput = () => {
@@ -229,6 +230,127 @@ export default function ChatbotCourseCreator({ onClose }) {
     }
   }, [messages, loading, isBatchGenerating]);
 
+  // Auto-resume polling if returning to an active background generation task
+  useEffect(() => {
+    if (activeDraftId) {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+
+      const checkInitialStatus = async () => {
+        try {
+          const res = await getBgGenerationStatus(activeDraftId);
+          if (res && res.status === 'generating') {
+            console.log('[ChatbotBuilder] Resuming active background generation status polling...');
+            pollGenerationStatus(activeDraftId);
+          } else {
+            setGenerationStatus('idle');
+            setIsBatchGenerating(false);
+          }
+        } catch (err) {
+          console.error("Failed to check initial bg generation status", err);
+        }
+      };
+
+      checkInitialStatus();
+    }
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+  }, [activeDraftId]);
+
+  // Batch sequential content generation loop
+  const pollGenerationStatus = (draftId) => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+
+    pollingIntervalRef.current = setInterval(async () => {
+      try {
+        const res = await getBgGenerationStatus(draftId);
+        if (res && res.status) {
+          if (res.status === 'generating') {
+            setGenerationStatus('generating');
+            setIsBatchGenerating(true);
+            setBatchTotal(res.total || 0);
+            setBatchCompleted(res.completed || 0);
+            setBatchCurrentTitle(res.current_title || '');
+
+            // Fetch the updated draft data to show current generated chapters in the syllabus preview
+            const draftRes = await getChatbotDraft(draftId);
+            if (draftRes && draftRes.status === 'success' && draftRes.draft) {
+              const draftData = typeof draftRes.draft.course_data === 'string' 
+                ? JSON.parse(draftRes.draft.course_data) 
+                : draftRes.draft.course_data;
+              setCourseData(draftData);
+            }
+          } else if (res.status === 'completed') {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+            setGenerationStatus('completed');
+            setIsBatchGenerating(false);
+            setCurrentStep('READY');
+
+            // Fetch final draft
+            const draftRes = await getChatbotDraft(draftId);
+            let finalCourseData = null;
+            if (draftRes && draftRes.status === 'success' && draftRes.draft) {
+              const draftData = typeof draftRes.draft.course_data === 'string' 
+                ? JSON.parse(draftRes.draft.course_data) 
+                : draftRes.draft.course_data;
+              setCourseData(draftData);
+              finalCourseData = draftData;
+            }
+
+            // Call standard congratulatory AI response
+            setLoading(true);
+            const finalHistory = messages.concat(
+              { role: 'user', content: "Content generation is complete. Congratulate me." }
+            ).map(m => ({ role: m.role || 'user', content: m.content || '' }));
+            
+            const resReady = await chatWithChatbotBuilder(finalHistory, 'READY', finalCourseData || courseData);
+            setLoading(false);
+
+            if (resReady && resReady.status === 'success') {
+              const finalMsg = {
+                role: 'assistant',
+                content: resReady.reply || "Content generation is successfully complete! You can now preview and publish your course.",
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              };
+              setMessages(prev => [...prev, finalMsg]);
+              setQuickReplies([]);
+            }
+          } else if (res.status === 'cancelled') {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+            setGenerationStatus('cancelled');
+            setIsBatchGenerating(false);
+            const cancelMsg = {
+              role: 'assistant',
+              content: "Course content generation has been cancelled. Let me know if you want to resume or make adjustments to the syllabus outline.",
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+            setMessages(prev => [...prev, cancelMsg]);
+            setQuickReplies([]);
+          } else if (res.status === 'failed') {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+            setGenerationStatus('idle');
+            setIsBatchGenerating(false);
+            alert("An error occurred during background content generation.");
+          }
+        }
+      } catch (err) {
+        console.error("Error polling generation status", err);
+      }
+    }, 2500);
+  };
+
   // Batch sequential content generation loop
   const startBatchGeneration = async (currentCourseData) => {
     setLoading(true);
@@ -275,98 +397,19 @@ export default function ChatbotCourseCreator({ onClose }) {
         throw new Error("No chapters found in the course structure.");
       }
 
-      cancelGenerationRef.current = false;
-      setGenerationStatus('generating');
-      setIsBatchGenerating(true);
-      setBatchTotal(chaptersToGenerate.length);
-      setBatchCompleted(0);
-      setBatchCurrentTitle(chaptersToGenerate[0].chapterTitle);
       setLoading(false);
 
-      let updatedCourse = { ...nextCourseData };
+      if (activeDraftId) {
+        await startBgGeneration({
+          draft_id: activeDraftId,
+          courseData: nextCourseData,
+          messages: messages
+        });
 
-      for (let i = 0; i < chaptersToGenerate.length; i++) {
-        if (cancelGenerationRef.current) {
-          setGenerationStatus('cancelled');
-          setIsBatchGenerating(false);
-          setLoading(false);
-          const cancelMsg = {
-            role: 'assistant',
-            content: "Course content generation has been cancelled. Let me know if you want to resume or make adjustments to the syllabus outline.",
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          };
-          setMessages(prev => [...prev, cancelMsg]);
-           setQuickReplies([]);
-          return;
-        }
-
-        const { mIdx, cIdx, chapterTitle, moduleTitle } = chaptersToGenerate[i];
-        setBatchCurrentTitle(chapterTitle);
-
-        const chapterObj = updatedCourse.content?.find(c => c.module_title === moduleTitle && c.chapter_title === chapterTitle);
-        const chapterPrompt = chapterObj?.prompt || `Generate a detailed structured lesson on ${chapterTitle}`;
-
-        try {
-          const resBlock = await generateLessonContent({
-            title: chapterTitle,
-            module_title: moduleTitle,
-            prompt: chapterPrompt,
-            type: 'html',
-            course_details: updatedCourse.details
-          });
-
-          if (resBlock && resBlock.blocks) {
-            const latestModules = JSON.parse(JSON.stringify(updatedCourse.structure?.modules || []));
-            const targetChapter = latestModules[mIdx]?.chapters?.[cIdx];
-            if (targetChapter) {
-              targetChapter.contents = [{
-                type: 'lesson-blocks',
-                title: resBlock.title || chapterTitle,
-                blocks: resBlock.blocks,
-                source: 'ai',
-                completed: true,
-                timestamp: new Date().toISOString()
-              }];
-              targetChapter.content = {
-                content_type: 'lesson-blocks',
-                html_content: '',
-                completed: true
-              };
-            }
-            updatedCourse = {
-              ...updatedCourse,
-              structure: { ...updatedCourse.structure, modules: latestModules }
-            };
-            setCourseData(updatedCourse);
-          }
-        } catch (err) {
-          console.error(`Failed to generate chapter block content for "${chapterTitle}"`, err);
-        }
-
-        setBatchCompleted(i + 1);
-      }
-
-      setGenerationStatus('completed');
-      setIsBatchGenerating(false);
-      setCurrentStep('READY');
-      
-      // Request final congratulations and summary from AI builder
-      const finalHistory = messages.concat(
-        { role: 'user', content: "Content generation is complete. Congratulate me." }
-      ).map(m => ({ role: m.role || 'user', content: m.content || '' }));
-      
-      setLoading(true);
-      const resReady = await chatWithChatbotBuilder(finalHistory, 'READY', updatedCourse);
-      setLoading(false);
-
-      if (resReady && resReady.status === 'success') {
-        const finalMsg = {
-          role: 'assistant',
-          content: resReady.reply || "Content generation is successfully complete! You can now preview and publish your course.",
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
-        setMessages(prev => [...prev, finalMsg]);
-        setQuickReplies([]);
+        // Trigger polling
+        pollGenerationStatus(activeDraftId);
+      } else {
+        throw new Error("No active draft session to generate content for.");
       }
 
     } catch (err) {
@@ -532,6 +575,15 @@ export default function ChatbotCourseCreator({ onClose }) {
 
         setMessages(prev => [...prev, assistantMsg]);
         console.log('[ChatbotBuilder] API Response → type:', res.type, '| metadataType:', assistantMsg.metadataType, '| metadata:', res.metadata, '| reply:', res.reply);
+
+        if (res.metadata && res.metadata.clear_course_data) {
+          console.log('[ChatbotBuilder] Clearing outline structure and content from React state cache.');
+          setCourseData(prev => ({
+            ...prev,
+            structure: { modules: [] },
+            content: []
+          }));
+        }
 
         // Dynamically override or supplement quick replies based on the NEXT step
         let replies = res.quickReplies || [];
@@ -751,6 +803,13 @@ export default function ChatbotCourseCreator({ onClose }) {
     cancelGenerationRef.current = true;
     setGenerationStatus('cancelled');
     setIsBatchGenerating(false);
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    if (activeDraftId) {
+      cancelBgGeneration(activeDraftId).catch(err => console.error("Failed to cancel bg generation", err));
+    }
   };
 
   const handleReset = () => {

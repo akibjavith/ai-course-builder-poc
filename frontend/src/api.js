@@ -215,6 +215,21 @@ export const renameChatbotDraft = async (draftId, name) => {
   return response.data;
 };
 
+export const startBgGeneration = async (payload) => {
+  const response = await axios.post(`${API_URL}/course/chatbot-builder/generate-content/start`, payload);
+  return response.data;
+};
+
+export const getBgGenerationStatus = async (draftId) => {
+  const response = await axios.get(`${API_URL}/course/chatbot-builder/generate-content/status/${draftId}`);
+  return response.data;
+};
+
+export const cancelBgGeneration = async (draftId) => {
+  const response = await axios.post(`${API_URL}/course/chatbot-builder/generate-content/cancel/${draftId}`);
+  return response.data;
+};
+
 
 
 

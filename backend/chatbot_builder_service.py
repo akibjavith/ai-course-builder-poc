@@ -97,7 +97,7 @@ Previously Extracted Slots: {json.dumps(current_slots)}
         logger.error(f"[NLU Extraction] Error extracting slots: {e}")
         return current_slots, {}
 
-def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: str, extracted_slots: Optional[Dict[str, Any]] = None) -> Tuple[str, Optional[str]]:
+def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: str, extracted_slots: Optional[Dict[str, Any]] = None, has_existing_structure: bool = False) -> Tuple[str, Optional[str]]:
     """
     Programmatic solver that determines the next step in the dialog based on slot status and transitions.
     Returns (next_step, validation_error_message).
@@ -137,12 +137,13 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
         cleared_any = False
         if any(w in lowercase_msg for w in ["change topic", "change the topic", "different topic", "another topic", "edit topic", "choose topic"]):
             if not is_newly_extracted("topic"):
-                slots["topic"] = None
-                slots["learningGoal"] = None
-                slots["currentLevel"] = None
-                slots["learningStyle"] = None
-                slots["duration"] = None
-                cleared_any = True
+                if not has_existing_structure:
+                    slots["topic"] = None
+                    slots["learningGoal"] = None
+                    slots["currentLevel"] = None
+                    slots["learningStyle"] = None
+                    slots["duration"] = None
+                    cleared_any = True
         if any(w in lowercase_msg for w in ["change goal", "change the goal", "different goal", "another goal", "edit goal", "edit learning goal"]):
             if not is_newly_extracted("learningGoal"):
                 slots["learningGoal"] = None
@@ -240,12 +241,13 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
         else:
             cleared_any = False
             if "topic" in lowercase_msg or "subject" in lowercase_msg or "course name" in lowercase_msg:
-                slots["topic"] = None
-                slots["learningGoal"] = None
-                slots["currentLevel"] = None
-                slots["learningStyle"] = None
-                slots["duration"] = None
-                cleared_any = True
+                if not has_existing_structure:
+                    slots["topic"] = None
+                    slots["learningGoal"] = None
+                    slots["currentLevel"] = None
+                    slots["learningStyle"] = None
+                    slots["duration"] = None
+                    cleared_any = True
             if "goal" in lowercase_msg or "objective" in lowercase_msg or "learn" in lowercase_msg:
                 slots["learningGoal"] = None
                 cleared_any = True
