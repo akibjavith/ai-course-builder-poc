@@ -108,29 +108,57 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
         val = extracted_slots.get(slot_key)
         return val is not None and str(val).strip() != "" and str(val).lower() != "null"
 
-    # 0. Conversational slot change requests override (only active during details questionnaire phase)
+    lowercase_msg = user_message.lower()
+
+    # 0. A. Skip-ahead protection: prevent going to structure or content before basic details are complete
+    has_skip_keywords = any(w in lowercase_msg for w in ["module", "modules", "chapter", "chapters", "outline", "syllabus", "roadmap", "content", "lesson", "lessons", "structure"])
+    details_incomplete = not (slots.get("topic") and slots.get("learningGoal") and slots.get("currentLevel") and slots.get("learningStyle") and slots.get("duration"))
+    if current_step in ["ASK_TOPIC", "ASK_GOAL", "ASK_LEVEL", "ASK_STYLE", "ASK_DURATION"] and has_skip_keywords and details_incomplete:
+        empty_step = "ASK_TOPIC"
+        if not slots.get("topic"):
+            empty_step = "ASK_TOPIC"
+        elif not slots.get("learningGoal"):
+            empty_step = "ASK_GOAL"
+        elif not slots.get("currentLevel"):
+            empty_step = "ASK_LEVEL"
+        elif not slots.get("learningStyle"):
+            empty_step = "ASK_STYLE"
+        elif not slots.get("duration"):
+            empty_step = "ASK_DURATION"
+        return empty_step, "We need to complete the basic course details first. Let's complete the questions step-by-step so I can construct your course correctly."
+
+    # 0. B. Universal details redirect: if user explicitly requests detail changes during outline or content phase
+    if current_step in ["OUTLINE_EDIT", "EDIT_OUTLINE_CHOICE", "CONFIRM_GENERATE", "PROMPT_GEN", "READY"]:
+        if any(w in lowercase_msg for w in ["change", "edit", "modify", "update", "correct"]) and any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration", "objective", "requirements", "hours", "basic info", "info", "basic"]):
+            return "CONFIRM_DETAILS", None
+
+    # 0. C. Conversational slot change requests override (only active during details questionnaire phase)
     if current_step in ["ASK_TOPIC", "ASK_GOAL", "ASK_LEVEL", "ASK_STYLE", "ASK_DURATION", "CONFIRM_DETAILS", "EDIT_DETAILS_CHOICE", "ASK_GENERATE_SKELETON"]:
-        lowercase_msg = user_message.lower()
+        cleared_any = False
         if any(w in lowercase_msg for w in ["change topic", "change the topic", "different topic", "another topic", "edit topic", "choose topic"]):
             if not is_newly_extracted("topic"):
                 slots["topic"] = None
-                return "ASK_TOPIC", None
+                slots["learningGoal"] = None
+                slots["currentLevel"] = None
+                slots["learningStyle"] = None
+                slots["duration"] = None
+                cleared_any = True
         if any(w in lowercase_msg for w in ["change goal", "change the goal", "different goal", "another goal", "edit goal", "edit learning goal"]):
             if not is_newly_extracted("learningGoal"):
                 slots["learningGoal"] = None
-                return "ASK_GOAL", None
+                cleared_any = True
         if any(w in lowercase_msg for w in ["change level", "change the level", "different level", "another level", "edit level", "edit difficulty level", "change experience"]):
             if not is_newly_extracted("currentLevel"):
                 slots["currentLevel"] = None
-                return "ASK_LEVEL", None
+                cleared_any = True
         if any(w in lowercase_msg for w in ["change style", "change the style", "different style", "another style", "edit style", "edit learning style"]):
             if not is_newly_extracted("learningStyle"):
                 slots["learningStyle"] = None
-                return "ASK_STYLE", None
+                cleared_any = True
         if any(w in lowercase_msg for w in ["change duration", "change the duration", "different duration", "another duration", "edit duration", "edit time", "edit hours"]):
             if not is_newly_extracted("duration"):
                 slots["duration"] = None
-                return "ASK_DURATION", None
+                cleared_any = True
 
     # 1. Normalize Slots First (ensures slot values are safe before any transitions)
     # Normalize Level
@@ -210,22 +238,29 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
         if has_new_val:
             pass
         else:
-            if "topic" in lowercase_msg or "subject" in lowercase_msg:
+            cleared_any = False
+            if "topic" in lowercase_msg or "subject" in lowercase_msg or "course name" in lowercase_msg:
                 slots["topic"] = None
-                return "ASK_TOPIC", None
-            elif "goal" in lowercase_msg or "objective" in lowercase_msg:
                 slots["learningGoal"] = None
-                return "ASK_GOAL", None
-            elif "level" in lowercase_msg or "difficulty" in lowercase_msg:
                 slots["currentLevel"] = None
-                return "ASK_LEVEL", None
-            elif "style" in lowercase_msg:
                 slots["learningStyle"] = None
-                return "ASK_STYLE", None
-            elif "duration" in lowercase_msg or "time" in lowercase_msg or "hours" in lowercase_msg:
                 slots["duration"] = None
-                return "ASK_DURATION", None
-            return "EDIT_DETAILS_CHOICE", None
+                cleared_any = True
+            if "goal" in lowercase_msg or "objective" in lowercase_msg or "learn" in lowercase_msg:
+                slots["learningGoal"] = None
+                cleared_any = True
+            if "level" in lowercase_msg or "difficulty" in lowercase_msg or "experience" in lowercase_msg:
+                slots["currentLevel"] = None
+                cleared_any = True
+            if "style" in lowercase_msg or "learn style" in lowercase_msg:
+                slots["learningStyle"] = None
+                cleared_any = True
+            if "duration" in lowercase_msg or "time" in lowercase_msg or "hours" in lowercase_msg:
+                slots["duration"] = None
+                cleared_any = True
+            
+            if not cleared_any:
+                return "EDIT_DETAILS_CHOICE", None
 
     elif current_step == "ASK_GENERATE_SKELETON":
         lowercase_msg = user_message.lower()
@@ -240,7 +275,7 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
         lowercase_msg = user_message.lower()
         
         # Check if user wants to change details
-        if any(w in lowercase_msg for w in ["change", "edit", "modify", "update", "correct"]) and any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration", "objective", "requirements", "hours"]):
+        if any(w in lowercase_msg for w in ["change", "edit", "modify", "update", "correct"]) and any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration", "objective", "requirements", "hours", "basic info", "info", "basic"]):
             return "CONFIRM_DETAILS", None
 
         if current_step == "OUTLINE_EDIT":
@@ -275,6 +310,10 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
 
     # 3. Fallback recoveries to prevent getting stuck in early slots if user skips ahead
     if not slots.get("topic"):
+        slots["learningGoal"] = None
+        slots["currentLevel"] = None
+        slots["learningStyle"] = None
+        slots["duration"] = None
         return "ASK_TOPIC", None
 
     if not slots.get("learningGoal") and (slots.get("learningStyle") or slots.get("duration")):
@@ -351,7 +390,11 @@ GLOBAL RULES:
         state_instructions = """
 Current State: ASK_TOPIC
 Goal: Ask the user what subject or topic they would like to learn.
-Conversational Guidance: Ask a natural, welcoming question to discover their desired topic. Example: "What subject or topic would you like to explore today?"
+Conversational Guidance: Ask a natural, welcoming question to discover their desired topic. 
+You MUST mirror the user's greeting tone and wording dynamically. For example:
+- If the user starts with "hi", "hello", "hey", respond with: "Hello! I'm excited to help you create a personalized learning roadmap. What subject or topic would you like to explore today?"
+- If the user starts with an informal/colloquial greeting like "hey dude", "yo", "sup", "what's up", respond in the same style: "Hey dude! I'm excited to help you create a personalized learning roadmap. What topic would you like to explore today?"
+- Adapt friendly and mirror their specific greeting style.
 """
     elif next_step == "ASK_GOAL":
         state_instructions = f"""

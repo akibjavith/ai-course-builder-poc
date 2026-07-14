@@ -695,7 +695,34 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
             is_confirmation = False
 
         # Check if we should change details (go-back to CONFIRM_DETAILS)
-        is_details_redirect = any(w in lowercase_msg for w in ["change", "edit", "modify", "update", "correct"]) and any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration", "objective", "requirements", "hours"])
+        is_details_redirect = any(w in lowercase_msg for w in ["change", "edit", "modify", "update", "correct"]) and any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration", "objective", "requirements", "hours", "basic info", "info", "basic"])
+
+        # Programmatic Ambiguity Checks
+        is_ambiguous = False
+        ambiguity_reply = ""
+        
+        has_edit_verb = any(w in lowercase_msg for w in ["edit", "change", "modify", "update", "adjust"])
+        has_detail_noun = any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration", "objective", "requirements", "hours", "basic info", "info", "basic"])
+        has_structure_noun = any(w in lowercase_msg for w in ["module", "modules", "chapter", "chapters", "outline", "syllabus", "roadmap", "lesson", "lessons"])
+        has_action_verb = any(w in lowercase_msg for w in ["add", "remove", "delete", "reduce", "shrink", "decrease", "cut", "rename", "reorder", "shuffle", "move", "swap"])
+        
+        if has_edit_verb and not has_detail_noun and not has_structure_noun:
+            is_ambiguous = True
+            ambiguity_reply = "Would you like to modify the course details (such as topic, goal, level, style, or duration) or make changes to the course outline modules?"
+        elif has_structure_noun and not has_action_verb and not has_edit_verb:
+            is_ambiguous = True
+            ambiguity_reply = "I'm not sure if you want to add modules, remove modules, or rename them. Could you please clarify your request?"
+
+        if is_ambiguous:
+            return JSONResponse({
+                "status": "success",
+                "reply": ambiguity_reply,
+                "quickReplies": ["Edit course details", "Add new module", "Reduce modules"],
+                "metadata": {
+                    "next_step": "OUTLINE_EDIT"
+                },
+                "type": "details"
+            })
 
         # No clarifying redirect since we directly edit the outline without asking questions
         if not is_confirmation and not is_details_redirect:
@@ -759,10 +786,9 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                             "status": "success",
                             "reply": "Your course already has 10 modules, which is the maximum limit. I cannot add any more modules.",
                             "metadata": {
-                                "next_step": "OUTLINE_EDIT",
-                                "modules": current_structure.get("modules", [])
+                                "next_step": "OUTLINE_EDIT"
                             },
-                            "type": "structure"
+                            "type": "details"
                         })
                     else:
                         return JSONResponse({
@@ -770,10 +796,9 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                             "reply": f"I can only create up to 10 modules. I can add {allowable_add} modules to bring your course to the maximum limit of 10. Would you like me to do that?",
                             "quickReplies": ["Yes, add modules", "Cancel"],
                             "metadata": {
-                                "next_step": "OUTLINE_EDIT",
-                                "modules": current_structure.get("modules", [])
+                                "next_step": "OUTLINE_EDIT"
                             },
-                            "type": "structure"
+                            "type": "details"
                         })
                 else:
                     user_message = f"Add exactly {count} new modules focused on '{topic_focus}' to the outline. The final outline MUST contain exactly {target_count} modules."
@@ -796,20 +821,18 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                         "status": "success",
                         "reply": f"The course outline already contains exactly {current_count} modules. I cannot reduce it to {target_count}.",
                         "metadata": {
-                            "next_step": "OUTLINE_EDIT",
-                            "modules": current_structure.get("modules", [])
+                            "next_step": "OUTLINE_EDIT"
                         },
-                        "type": "structure"
+                        "type": "details"
                     })
                 elif target_count < 1:
                     return JSONResponse({
                         "status": "success",
                         "reply": "A course outline must contain at least 1 module. I cannot reduce the course below 1 module.",
                         "metadata": {
-                            "next_step": "OUTLINE_EDIT",
-                            "modules": current_structure.get("modules", [])
+                            "next_step": "OUTLINE_EDIT"
                         },
-                        "type": "structure"
+                        "type": "details"
                     })
                 else:
                     user_message = f"Reduce exactly {diff} modules of your choice from the outline. The final outline MUST contain exactly {target_count} modules."
@@ -953,11 +976,127 @@ Expected JSON output format exactly:
                 "language": "English"
             }
 
+        # Check if the user is confirming/cancelling a topic change warning
+        is_topic_confirm = False
+        is_topic_cancel = False
+        
+        lowercase_msg = user_message.lower()
+        confirm_words = ["yes", "continue", "looks good", "proceed", "generate", "correct", "confirm", "happy", "fine", "ok", "go ahead"]
+
+        if req.messages:
+            last_assistant_msg = ""
+            for msg in reversed(req.messages):
+                if msg.get("role") == "assistant":
+                    last_assistant_msg = msg.get("content", "").lower()
+                    break
+            if "will require regenerating the syllabus outline" in last_assistant_msg:
+                # User is replying to topic change warning
+                if any(w in lowercase_msg for w in confirm_words) or "change" in lowercase_msg:
+                    is_topic_confirm = True
+                elif any(w in lowercase_msg for w in ["no", "cancel", "back", "stop"]):
+                    is_topic_cancel = True
+
+        if is_topic_cancel:
+            old_topic = details.get("topic") or details.get("subject") or details.get("courseName") or ""
+            if old_topic:
+                current_slots["topic"] = old_topic
+
+        pending_topic = details.get("pending_topic")
+        if is_topic_confirm and pending_topic:
+            current_slots["topic"] = pending_topic
+            # Also clear the existing structure and content to force regeneration!
+            req.courseData["structure"] = {"modules": []}
+            req.courseData["content"] = []
+
         # Stage 1: Run NLU Slot Extraction
         updated_slots, raw_extracted = extract_slots_from_message(user_message, current_slots, req.currentStep)
+        
+        if is_topic_confirm:
+            updated_slots["pending_topic"] = None
+        if is_topic_cancel:
+            updated_slots["pending_topic"] = None
+
+        # Check if topic changed and we already have structure/content
+        old_topic = current_slots.get("topic")
+        new_topic = updated_slots.get("topic")
+        has_existing_structure = len(req.courseData.get("structure", {}).get("modules", [])) > 0
+        
+        # If topic changed, clear all subsequent details slots
+        if old_topic and new_topic and str(old_topic).lower().strip() != str(new_topic).lower().strip():
+            if not has_existing_structure or is_topic_confirm:
+                updated_slots["learningGoal"] = ""
+                updated_slots["currentLevel"] = ""
+                updated_slots["learningStyle"] = ""
+                updated_slots["duration"] = ""
+
+        if old_topic and new_topic and str(old_topic).lower().strip() != str(new_topic).lower().strip() and has_existing_structure and not is_topic_confirm and not is_topic_cancel:
+            # Topic changed, but we haven't warned them yet!
+            meta = {
+                "next_step": "CONFIRM_DETAILS",
+                "pending_topic": new_topic,
+                **current_slots
+            }
+            return JSONResponse({
+                "status": "success",
+                "reply": f"Changing the course topic from '{old_topic}' to '{new_topic}' will require regenerating the syllabus outline and course content from scratch. Are you sure you want to proceed with this change?",
+                "quickReplies": ["Yes, change topic", "Cancel"],
+                "metadata": meta,
+                "type": "details_card"
+            })
 
         # Stage 2: Programmatic Dialog Solver
         next_step, validation_error = determine_next_step(req.currentStep, updated_slots, user_message, raw_extracted)
+
+        # Check if the user is confirming/cancelling existing structure reuse
+        is_structure_confirm = False
+        is_structure_regenerate = False
+        
+        if req.messages:
+            last_assistant_msg = ""
+            for msg in reversed(req.messages):
+                if msg.get("role") == "assistant":
+                    last_assistant_msg = msg.get("content", "").lower()
+                    break
+            if "would you like to proceed with your existing outline structure" in last_assistant_msg:
+                if any(w in lowercase_msg for w in ["keep", "existing", "proceed", "old", "yes"]):
+                    is_structure_confirm = True
+                elif any(w in lowercase_msg for w in ["generate", "new", "recreate", "change", "fresh"]):
+                    is_structure_regenerate = True
+
+        # Check if details changed (excluding topic, which is handled separately)
+        details_changed_chk = False
+        if details:
+            for k in ["learningGoal", "currentLevel", "learningStyle", "duration"]:
+                old_val = details.get(k) or ""
+                new_val = updated_slots.get(k) or ""
+                if str(old_val).lower().strip() != str(new_val).lower().strip():
+                    details_changed_chk = True
+                    break
+                    
+        has_existing_structure = len(req.courseData.get("structure", {}).get("modules", [])) > 0
+        
+        if next_step == "OUTLINE_EDIT" and details_changed_chk and has_existing_structure and not is_structure_confirm and not is_structure_regenerate:
+            # Show selection prompt
+            return JSONResponse({
+                "status": "success",
+                "reply": "You already have a generated module structure. Would you like to proceed with your existing outline structure or generate a new one based on the updated details?",
+                "quickReplies": ["Keep existing structure", "Generate new structure"],
+                "metadata": {
+                    "next_step": "CONFIRM_DETAILS",
+                    "pending_details_change": "true",
+                    **updated_slots
+                },
+                "type": "details_card"
+            })
+
+        if is_structure_regenerate:
+            req.courseData["structure"] = {"modules": []}
+            req.courseData["content"] = []
+
+        if next_step == "OUTLINE_EDIT" and req.currentStep in ["CONFIRM_DETAILS", "EDIT_DETAILS_CHOICE"]:
+            has_content = len(req.courseData.get("content", [])) > 0
+            if has_content and (is_structure_confirm or not details_changed_chk):
+                next_step = "CONFIRM_GENERATE"
 
         # Stage 3: Dynamic NLG Prompt Generation
         system_prompt = build_builder_system_prompt(next_step, updated_slots, validation_error)
@@ -1048,31 +1187,36 @@ Expected JSON output format exactly:
             # If details changed (e.g. topic, goal, level, style, duration), discard the old structure to trigger regeneration
             details = req.courseData.get("details", {})
             details_changed = False
-            if details:
-                old_topic = details.get("topic") or details.get("subject") or details.get("courseName") or ""
-                new_topic = updated_slots.get("topic") or updated_slots.get("subject") or updated_slots.get("courseName") or ""
-                if str(old_topic).lower().strip() != str(new_topic).lower().strip():
-                    details_changed = True
-                    
-                old_goal = details.get("learningGoal") or details.get("description") or details.get("goal") or ""
-                new_goal = updated_slots.get("learningGoal") or updated_slots.get("description") or updated_slots.get("goal") or ""
-                if str(old_goal).lower().strip() != str(new_goal).lower().strip():
-                    details_changed = True
-                    
-                old_level = details.get("currentLevel") or details.get("level") or ""
-                new_level = updated_slots.get("currentLevel") or updated_slots.get("level") or ""
-                if str(old_level).lower().strip() != str(new_level).lower().strip():
-                    details_changed = True
-                    
-                old_style = details.get("learningStyle") or details.get("requirements") or details.get("style") or ""
-                new_style = updated_slots.get("learningStyle") or updated_slots.get("requirements") or updated_slots.get("style") or ""
-                if str(old_style).lower().strip() != str(new_style).lower().strip():
-                    details_changed = True
-                    
-                old_duration = details.get("duration") or details.get("courseDuration") or details.get("hours") or ""
-                new_duration = updated_slots.get("duration") or updated_slots.get("courseDuration") or updated_slots.get("hours") or ""
-                if str(old_duration).lower().strip() != str(new_duration).lower().strip():
-                    details_changed = True
+            if is_structure_regenerate:
+                details_changed = True
+            elif is_structure_confirm:
+                details_changed = False
+            else:
+                if details:
+                    old_topic = details.get("topic") or details.get("subject") or details.get("courseName") or ""
+                    new_topic = updated_slots.get("topic") or updated_slots.get("subject") or updated_slots.get("courseName") or ""
+                    if str(old_topic).lower().strip() != str(new_topic).lower().strip():
+                        details_changed = True
+                        
+                    old_goal = details.get("learningGoal") or details.get("description") or details.get("goal") or ""
+                    new_goal = updated_slots.get("learningGoal") or updated_slots.get("description") or updated_slots.get("goal") or ""
+                    if str(old_goal).lower().strip() != str(new_goal).lower().strip():
+                        details_changed = True
+                        
+                    old_level = details.get("currentLevel") or details.get("level") or ""
+                    new_level = updated_slots.get("currentLevel") or updated_slots.get("level") or ""
+                    if str(old_level).lower().strip() != str(new_level).lower().strip():
+                        details_changed = True
+                        
+                    old_style = details.get("learningStyle") or details.get("requirements") or details.get("style") or ""
+                    new_style = updated_slots.get("learningStyle") or updated_slots.get("requirements") or updated_slots.get("style") or ""
+                    if str(old_style).lower().strip() != str(new_style).lower().strip():
+                        details_changed = True
+                        
+                    old_duration = details.get("duration") or details.get("courseDuration") or details.get("hours") or ""
+                    new_duration = updated_slots.get("duration") or updated_slots.get("courseDuration") or updated_slots.get("hours") or ""
+                    if str(old_duration).lower().strip() != str(new_duration).lower().strip():
+                        details_changed = True
 
             current_structure_modules = req.courseData.get("structure", {}).get("modules", [])
             if details_changed:

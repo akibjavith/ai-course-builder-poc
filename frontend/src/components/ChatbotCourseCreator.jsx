@@ -2073,14 +2073,14 @@ export default function ChatbotCourseCreator({ onClose }) {
                       key={idx} 
                       className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-fade-in`}
                     >
-                      <div className="space-y-1 max-w-[80%]">
+                      <div className={`space-y-1 ${(!isUser && (msg.metadataType === 'structure' || msg.metadataType === 'details_card')) ? 'w-[520px] max-w-full' : 'max-w-[80%]'}`}>
                         
                         {/* Bubble content */}
                         <div className={`p-4 shadow-sm leading-relaxed ${
                           isUser 
                             ? 'bg-indigo-600 text-white rounded-2xl rounded-br-none' 
                             : 'bg-white border border-slate-200/80 text-slate-800 rounded-2xl rounded-bl-none'
-                        }`}>
+                        } ${(!isUser && (msg.metadataType === 'structure' || msg.metadataType === 'details_card')) ? 'w-full' : ''}`}>
                            {msg.content && msg.content.trim() && (
                              <div className="space-y-0.5">
                                {formatChatMessage(msg.metadataType === 'structure' ? cleanStructureText(msg.content) : msg.content)}
