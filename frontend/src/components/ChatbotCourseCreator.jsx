@@ -4,7 +4,8 @@ import {
   HelpCircle, Eye, Sparkles, ChevronRight, ChevronLeft, 
   Trash2, Loader2, Award, FileText, Check, Paperclip, 
   Mic, Lightbulb, Compass, ThumbsUp, ThumbsDown, Copy, 
-  RotateCcw, X, Search, Bell, Info, Plus, PanelLeft, Edit
+  RotateCcw, X, Search, Bell, Info, Plus, PanelLeft, Edit,
+  Pause, Play
 } from 'lucide-react';
 import { chatWithChatbotBuilder, createCourse, uploadDoc, generateLessonContent, saveChatbotDraft, getChatbotDrafts, getChatbotDraft, deleteChatbotDraft, renameChatbotDraft, getSubjects, getCourseById, generateStructure, startBgGeneration, getBgGenerationStatus, cancelBgGeneration } from '../api';
 import logo from '../assets/logo.png';
@@ -52,6 +53,32 @@ export default function ChatbotCourseCreator({ onClose }) {
   const [batchCurrentTitle, setBatchCurrentTitle] = useState('');
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   
+  const [reactError, setReactError] = useState(null);
+
+  useEffect(() => {
+    const handleError = (event) => {
+      setReactError({
+        message: event.message || "Unknown error",
+        filename: event.filename || "",
+        lineno: event.lineno || 0,
+        colno: event.colno || 0,
+        error: event.error ? event.error.stack : null
+      });
+    };
+    const handleRejection = (event) => {
+      setReactError({
+        message: event.reason ? String(event.reason.message || event.reason) : "Unhandled Promise Rejection",
+        error: event.reason && event.reason.stack ? event.reason.stack : null
+      });
+    };
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleRejection);
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleRejection);
+    };
+  }, []);
+
   // Collage Sidebar & DB Draft States
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [draftsList, setDraftsList] = useState([]);
@@ -86,6 +113,15 @@ export default function ChatbotCourseCreator({ onClose }) {
     content: [],
     quiz: []
   });
+
+  const latestMessagesRef = useRef(messages);
+  const latestCourseDataRef = useRef(courseData);
+  useEffect(() => {
+    latestMessagesRef.current = messages;
+  }, [messages]);
+  useEffect(() => {
+    latestCourseDataRef.current = courseData;
+  }, [courseData]);
 
   // Attachments
   const [uploadingFile, setUploadingFile] = useState(false);
@@ -241,12 +277,14 @@ export default function ChatbotCourseCreator({ onClose }) {
       const checkInitialStatus = async () => {
         try {
           const res = await getBgGenerationStatus(activeDraftId);
-          if (res && res.status === 'generating') {
-            console.log('[ChatbotBuilder] Resuming active background generation status polling...');
-            pollGenerationStatus(activeDraftId);
-          } else {
-            setGenerationStatus('idle');
-            setIsBatchGenerating(false);
+          if (res && res.status) {
+            if (res.status === 'generating') {
+              console.log('[ChatbotBuilder] Resuming active background generation status polling...');
+              pollGenerationStatus(activeDraftId);
+            } else {
+              setGenerationStatus(res.status);
+              setIsBatchGenerating(false);
+            }
           }
         } catch (err) {
           console.error("Failed to check initial bg generation status", err);
@@ -263,6 +301,31 @@ export default function ChatbotCourseCreator({ onClose }) {
       }
     };
   }, [activeDraftId]);
+
+  const triggerCongratulatoryMessage = async (currentMessages, currentCourseData) => {
+    setLoading(true);
+    try {
+      const finalHistory = currentMessages
+        .concat({ role: 'user', content: "Content generation is complete. Congratulate me." })
+        .filter(m => m && typeof m.content === 'string')
+        .map(m => ({ role: m.role || 'user', content: m.content || '' }));
+      
+      const resReady = await chatWithChatbotBuilder(finalHistory, 'READY', currentCourseData);
+      if (resReady && resReady.status === 'success') {
+        const finalMsg = {
+          role: 'assistant',
+          content: resReady.reply || "Content generation is successfully complete! You can now preview and publish your course.",
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        setMessages(prev => [...prev, finalMsg]);
+        setQuickReplies([]);
+      }
+    } catch (err) {
+      console.error("Failed to generate congratulatory message", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Batch sequential content generation loop
   const pollGenerationStatus = (draftId) => {
@@ -295,6 +358,8 @@ export default function ChatbotCourseCreator({ onClose }) {
             setGenerationStatus('completed');
             setIsBatchGenerating(false);
             setCurrentStep('READY');
+            setBatchCompleted(res.completed || res.total || 0);
+            setBatchTotal(res.total || 0);
 
             // Fetch final draft
             const draftRes = await getChatbotDraft(draftId);
@@ -307,24 +372,8 @@ export default function ChatbotCourseCreator({ onClose }) {
               finalCourseData = draftData;
             }
 
-            // Call standard congratulatory AI response
-            setLoading(true);
-            const finalHistory = messages.concat(
-              { role: 'user', content: "Content generation is complete. Congratulate me." }
-            ).map(m => ({ role: m.role || 'user', content: m.content || '' }));
-            
-            const resReady = await chatWithChatbotBuilder(finalHistory, 'READY', finalCourseData || courseData);
-            setLoading(false);
-
-            if (resReady && resReady.status === 'success') {
-              const finalMsg = {
-                role: 'assistant',
-                content: resReady.reply || "Content generation is successfully complete! You can now preview and publish your course.",
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-              };
-              setMessages(prev => [...prev, finalMsg]);
-              setQuickReplies([]);
-            }
+            // Call standard congratulatory AI response using non-stale refs
+            triggerCongratulatoryMessage(latestMessagesRef.current, finalCourseData || latestCourseDataRef.current);
           } else if (res.status === 'cancelled') {
             clearInterval(pollingIntervalRef.current);
             pollingIntervalRef.current = null;
@@ -354,6 +403,7 @@ export default function ChatbotCourseCreator({ onClose }) {
   // Batch sequential content generation loop
   const startBatchGeneration = async (currentCourseData) => {
     setLoading(true);
+    setQuickReplies([]);
     const prepareMsg = {
       role: 'assistant',
       content: "Outline confirmed! Proposing prompt blueprints and generating all lesson contents sequentially. Please wait...",
@@ -400,10 +450,11 @@ export default function ChatbotCourseCreator({ onClose }) {
       setLoading(false);
 
       if (activeDraftId) {
+        const updatedMessages = [...messages, prepareMsg];
         await startBgGeneration({
           draft_id: activeDraftId,
           courseData: nextCourseData,
-          messages: messages
+          messages: updatedMessages
         });
 
         // Trigger polling
@@ -438,6 +489,20 @@ export default function ChatbotCourseCreator({ onClose }) {
     }
     if (lowercaseText === "create a new course" || lowercaseText === "create new course") {
       handleResetWithoutConfirm();
+      return;
+    }
+    if (lowercaseText === "confirm outline" && currentStep === 'OUTLINE_EDIT') {
+      setCurrentStep('CONFIRM_GENERATE');
+      handleSendMessage("I am happy with this outline. Please confirm and proceed.", 'CONFIRM_GENERATE', courseData);
+      return;
+    }
+    if (lowercaseText === "yes, start again" || lowercaseText === "yes start again") {
+      startBatchGeneration(courseData);
+      return;
+    }
+    if (lowercaseText === "no, go back to outline" || lowercaseText === "no go back to outline") {
+      setCurrentStep('OUTLINE_EDIT');
+      handleSendMessage("Edit outline", 'OUTLINE_EDIT', courseData);
       return;
     }
 
@@ -799,17 +864,98 @@ export default function ChatbotCourseCreator({ onClose }) {
     }
   };
 
-  const handleCancelGeneration = () => {
-    cancelGenerationRef.current = true;
-    setGenerationStatus('cancelled');
+  const handlePauseGeneration = async () => {
+    setGenerationStatus('paused');
     setIsBatchGenerating(false);
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
       pollingIntervalRef.current = null;
     }
     if (activeDraftId) {
-      cancelBgGeneration(activeDraftId).catch(err => console.error("Failed to cancel bg generation", err));
+      try {
+        await cancelBgGeneration(activeDraftId);
+      } catch (err) {
+        console.error("Failed to pause bg generation", err);
+      }
     }
+  };
+
+  const handleResumeGeneration = async () => {
+    setGenerationStatus('generating');
+    setIsBatchGenerating(true);
+    setLoading(true);
+    try {
+      if (activeDraftId) {
+        // Trigger status start backend call
+        await startBgGeneration({
+          draft_id: activeDraftId,
+          courseData: courseData,
+          messages: messages
+        });
+        
+        // Trigger polling
+        pollGenerationStatus(activeDraftId);
+      }
+    } catch (err) {
+      console.error("Failed to resume generation", err);
+      alert("Failed to resume generation.");
+      setGenerationStatus('paused');
+      setIsBatchGenerating(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelGeneration = async () => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    
+    // Call backend cancel
+    if (activeDraftId) {
+      try {
+        await cancelBgGeneration(activeDraftId);
+      } catch (err) {
+        console.error("Failed to cancel bg generation", err);
+      }
+    }
+
+    // Clear progress card messages and set restart prompt
+    setMessages(prev => {
+      const filtered = prev.filter(m => !m.isProgressCard);
+      const stopMsg = {
+        role: 'assistant',
+        content: "Course creation has been stopped. Do you want to start again?",
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      return [...filtered, stopMsg];
+    });
+
+    // Reset local generation status
+    setGenerationStatus('idle');
+    setIsBatchGenerating(false);
+    setBatchCompleted(0);
+    setBatchTotal(0);
+
+    // Clear generated content from courseData
+    const clearedModules = (courseData.structure?.modules || []).map(m => {
+      const clearedChapters = (m.chapters || []).map(c => ({
+        ...c,
+        contents: [],
+        content: { content_type: 'html', html_content: '', completed: false }
+      }));
+      return { ...m, chapters: clearedChapters };
+    });
+
+    const clearedCourseData = {
+      ...courseData,
+      structure: { modules: clearedModules },
+      content: []
+    };
+
+    setCourseData(clearedCourseData);
+    setQuickReplies(["Yes, start again", "No, go back to outline"]);
   };
 
   const handleReset = () => {
@@ -927,6 +1073,16 @@ export default function ChatbotCourseCreator({ onClose }) {
           setBatchTotal(totalChaps);
           setBatchCompleted(completedChaps);
           setGenerationStatus('completed');
+          
+          // Auto-trigger congrats message if it's missing from the loaded chat history
+          const hasCongrats = (d.messages || []).some(m => 
+            m.role === 'assistant' && 
+            m.content && 
+            (m.content.toLowerCase().includes("congratulat") || m.content.toLowerCase().includes("successfully complete"))
+          );
+          if (!hasCongrats) {
+            triggerCongratulatoryMessage(d.messages || [], d.courseData || {});
+          }
         } else {
           setGenerationStatus('idle');
           setIsBatchGenerating(false);
@@ -1742,6 +1898,31 @@ export default function ChatbotCourseCreator({ onClose }) {
     );
   };
 
+  if (reactError) {
+    return (
+      <div className="p-6 max-w-2xl mx-auto my-10 bg-rose-50 border border-rose-200 rounded-2xl shadow-md text-slate-800">
+        <h2 className="text-lg font-black text-rose-600 mb-2">Something went wrong (UI Crash)</h2>
+        <p className="text-sm font-bold text-slate-700 mb-4">{reactError.message}</p>
+        {reactError.filename && (
+          <p className="text-xs text-slate-500 mb-2">
+            File: {reactError.filename} (Line {reactError.lineno}, Col {reactError.colno})
+          </p>
+        )}
+        {reactError.error && (
+          <pre className="p-3 bg-slate-900 text-slate-100 text-xs rounded-xl overflow-auto max-h-60 font-mono">
+            {reactError.error}
+          </pre>
+        )}
+        <button 
+          onClick={() => window.location.reload()}
+          className="mt-4 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition"
+        >
+          Reload Page
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex bg-gradient-to-tr from-rose-100 via-violet-100 to-sky-100 text-slate-800 font-sans overflow-hidden">
       
@@ -2156,7 +2337,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                         </div>
 
                         {/* Render Inline Progress Card if flagged */}
-                        {!isUser && msg.isProgressCard && (isBatchGenerating || generationStatus === 'completed') && (
+                        {!isUser && msg.isProgressCard && (
                           <div className="bg-white border border-slate-200 shadow-md p-5 rounded-2xl rounded-bl-none w-full flex flex-col gap-4 text-slate-800 mt-3 animate-fade-in">
                             <div className="flex items-center gap-4">
                               <div className="relative w-12 h-12 flex-shrink-0">
@@ -2176,25 +2357,49 @@ export default function ChatbotCourseCreator({ onClose }) {
                                     cy="24"
                                     r="20"
                                     strokeWidth="3.5"
-                                    stroke={generationStatus === 'completed' ? '#10b981' : '#6366f1'}
+                                    stroke={
+                                      generationStatus === 'completed' ? '#10b981' :
+                                      generationStatus === 'paused' ? '#f59e0b' :
+                                      (generationStatus === 'cancelled' || generationStatus === 'failed' || (generationStatus === 'idle' && currentStep !== 'READY')) ? '#ef4444' :
+                                      '#6366f1'
+                                    }
                                     fill="transparent"
                                     strokeDasharray={125.6}
-                                    strokeDashoffset={generationStatus === 'completed' ? 0 : (125.6 - (125.6 * Math.min(batchCompleted, batchTotal)) / batchTotal)}
+                                    strokeDashoffset={
+                                      generationStatus === 'completed' ? 0 :
+                                      (batchTotal > 0 ? (125.6 - (125.6 * Math.min(batchCompleted, batchTotal)) / batchTotal) : 125.6)
+                                    }
                                     strokeLinecap="round"
                                     className="transition-all duration-500 ease-out"
                                   />
                                 </svg>
                                 {/* Percentage text */}
-                                <div className={`absolute inset-0 flex items-center justify-center text-[10px] font-black ${generationStatus === 'completed' ? 'text-emerald-600' : 'text-indigo-600'}`}>
-                                  {generationStatus === 'completed' ? '100%' : `${Math.round((batchCompleted / batchTotal) * 100)}%`}
+                                <div className={`absolute inset-0 flex items-center justify-center text-[10px] font-black ${
+                                  generationStatus === 'completed' ? 'text-emerald-600' :
+                                  generationStatus === 'paused' ? 'text-amber-500' :
+                                  (generationStatus === 'cancelled' || generationStatus === 'failed' || (generationStatus === 'idle' && currentStep !== 'READY')) ? 'text-rose-500' :
+                                  'text-indigo-600'
+                                }`}>
+                                  {generationStatus === 'completed' ? '100%' : `${batchTotal > 0 ? Math.round((batchCompleted / batchTotal) * 100) : 0}%`}
                                 </div>
                               </div>
                               <div className="flex-1 space-y-1">
-                                <span className={`text-[9px] uppercase tracking-widest font-black block ${generationStatus === 'completed' ? 'text-emerald-600' : 'text-indigo-600'}`}>
-                                  {generationStatus === 'completed' ? 'Content Generation Complete' : 'Writing Course Material'}
+                                <span className={`text-[9px] uppercase tracking-widest font-black block ${
+                                  generationStatus === 'completed' ? 'text-emerald-600' :
+                                  generationStatus === 'paused' ? 'text-amber-500' :
+                                  (generationStatus === 'cancelled' || generationStatus === 'failed' || (generationStatus === 'idle' && currentStep !== 'READY')) ? 'text-rose-500' :
+                                  'text-indigo-600'
+                                }`}>
+                                  {generationStatus === 'completed' ? 'Content Generation Complete' :
+                                   generationStatus === 'paused' ? 'Generation Paused' :
+                                   (generationStatus === 'cancelled' || generationStatus === 'failed' || (generationStatus === 'idle' && currentStep !== 'READY')) ? 'Generation Suspended' :
+                                   'Writing Course Material'}
                                 </span>
                                 <h5 className="text-xs font-bold text-slate-800 line-clamp-1">
-                                  {generationStatus === 'completed' ? 'All lessons generated successfully!' : batchCurrentTitle}
+                                  {generationStatus === 'completed' ? 'All lessons generated successfully!' :
+                                   generationStatus === 'paused' ? 'Course generation is paused.' :
+                                   (generationStatus === 'cancelled' || generationStatus === 'failed' || (generationStatus === 'idle' && currentStep !== 'READY')) ? 'Course generation was suspended.' :
+                                   batchCurrentTitle}
                                 </h5>
                                 <p className="text-[10px] text-slate-500 font-medium">
                                   Completed {batchCompleted} of {batchTotal} chapters...
@@ -2204,12 +2409,35 @@ export default function ChatbotCourseCreator({ onClose }) {
 
                             {/* Action Buttons inside Card */}
                             {isBatchGenerating && (
-                              <div className="border-t border-slate-100 pt-3">
+                              <div className="border-t border-slate-100 pt-3 flex gap-2.5">
+                                <button
+                                  onClick={() => handlePauseGeneration()}
+                                  className="flex-1 bg-amber-50 hover:bg-amber-100 text-amber-600 border border-amber-200/50 font-bold py-2 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1 shadow-sm"
+                                >
+                                  <Pause className="w-3.5 h-3.5" /> Pause Generation
+                                </button>
                                 <button
                                   onClick={() => handleCancelGeneration()}
-                                  className="w-full bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/50 font-bold py-2 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1 shadow-sm"
+                                  className="flex-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/50 font-bold py-2 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1 shadow-sm"
                                 >
-                                  <X className="w-3.5 h-3.5" /> Cancel Course Generation
+                                  <X className="w-3.5 h-3.5" /> Cancel Generation
+                                </button>
+                              </div>
+                            )}
+
+                            {(generationStatus === 'paused' || generationStatus === 'cancelled' || generationStatus === 'failed' || (generationStatus === 'idle' && currentStep !== 'READY')) && (
+                              <div className="border-t border-slate-100 pt-3 flex gap-2.5">
+                                <button
+                                  onClick={() => handleResumeGeneration()}
+                                  className="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-200/50 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm"
+                                >
+                                  <Play className="w-3.5 h-3.5" /> Resume Generation
+                                </button>
+                                <button
+                                  onClick={() => handleCancelGeneration()}
+                                  className="flex-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/50 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm"
+                                >
+                                  <X className="w-3.5 h-3.5" /> Cancel Generation
                                 </button>
                               </div>
                             )}

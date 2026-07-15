@@ -36,6 +36,15 @@ from chatbot_builder_service import parse_number_from_text
 
 app = FastAPI()
 
+from fastapi.exceptions import RequestValidationError
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    logger.error(f"[Validation Error] Request path: {request.url.path}, Error: {exc.errors()}, Body: {await request.body()}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": str(await request.body())}
+    )
+
 # Register online course generator router
 from app.api.online_course_generator import router as ocg_router
 app.include_router(ocg_router)
@@ -701,17 +710,18 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
         is_ambiguous = False
         ambiguity_reply = ""
         
-        has_edit_verb = any(w in lowercase_msg for w in ["edit", "change", "modify", "update", "adjust"])
-        has_detail_noun = any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration", "objective", "requirements", "hours", "basic info", "info", "basic"])
-        has_structure_noun = any(w in lowercase_msg for w in ["module", "modules", "chapter", "chapters", "outline", "syllabus", "roadmap", "lesson", "lessons"])
-        has_action_verb = any(w in lowercase_msg for w in ["add", "remove", "delete", "reduce", "shrink", "decrease", "cut", "rename", "reorder", "shuffle", "move", "swap"])
-        
-        if has_edit_verb and not has_detail_noun and not has_structure_noun:
-            is_ambiguous = True
-            ambiguity_reply = "Would you like to modify the course details (such as topic, goal, level, style, or duration) or make changes to the course outline modules?"
-        elif has_structure_noun and not has_action_verb and not has_edit_verb:
-            is_ambiguous = True
-            ambiguity_reply = "I'm not sure if you want to add modules, remove modules, or rename them. Could you please clarify your request?"
+        if not is_confirmation:
+            has_edit_verb = any(w in lowercase_msg for w in ["edit", "change", "modify", "update", "adjust"])
+            has_detail_noun = any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration", "objective", "requirements", "hours", "basic info", "info", "basic"])
+            has_structure_noun = any(w in lowercase_msg for w in ["module", "modules", "chapter", "chapters", "outline", "syllabus", "roadmap", "lesson", "lessons"])
+            has_action_verb = any(w in lowercase_msg for w in ["add", "remove", "delete", "reduce", "shrink", "decrease", "cut", "rename", "reorder", "shuffle", "move", "swap"])
+            
+            if has_edit_verb and not has_detail_noun and not has_structure_noun:
+                is_ambiguous = True
+                ambiguity_reply = "Would you like to modify the course details (such as topic, goal, level, style, or duration) or make changes to the course outline modules?"
+            elif has_structure_noun and not has_action_verb and not has_edit_verb:
+                is_ambiguous = True
+                ambiguity_reply = "I'm not sure if you want to add modules, remove modules, or rename them. Could you please clarify your request?"
 
         if is_ambiguous:
             return JSONResponse({
@@ -761,9 +771,34 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                 if match:
                     count = int(match.group(1))
             
+            # Determine if this is a specific module/position edit
+            is_specific_edit = False
+            
+            # 1. Match patterns like "module 3", "modules 1 and 3", "chapter 2", etc.
+            if re.search(r'\b(modules?|chapters?)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b', lowercase_msg):
+                is_specific_edit = True
+                
+            # 2. Check for ordinal/positional descriptors like "first", "3rd", "last"
+            ordinals = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "last",
+                        "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th"]
+            if any(rf"\b{ord}\b" in lowercase_msg for ord in ordinals):
+                is_specific_edit = True
+                
+            # 3. Check for position indicators like "at 4", "at position 3", "at index 2", "after module 2"
+            if any(w in lowercase_msg for w in ["at", "position", "index", "place", "after", "before"]):
+                if re.search(r'\b(at|position|index|place|after|before)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b', lowercase_msg):
+                    is_specific_edit = True
+                    
+            # 4. Check for multiple indices like "1 and 3", "2 and 4"
+            if re.search(r'\b\d+\s+and\s+\d+\b', lowercase_msg):
+                is_specific_edit = True
+            
             # Check reduce vs add
-            is_reduce_req = any(w in lowercase_msg for w in ["reduce", "shrink", "delete", "remove", "cut", "decrease"])
-            is_add_req = ("add" in lowercase_msg and any(w in lowercase_msg for w in ["module", "modules", "syllabus", "roadmap"])) or is_pending_add_confirm
+            is_reduce_req = False
+            is_add_req = False
+            if not is_specific_edit:
+                is_reduce_req = any(w in lowercase_msg for w in ["reduce", "shrink", "delete", "remove", "cut", "decrease"])
+                is_add_req = ("add" in lowercase_msg and any(w in lowercase_msg for w in ["module", "modules", "syllabus", "roadmap"])) or is_pending_add_confirm
             
             if is_add_req:
                 if count is None:
@@ -838,8 +873,9 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                     user_message = f"Reduce exactly {diff} modules of your choice from the outline. The final outline MUST contain exactly {target_count} modules."
                     lowercase_msg = user_message.lower()
 
-            # 1. Programmatic Shuffle Interceptor
-            if "shuffle" in lowercase_msg or "reorder" in lowercase_msg:
+            # 1. Programmatic Shuffle Interceptor (only for random shuffle requests)
+            is_random_shuffle = ("shuffle" in lowercase_msg or "reorder" in lowercase_msg) and not is_specific_edit and any(w in lowercase_msg for w in ["random", "randomly", "shuffle", "mix"])
+            if is_random_shuffle:
                 modules = current_structure.get("modules", [])
                 import random
                 if "submodule" in lowercase_msg or "chapter" in lowercase_msg:
@@ -869,6 +905,10 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                         "type": "structure"
                     })
 
+            specific_edit_rule = ""
+            if is_specific_edit:
+                specific_edit_rule = "\n7. SPECIFIC EDIT RULE: The user has requested a specific modification (e.g., removing specific modules/chapters, inserting a module at a specific index, or reordering). You MUST perform that exact modification, adding/removing exactly those elements, while leaving the rest of the syllabus structure and content completely unchanged."
+
             edit_prompt = f"""You are an expert curriculum designer.
 Your task is to modify the current course outline based strictly on the user's request.
 
@@ -891,7 +931,7 @@ Rules:
 3. EXACT COUNT RULE: The final outline in the JSON output MUST have EXACTLY the target count of modules specified in the user request description. Count them carefully. If it says "The final outline MUST contain exactly X modules", your JSON output 'modules' array MUST have exactly X items. Do not output X-1 or X+1 modules.
 4. RENAME STRUCTURAL PRESERVATION RULE: If the request is to rename modules or chapters, you MUST keep the exact same number of modules and chapters, and only change/rename their titles. Do NOT alter the course structure or count of modules/chapters.
 5. NO INDEXES RULE: Do NOT prepend numbers, chapter numbers, or index prefixes (like "Module 1", "Chapter 1 -", "1.1") to module or chapter titles.
-6. JSON ONLY RULE: Output ONLY valid JSON conforming to the schema. No markdown code blocks, no text explanations.
+6. JSON ONLY RULE: Output ONLY valid JSON conforming to the schema. No markdown code blocks, no text explanations.{specific_edit_rule}
 
 Expected JSON output format exactly:
 {{
@@ -1473,12 +1513,14 @@ def run_background_generation(draft_id: str, course_data: dict, messages: list):
                 loop.close()
 
             if res_block and res_block.blocks:
+                res_block_dict = res_block.dict() if hasattr(res_block, "dict") else res_block
+                blocks_data = res_block_dict.get("blocks", [])
                 latest_modules = updated_course["structure"]["modules"]
                 target_chapter = latest_modules[m_idx]["chapters"][c_idx]
                 target_chapter["contents"] = [{
                     "type": "lesson-blocks",
-                    "title": getattr(res_block, "title", None) or chapter_title,
-                    "blocks": getattr(res_block, "blocks", []),
+                    "title": res_block_dict.get("title") or chapter_title,
+                    "blocks": blocks_data,
                     "source": "ai",
                     "completed": True,
                     "timestamp": ""
@@ -1500,7 +1542,7 @@ def run_background_generation(draft_id: str, course_data: dict, messages: list):
                             "chapter_title": chapter_title,
                             "prompt": prompt,
                             "type": "html",
-                            "blocks": getattr(res_block, "blocks", [])
+                            "blocks": blocks_data
                         }
                         content_exist = True
                         break
@@ -1510,7 +1552,7 @@ def run_background_generation(draft_id: str, course_data: dict, messages: list):
                         "chapter_title": chapter_title,
                         "prompt": prompt,
                         "type": "html",
-                        "blocks": getattr(res_block, "blocks", [])
+                        "blocks": blocks_data
                     })
 
             # Save draft database
@@ -1558,7 +1600,7 @@ async def api_get_generation_status(draft_id: str):
         from database import get_chatbot_draft
         try:
             draft = get_chatbot_draft(draft_id)
-            if draft and draft.get("current_step") == "READY":
+            if draft and (draft.get("current_step") == "READY" or draft.get("currentStep") == "READY"):
                 return {
                     "status": "completed",
                     "completed": 100,
