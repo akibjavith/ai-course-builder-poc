@@ -216,6 +216,13 @@ async def generate_lesson_blocks(req: LessonRequest):
             temperature=0.7,
             response_format={"type": "json_object"}
         )
+
+        if req.draft_id:
+            try:
+                from metering_helper import track_chatbot_cost
+                track_chatbot_cost(req.draft_id, response, "gpt-4o-mini", f"generate_lesson_{req.title}")
+            except Exception as ex:
+                logger.error(f"Failed to track lesson blocks generation cost: {ex}")
         
         lesson_data = json.loads(response.choices[0].message.content)
         

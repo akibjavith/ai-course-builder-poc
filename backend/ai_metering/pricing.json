@@ -1,0 +1,47 @@
+{
+  "gpt-4o-mini": {
+    "input_cost_per_million": 0.15,
+    "output_cost_per_million": 0.60,
+    "updated_at": "2026-07-15T00:00:00.000000"
+  },
+  "gpt-4o-mini-tts": {
+    "input_cost_per_million": 0.60,
+    "output_cost_per_million": 12.00,
+    "updated_at": "2026-07-15T00:00:00.000000"
+  },
+  "gpt-4o": {
+    "input_cost_per_million": 2.50,
+    "output_cost_per_million": 10.00,
+    "updated_at": "2026-07-15T00:00:00.000000"
+  },
+  "o1-mini": {
+    "input_cost_per_million": 1.10,
+    "output_cost_per_million": 4.40,
+    "updated_at": "2026-07-15T00:00:00.000000"
+  },
+  "o1": {
+    "input_cost_per_million": 15.00,
+    "output_cost_per_million": 60.00,
+    "updated_at": "2026-07-15T00:00:00.000000"
+  },
+  "o3-mini": {
+    "input_cost_per_million": 1.10,
+    "output_cost_per_million": 4.40,
+    "updated_at": "2026-07-15T00:00:00.000000"
+  },
+  "gpt-4": {
+    "input_cost_per_million": 30.00,
+    "output_cost_per_million": 60.00,
+    "updated_at": "2026-07-15T00:00:00.000000"
+  },
+  "gpt-4-turbo": {
+    "input_cost_per_million": 10.00,
+    "output_cost_per_million": 30.00,
+    "updated_at": "2026-07-15T00:00:00.000000"
+  },
+  "default": {
+    "input_cost_per_million": 0.15,
+    "output_cost_per_million": 0.60,
+    "updated_at": "2026-07-15T00:00:00.000000"
+  }
+}

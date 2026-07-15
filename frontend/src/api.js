@@ -180,11 +180,12 @@ export const uploadTheme = async (themeData) => {
   return response.data;
 };
 
-export const chatWithChatbotBuilder = async (messages, currentStep, courseData) => {
+export const chatWithChatbotBuilder = async (messages, currentStep, courseData, draftId) => {
   const response = await axios.post(`${API_URL}/course/chatbot-builder/chat`, {
     messages,
     currentStep,
-    courseData
+    courseData,
+    draft_id: draftId
   });
   return response.data;
 };

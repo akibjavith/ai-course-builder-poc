@@ -28,7 +28,7 @@ def parse_number_from_text(text: str) -> Optional[int]:
             return word_to_num[t]
     return None
 
-def extract_slots_from_message(user_message: str, current_slots: Dict[str, Any], current_step: str = "ASK_TOPIC") -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def extract_slots_from_message(user_message: str, current_slots: Dict[str, Any], current_step: str = "ASK_TOPIC", draft_id: Optional[str] = None) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
     Invokes OpenAI in structured JSON mode to extract slot values from the latest user message
     and merge them with existing slot values. Returns a tuple of (merged_slots, raw_extracted_slots).
@@ -79,6 +79,9 @@ Previously Extracted Slots: {json.dumps(current_slots)}
             response_format={"type": "json_object"}
         )
         extracted = json.loads(response.choices[0].message.content)
+        if draft_id:
+            from metering_helper import track_chatbot_cost
+            track_chatbot_cost(draft_id, response, LLM_MODEL, f"slot_extraction_{current_step}")
         
         # Merge logic: if extracted key is not null, overwrite current slot.
         merged = {**current_slots}

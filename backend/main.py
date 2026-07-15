@@ -958,6 +958,9 @@ Expected JSON output format exactly:
                 response_format={"type": "json_object"}
             )
 
+            from metering_helper import track_chatbot_cost
+            track_chatbot_cost(req.draft_id, response, LLM_MODEL, "outline_edit")
+
             structure_json = json.loads(response.choices[0].message.content)
             structure_json["next_step"] = "OUTLINE_EDIT"
 
@@ -1094,7 +1097,7 @@ Expected JSON output format exactly:
         
         # Temp NLU run to see if they specified a new topic in message
         temp_slots = {**current_slots}
-        temp_updated, _ = extract_slots_from_message(user_message, temp_slots, req.currentStep)
+        temp_updated, _ = extract_slots_from_message(user_message, temp_slots, req.currentStep, req.draft_id)
         old_topic_temp = current_slots.get("topic")
         new_topic_temp = temp_updated.get("topic")
         
@@ -1126,7 +1129,7 @@ Expected JSON output format exactly:
             })
 
         # Stage 1: Run NLU Slot Extraction
-        updated_slots, raw_extracted = extract_slots_from_message(user_message, current_slots, req.currentStep)
+        updated_slots, raw_extracted = extract_slots_from_message(user_message, current_slots, req.currentStep, req.draft_id)
         
         if is_topic_confirm:
             updated_slots["pending_topic"] = None
@@ -1220,7 +1223,10 @@ Expected JSON output format exactly:
             temperature=0.7,
             max_tokens=4000
         )
-        
+
+        from metering_helper import track_chatbot_cost
+        track_chatbot_cost(req.draft_id, response, LLM_MODEL, f"chatbot_chat_{next_step}")
+
         ai_reply = response.choices[0].message.content
 
         # Determine scope based on next_step
@@ -1501,7 +1507,8 @@ def run_background_generation(draft_id: str, course_data: dict, messages: list):
                 module_title=module_title,
                 prompt=prompt,
                 type="html",
-                course_details=course_details_obj
+                course_details=course_details_obj,
+                draft_id=draft_id
             )
 
             # Run async function in a new loop

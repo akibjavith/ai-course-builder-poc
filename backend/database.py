@@ -466,10 +466,17 @@ def init_draft_table():
                 course_data LONGTEXT,
                 messages LONGTEXT,
                 created_at DATETIME,
-                updated_at DATETIME
+                updated_at DATETIME,
+                total_cost DOUBLE DEFAULT 0.0
             )
         """)
         conn.commit()
+        # Fallback ALTER TABLE check for existing tables without the column
+        try:
+            cursor.execute("ALTER TABLE corp_chatbot_course_draft ADD COLUMN total_cost DOUBLE DEFAULT 0.0")
+            conn.commit()
+        except Exception:
+            pass
         print("DEBUG: Local MySQL drafts table initialized successfully.")
     except Exception as e:
         print(f"Error initializing local draft table: {e}")
@@ -590,6 +597,16 @@ def rename_chatbot_draft(draft_id: str, new_name: str):
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     try:
         cursor.execute("UPDATE corp_chatbot_course_draft SET course_name = %s, updated_at = %s WHERE id = %s", (new_name, now_str, draft_id))
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
+
+def add_chatbot_draft_cost(draft_id: str, cost: float):
+    conn = get_local_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE corp_chatbot_course_draft SET total_cost = total_cost + %s WHERE id = %s", (cost, draft_id))
         conn.commit()
     finally:
         cursor.close()

@@ -54,6 +54,7 @@ export default function ChatbotCourseCreator({ onClose }) {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   
   const [reactError, setReactError] = useState(null);
+  const [activeFilter, setActiveFilter] = useState('all'); // 'all' | 'published' | 'unpublished' | 'progress' | 'outline'
 
   useEffect(() => {
     const handleError = (event) => {
@@ -81,6 +82,38 @@ export default function ChatbotCourseCreator({ onClose }) {
 
   // Collage Sidebar & DB Draft States
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarWidth, setSidebarWidth] = useState(256);
+  const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
+  const isDraggingSidebarRef = useRef(false);
+
+  const handleSidebarMouseDown = (e) => {
+    e.preventDefault();
+    isDraggingSidebarRef.current = true;
+    setIsDraggingSidebar(true);
+    document.addEventListener('mousemove', handleSidebarMouseMove);
+    document.addEventListener('mouseup', handleSidebarMouseUp);
+  };
+
+  const handleSidebarMouseMove = (e) => {
+    if (!isDraggingSidebarRef.current) return;
+    const newWidth = Math.max(180, Math.min(480, e.clientX));
+    setSidebarWidth(newWidth);
+  };
+
+  const handleSidebarMouseUp = () => {
+    isDraggingSidebarRef.current = false;
+    setIsDraggingSidebar(false);
+    document.removeEventListener('mousemove', handleSidebarMouseMove);
+    document.removeEventListener('mouseup', handleSidebarMouseUp);
+  };
+
+  useEffect(() => {
+    return () => {
+      document.removeEventListener('mousemove', handleSidebarMouseMove);
+      document.removeEventListener('mouseup', handleSidebarMouseUp);
+    };
+  }, []);
+
   const [draftsList, setDraftsList] = useState([]);
   const [activeDraftId, setActiveDraftId] = useState(() => 'draft_' + Date.now());
   const [searchQuery, setSearchQuery] = useState('');
@@ -310,7 +343,7 @@ export default function ChatbotCourseCreator({ onClose }) {
         .filter(m => m && typeof m.content === 'string')
         .map(m => ({ role: m.role || 'user', content: m.content || '' }));
       
-      const resReady = await chatWithChatbotBuilder(finalHistory, 'READY', currentCourseData);
+      const resReady = await chatWithChatbotBuilder(finalHistory, 'READY', currentCourseData, activeDraftId);
       if (resReady && resReady.status === 'success') {
         const finalMsg = {
           role: 'assistant',
@@ -418,7 +451,7 @@ export default function ChatbotCourseCreator({ onClose }) {
         .filter(m => m && typeof m.content === 'string')
         .map(m => ({ role: m.role || 'user', content: m.content || '' }));
 
-      const res = await chatWithChatbotBuilder(historyForApi, 'PROMPT_GEN', currentCourseData);
+      const res = await chatWithChatbotBuilder(historyForApi, 'PROMPT_GEN', currentCourseData, activeDraftId);
       let nextCourseData = { ...currentCourseData };
 
       if (res && res.status === 'success' && res.metadata) {
@@ -627,7 +660,7 @@ export default function ChatbotCourseCreator({ onClose }) {
         }));
 
       setCourseData(nextCourseData);
-      const res = await chatWithChatbotBuilder(historyForApi, nextStepToUse, nextCourseData);
+      const res = await chatWithChatbotBuilder(historyForApi, nextStepToUse, nextCourseData, activeDraftId);
 
       if (res && res.status === 'success') {
         const assistantMsg = {
@@ -889,8 +922,8 @@ export default function ChatbotCourseCreator({ onClose }) {
         // Trigger status start backend call
         await startBgGeneration({
           draft_id: activeDraftId,
-          courseData: courseData,
-          messages: messages
+          courseData: latestCourseDataRef.current || courseData,
+          messages: latestMessagesRef.current || messages
         });
         
         // Trigger polling
@@ -1150,9 +1183,26 @@ export default function ChatbotCourseCreator({ onClose }) {
   // Group drafts dynamically by modify date
   const getGroupedDrafts = () => {
     const filtered = draftsList.filter(d => {
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase();
-      return (d.courseName || '').toLowerCase().includes(q) || (d.currentStep || '').toLowerCase().includes(q);
+      // 1. Search Query filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesName = (d.courseName || '').toLowerCase().includes(q);
+        const matchesStep = (d.currentStep || '').toLowerCase().includes(q);
+        if (!matchesName && !matchesStep) return false;
+      }
+
+      // 2. Category Filter
+      const isPublished = d.currentStep === 'READY' && d.courseData?.mysql_id;
+      const isUnpublished = d.currentStep === 'READY' && !d.courseData?.mysql_id;
+      const isInProgress = d.currentStep === 'CONFIRM_GENERATE';
+      const isOutline = !['READY', 'CONFIRM_GENERATE'].includes(d.currentStep);
+
+      if (activeFilter === 'published') return isPublished;
+      if (activeFilter === 'unpublished') return isUnpublished;
+      if (activeFilter === 'progress') return isInProgress;
+      if (activeFilter === 'outline') return isOutline;
+
+      return true; // 'all'
     });
 
     const groups = {
@@ -1927,7 +1977,10 @@ export default function ChatbotCourseCreator({ onClose }) {
     <div className="fixed inset-0 z-50 flex bg-gradient-to-tr from-rose-100 via-violet-100 to-sky-100 text-slate-800 font-sans overflow-hidden">
       
       {/* 1. Collapsible Left Navigation Sidebar */}
-      <div className={`h-full flex flex-col justify-between bg-white/70 backdrop-blur-md border-r border-white/50 transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-16'} overflow-hidden`}>
+      <div 
+        className={`h-full flex flex-col justify-between bg-white/70 backdrop-blur-md border-r border-white/50 relative overflow-hidden ${isDraggingSidebar ? '' : 'transition-all duration-300'}`}
+        style={{ width: sidebarOpen ? `${sidebarWidth}px` : '64px' }}
+      >
         {sidebarOpen ? (
           /* Expandable Full View Sidebar */
           <div className="flex-1 flex flex-col min-h-0 py-6 px-4 space-y-6">
@@ -1976,6 +2029,29 @@ export default function ChatbotCourseCreator({ onClose }) {
               )}
             </div>
 
+            {/* Filter Tabs Chips */}
+            {sidebarOpen && (
+              <div className="flex flex-wrap gap-1 pb-1 px-0.5">
+                {['all', 'published', 'unpublished', 'progress', 'outline'].map((filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => setActiveFilter(filter)}
+                    className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider whitespace-nowrap transition border ${
+                      activeFilter === filter
+                        ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                        : 'bg-white/50 hover:bg-slate-100 text-slate-500 border-slate-200/50 hover:text-slate-700'
+                    }`}
+                  >
+                    {filter === 'all' && 'All'}
+                    {filter === 'published' && 'Published'}
+                    {filter === 'unpublished' && 'Drafts'}
+                    {filter === 'progress' && 'In Progress'}
+                    {filter === 'outline' && 'Outlines'}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* History Feed Categories */}
             <div className="flex-1 overflow-y-auto space-y-4 pr-1 scrollbar-thin scrollbar-thumb-slate-200">
               {(() => {
@@ -2017,17 +2093,37 @@ export default function ChatbotCourseCreator({ onClose }) {
                                   className="bg-white text-slate-800 px-2 py-0.5 rounded border border-indigo-400 text-xs w-full focus:outline-none"
                                 />
                               ) : (
-                                <span 
-                                  className="truncate pr-2 select-none flex-1 text-left"
-                                  title="Double click to rename"
-                                  onDoubleClick={(e) => {
-                                    e.stopPropagation();
-                                    setEditingDraftId(d.id);
-                                    setEditingTitleText(d.courseName || "Untitled Course");
-                                  }}
-                                >
-                                  {d.courseName || 'Untitled Course'}
-                                </span>
+                                <div className="flex flex-col flex-1 min-w-0 items-start select-none text-left">
+                                  <span 
+                                    className="truncate pr-2 font-medium w-full"
+                                    title="Double click to rename"
+                                    onDoubleClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingDraftId(d.id);
+                                      setEditingTitleText(d.courseName || "Untitled Course");
+                                    }}
+                                  >
+                                    {d.courseName || 'Untitled Course'}
+                                  </span>
+                                  {(() => {
+                                    const isPublished = d.currentStep === 'READY' && d.courseData?.mysql_id;
+                                    const isUnpublished = d.currentStep === 'READY' && !d.courseData?.mysql_id;
+                                    const isInProgress = d.currentStep === 'CONFIRM_GENERATE';
+                                    
+                                    return (
+                                      <span className={`text-[8px] px-1 py-0.2 rounded-md font-extrabold uppercase tracking-wider mt-0.5 ${
+                                        isActive
+                                          ? 'bg-white/20 text-white border border-white/10'
+                                          : isPublished ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                                            isUnpublished ? 'bg-indigo-50 text-indigo-600 border border-indigo-150' :
+                                            isInProgress ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                                            'bg-slate-100 text-slate-500 border border-slate-200/60'
+                                      }`}>
+                                        {isPublished ? 'Published' : isUnpublished ? 'Draft' : isInProgress ? 'In Progress' : 'Outline'}
+                                      </span>
+                                    );
+                                  })()}
+                                </div>
                               )}
                               {!isEditing && (
                                 <button
@@ -2141,6 +2237,14 @@ export default function ChatbotCourseCreator({ onClose }) {
               </button>
             </div>
           </div>
+        )}
+        {/* Resize handle drag bar */}
+        {sidebarOpen && (
+          <div 
+            onMouseDown={handleSidebarMouseDown}
+            className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-500/40 active:bg-indigo-505 transition-colors z-50"
+            title="Drag to resize"
+          />
         )}
       </div>
 

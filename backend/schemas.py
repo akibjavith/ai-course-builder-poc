@@ -95,6 +95,7 @@ class LessonRequest(BaseModel):
     prompt: str
     type: str = "html"
     course_details: Optional[CourseDetails] = None
+    draft_id: Optional[str] = None
 
 class ImagePromptResponse(BaseModel):
     prompt: str
@@ -282,6 +283,7 @@ class ChatbotBuilderRequest(BaseModel):
     messages: list
     currentStep: str = "GATHER_DETAILS"
     courseData: Optional[dict] = {}
+    draft_id: Optional[str] = None
 
 
 class ChatbotDraftSaveRequest(BaseModel):
