@@ -1436,14 +1436,19 @@ def run_background_generation(draft_id: str, course_data: dict, messages: list):
 
         modules = course_data.get("structure", {}).get("modules", [])
         chapters_to_generate = []
+        already_completed = 0
+        absolute_total = 0
         for m_idx, m in enumerate(modules):
             module_title = m.get("title", "")
             chapters = m.get("chapters", [])
             for c_idx, c in enumerate(chapters):
+                absolute_total += 1
                 chapter_title = c.get("title", "")
                 contents = c.get("contents", [])
                 has_content = any(item.get("type") == "lesson-blocks" for item in contents)
-                if not has_content:
+                if has_content:
+                    already_completed += 1
+                else:
                     chapters_to_generate.append({
                         "m_idx": m_idx,
                         "c_idx": c_idx,
@@ -1456,16 +1461,16 @@ def run_background_generation(draft_id: str, course_data: dict, messages: list):
         if total == 0:
             bg_generation_registry[draft_id] = {
                 "status": "completed",
-                "completed": 0,
-                "total": 0,
+                "completed": absolute_total,
+                "total": absolute_total,
                 "current_title": ""
             }
             return
 
         bg_generation_registry[draft_id] = {
             "status": "generating",
-            "completed": 0,
-            "total": total,
+            "completed": already_completed,
+            "total": absolute_total,
             "current_title": chapters_to_generate[0]["chapter_title"],
             "cancel_requested": False
         }
@@ -1500,7 +1505,7 @@ def run_background_generation(draft_id: str, course_data: dict, messages: list):
             prompt = ch["prompt"]
 
             bg_generation_registry[draft_id]["current_title"] = chapter_title
-            bg_generation_registry[draft_id]["completed"] = i
+            bg_generation_registry[draft_id]["completed"] = already_completed + i
 
             req_obj = LessonRequest(
                 title=chapter_title,
@@ -1570,7 +1575,7 @@ def run_background_generation(draft_id: str, course_data: dict, messages: list):
                 course_data=updated_course,
                 messages=messages
             )
-            bg_generation_registry[draft_id]["completed"] = i + 1
+            bg_generation_registry[draft_id]["completed"] = already_completed + i + 1
 
         bg_generation_registry[draft_id]["status"] = "completed"
         # Final transition to READY
@@ -1634,7 +1639,7 @@ async def api_cancel_generation(draft_id: str):
     return {"status": "error", "message": "No active generation task found for this draft"}
 
 # Get all drafts
-@app.get("/course/chatbot-builder/drafts")
+@app.get("/course/chatbot-builder/courses")
 def api_get_chatbot_drafts():
     try:
         from database import get_chatbot_drafts
@@ -1645,7 +1650,7 @@ def api_get_chatbot_drafts():
         raise HTTPException(status_code=500, detail=str(e))
 
 # Get a specific draft
-@app.get("/course/chatbot-builder/draft/{draft_id}")
+@app.get("/course/chatbot-builder/course/load/{draft_id}")
 def api_get_chatbot_draft(draft_id: str):
     try:
         from database import get_chatbot_draft
@@ -1660,7 +1665,7 @@ def api_get_chatbot_draft(draft_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 # Save or update a draft
-@app.post("/course/chatbot-builder/draft")
+@app.post("/course/chatbot-builder/course/save")
 def api_save_chatbot_draft(req: ChatbotDraftSaveRequest):
     try:
         from database import save_chatbot_draft
@@ -1677,7 +1682,7 @@ def api_save_chatbot_draft(req: ChatbotDraftSaveRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 # Delete a draft
-@app.delete("/course/chatbot-builder/draft/{draft_id}")
+@app.delete("/course/chatbot-builder/course/delete/{draft_id}")
 def api_delete_chatbot_draft(draft_id: str):
     try:
         from database import delete_chatbot_draft
@@ -1690,7 +1695,7 @@ def api_delete_chatbot_draft(draft_id: str):
 from schemas import RenameDraftRequest
 
 # Rename a draft
-@app.post("/course/chatbot-builder/draft/{draft_id}/rename")
+@app.post("/course/chatbot-builder/course/rename/{draft_id}")
 def api_rename_chatbot_draft(draft_id: str, req: RenameDraftRequest):
     try:
         from database import rename_chatbot_draft

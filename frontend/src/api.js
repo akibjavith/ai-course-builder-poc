@@ -192,27 +192,27 @@ export const chatWithChatbotBuilder = async (messages, currentStep, courseData, 
 
 
 export const saveChatbotDraft = async (draftData) => {
-  const response = await axios.post(`${API_URL}/course/chatbot-builder/draft`, draftData);
+  const response = await axios.post(`${API_URL}/course/chatbot-builder/course/save`, draftData);
   return response.data;
 };
 
 export const getChatbotDrafts = async () => {
-  const response = await axios.get(`${API_URL}/course/chatbot-builder/drafts`);
+  const response = await axios.get(`${API_URL}/course/chatbot-builder/courses`);
   return response.data;
 };
 
 export const getChatbotDraft = async (draftId) => {
-  const response = await axios.get(`${API_URL}/course/chatbot-builder/draft/${draftId}`);
+  const response = await axios.get(`${API_URL}/course/chatbot-builder/course/load/${draftId}`);
   return response.data;
 };
 
 export const deleteChatbotDraft = async (draftId) => {
-  const response = await axios.delete(`${API_URL}/course/chatbot-builder/draft/${draftId}`);
+  const response = await axios.delete(`${API_URL}/course/chatbot-builder/course/delete/${draftId}`);
   return response.data;
 };
 
 export const renameChatbotDraft = async (draftId, name) => {
-  const response = await axios.post(`${API_URL}/course/chatbot-builder/draft/${draftId}/rename`, { name });
+  const response = await axios.post(`${API_URL}/course/chatbot-builder/course/rename/${draftId}`, { name });
   return response.data;
 };
 

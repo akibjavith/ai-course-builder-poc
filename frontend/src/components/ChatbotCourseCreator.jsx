@@ -380,10 +380,13 @@ export default function ChatbotCourseCreator({ onClose }) {
             // Fetch the updated draft data to show current generated chapters in the syllabus preview
             const draftRes = await getChatbotDraft(draftId);
             if (draftRes && draftRes.status === 'success' && draftRes.draft) {
-              const draftData = typeof draftRes.draft.course_data === 'string' 
-                ? JSON.parse(draftRes.draft.course_data) 
-                : draftRes.draft.course_data;
-              setCourseData(draftData);
+              const rawData = draftRes.draft.courseData || draftRes.draft.course_data;
+              const draftData = typeof rawData === 'string' 
+                ? JSON.parse(rawData) 
+                : rawData;
+              if (draftData) {
+                setCourseData(draftData);
+              }
             }
           } else if (res.status === 'completed') {
             clearInterval(pollingIntervalRef.current);
@@ -398,11 +401,14 @@ export default function ChatbotCourseCreator({ onClose }) {
             const draftRes = await getChatbotDraft(draftId);
             let finalCourseData = null;
             if (draftRes && draftRes.status === 'success' && draftRes.draft) {
-              const draftData = typeof draftRes.draft.course_data === 'string' 
-                ? JSON.parse(draftRes.draft.course_data) 
-                : draftRes.draft.course_data;
-              setCourseData(draftData);
-              finalCourseData = draftData;
+              const rawData = draftRes.draft.courseData || draftRes.draft.course_data;
+              const draftData = typeof rawData === 'string' 
+                ? JSON.parse(rawData) 
+                : rawData;
+              if (draftData) {
+                setCourseData(draftData);
+                finalCourseData = draftData;
+              }
             }
 
             // Call standard congratulatory AI response using non-stale refs
@@ -971,8 +977,9 @@ export default function ChatbotCourseCreator({ onClose }) {
     setBatchCompleted(0);
     setBatchTotal(0);
 
-    // Clear generated content from courseData
-    const clearedModules = (courseData.structure?.modules || []).map(m => {
+    // Clear generated content from courseData safely
+    const structureModules = courseData?.structure?.modules || [];
+    const clearedModules = structureModules.map(m => {
       const clearedChapters = (m.chapters || []).map(c => ({
         ...c,
         contents: [],
@@ -982,7 +989,7 @@ export default function ChatbotCourseCreator({ onClose }) {
     });
 
     const clearedCourseData = {
-      ...courseData,
+      ...(courseData || {}),
       structure: { modules: clearedModules },
       content: []
     };
