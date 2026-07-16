@@ -132,7 +132,11 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
 
     # 0. B. Universal details redirect: if user explicitly requests detail changes during outline or content phase
     if current_step in ["OUTLINE_EDIT", "EDIT_OUTLINE_CHOICE", "CONFIRM_GENERATE", "PROMPT_GEN", "READY"]:
-        if any(w in lowercase_msg for w in ["change", "edit", "modify", "update", "correct"]) and any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration", "objective", "requirements", "hours", "basic info", "info", "basic"]):
+        if (
+            (any(w in lowercase_msg for w in ["change", "edit", "modify", "update", "correct", "go", "back", "adjust"]) and 
+             any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration", "objective", "requirements", "hours", "basic info", "info", "basic"])) or
+            any(w in lowercase_msg for w in ["basic info", "basic information", "detail summary", "details summary", "go back to basic", "go back to details", "go back to info", "change topic", "change duration", "change goal", "change style", "change level"])
+        ):
             return "CONFIRM_DETAILS", None
 
     # 0. C. Conversational slot change requests override (only active during details questionnaire phase)
@@ -280,7 +284,11 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
         lowercase_msg = user_message.lower()
         
         # Check if user wants to change details
-        if any(w in lowercase_msg for w in ["change", "edit", "modify", "update", "correct"]) and any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration", "objective", "requirements", "hours", "basic info", "info", "basic"]):
+        if (
+            (any(w in lowercase_msg for w in ["change", "edit", "modify", "update", "correct", "go", "back", "adjust"]) and 
+             any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration", "objective", "requirements", "hours", "basic info", "info", "basic"])) or
+            any(w in lowercase_msg for w in ["basic info", "basic information", "detail summary", "details summary", "go back to basic", "go back to details", "go back to info", "change topic", "change duration", "change goal", "change style", "change level"])
+        ):
             return "CONFIRM_DETAILS", None
 
         if current_step == "OUTLINE_EDIT":
@@ -321,16 +329,19 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
         slots["duration"] = None
         return "ASK_TOPIC", None
 
-    if not slots.get("learningGoal") and (slots.get("learningStyle") or slots.get("duration")):
-        slots["learningGoal"] = f"Learn {slots.get('topic')}"
+    if current_step not in ["EDIT_DETAILS_CHOICE", "ASK_TOPIC", "ASK_GOAL", "ASK_LEVEL", "ASK_STYLE", "ASK_DURATION"]:
+        if not slots.get("learningGoal") and (slots.get("learningStyle") or slots.get("duration")):
+            slots["learningGoal"] = f"Learn {slots.get('topic')}"
 
-    if not slots.get("currentLevel") and (slots.get("learningStyle") or slots.get("duration")):
-        slots["currentLevel"] = "beginner"
+        if not slots.get("currentLevel") and (slots.get("learningStyle") or slots.get("duration")):
+            slots["currentLevel"] = "beginner"
 
-    if not slots.get("learningStyle") and slots.get("duration"):
-        slots["learningStyle"] = "balanced combination"
+        if not slots.get("learningStyle") and slots.get("duration"):
+            slots["learningStyle"] = "balanced combination"
 
     # 4. Determine the next empty slot in priority order
+    if not slots.get("topic"):
+        return "ASK_TOPIC", None
     if not slots.get("learningGoal"):
         return "ASK_GOAL", None
     if not slots.get("currentLevel"):

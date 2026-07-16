@@ -674,6 +674,37 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
 
     logger.info(f"Chatbot Builder request received. Step: {req.currentStep}")
 
+    # 0. Intercept "go back to outline" request from CONFIRM_GENERATE
+    if req.currentStep == "CONFIRM_GENERATE":
+        user_message = ""
+        if req.messages:
+            for msg in reversed(req.messages):
+                if msg.get("role") == "user":
+                    user_message = msg.get("content", "")
+                    break
+        lowercase_msg = user_message.lower()
+        if any(w in lowercase_msg for w in ["back", "no", "outline"]):
+            # Check if this is indeed a go-back request (and not a confirmation or detail redirect)
+            is_confirm_check = any(w in lowercase_msg for w in ["yes", "continue", "looks good", "proceed", "generate", "correct", "confirm", "happy", "fine", "ok", "go ahead"]) and not any(neg in lowercase_msg for neg in ["not", "dont", "change", "add", "remove", "delete", "reduce", "back", "no"])
+            is_detail_redirect_check = (
+                (any(w in lowercase_msg for w in ["change", "edit", "modify", "update", "correct", "go", "back", "adjust"]) and 
+                 any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration", "objective", "requirements", "hours", "basic info", "info", "basic"])) or
+                any(w in lowercase_msg for w in ["basic info", "basic information", "detail summary", "details summary", "go back to basic", "go back to details", "go back to info", "change topic", "change duration", "change goal", "change style", "change level"])
+            )
+            if not is_confirm_check and not is_detail_redirect_check:
+                current_structure = req.courseData.get("structure", {})
+                meta = {
+                    "next_step": "OUTLINE_EDIT",
+                    "modules": current_structure.get("modules", [])
+                }
+                return {
+                    "status": "success",
+                    "reply": "Here is your course outline. You can rename, add, or remove modules, or click 'Confirm Outline' to proceed.",
+                    "quickReplies": ["Confirm Outline", "Reduce modules", "Add new module", "Rename modules/chapters"],
+                    "metadata": meta,
+                    "type": "structure"
+                }
+
     # -------------------------------------------------------------------------
     # OUTLINE_EDIT: Use a dedicated JSON-mode call to guarantee structure output
     # -------------------------------------------------------------------------
@@ -687,6 +718,25 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                     break
         lowercase_msg = user_message.lower()
         confirm_words = ["yes", "continue", "looks good", "proceed", "generate", "correct", "confirm", "happy", "fine", "ok", "go ahead"]
+
+        # Check if the user is asking to view the outline card
+        is_go_back_to_outline = any(w in lowercase_msg for w in ["go back", "go to", "show", "view", "display"]) and "outline" in lowercase_msg
+        if lowercase_msg.strip() in ["no, go back to outline", "no go back to outline", "go back to outline", "go back to the outline", "go to outline", "go to the outline", "back to outline", "outline", "view outline", "show outline"]:
+            is_go_back_to_outline = True
+
+        if is_go_back_to_outline:
+            current_structure = req.courseData.get("structure", {})
+            meta = {
+                "next_step": "OUTLINE_EDIT",
+                "modules": current_structure.get("modules", [])
+            }
+            return JSONResponse({
+                "status": "success",
+                "reply": "Here is your course outline. You can rename, add, or remove modules, or click 'Confirm Outline' to proceed.",
+                "quickReplies": ["Confirm Outline", "Reduce modules", "Add new module", "Rename modules/chapters"],
+                "metadata": meta,
+                "type": "structure"
+            })
         
         # Check if the user is confirming a pending addition from a previous 10-module limit warning
         is_pending_add_confirm = False
@@ -704,7 +754,11 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
             is_confirmation = False
 
         # Check if we should change details (go-back to CONFIRM_DETAILS)
-        is_details_redirect = any(w in lowercase_msg for w in ["change", "edit", "modify", "update", "correct"]) and any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration", "objective", "requirements", "hours", "basic info", "info", "basic"])
+        is_details_redirect = (
+            (any(w in lowercase_msg for w in ["change", "edit", "modify", "update", "correct", "go", "back", "adjust"]) and 
+             any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration", "objective", "requirements", "hours", "basic info", "info", "basic"])) or
+            any(w in lowercase_msg for w in ["basic info", "basic information", "detail summary", "details summary", "go back to basic", "go back to details", "go back to info", "change topic", "change duration", "change goal", "change style", "change level"])
+        )
 
         # Programmatic Ambiguity Checks
         is_ambiguous = False
@@ -1215,6 +1269,19 @@ Expected JSON output format exactly:
         system_prompt = build_builder_system_prompt(next_step, updated_slots, validation_error)
 
         cleaned_history = reinject_quick_replies_into_history(req.messages, updated_slots)
+
+        # Filter history to only include messages after the last topic reset/change request
+        cutoff_index = 0
+        for idx, msg in enumerate(cleaned_history):
+            if msg.get("role") == "user":
+                content_lower = msg.get("content", "").lower()
+                if any(w in content_lower for w in ["change topic", "change the topic", "different topic", "another topic", "edit topic", "choose topic", "edit subject", "change subject"]):
+                    cutoff_index = idx
+
+        if cutoff_index > 0:
+            logger.info(f"Filtering conversation history for LLM. Cutoff index: {cutoff_index}")
+            cleaned_history = cleaned_history[cutoff_index:]
+
         messages = [{"role": "system", "content": system_prompt}] + cleaned_history
 
         response = openai_client.chat.completions.create(
@@ -1379,6 +1446,12 @@ Expected JSON output format exactly:
                     "next_step": next_step,
                     **updated_slots
                 }
+
+            # Enforce details type and strip pre-generated modules when in details questionnaire steps
+            if next_step in ["CONFIRM_DETAILS", "EDIT_DETAILS_CHOICE", "ASK_TOPIC", "ASK_GOAL", "ASK_LEVEL", "ASK_STYLE", "ASK_DURATION"]:
+                type_val = "details_card" if next_step in ["CONFIRM_DETAILS", "EDIT_DETAILS_CHOICE"] else "details"
+                if isinstance(metadata, dict):
+                    metadata.pop("modules", None)
 
         # Quick replies are already parsed and extracted above
         reply_text = reply_text.strip()

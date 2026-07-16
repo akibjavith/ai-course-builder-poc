@@ -386,7 +386,7 @@ def parse_metadata(ai_reply: str, scope: str, details: dict) -> tuple:
                     "price": details.get("price") or "",
                     "duration": details.get("duration") or "",
                     "requirements": details.get("requirements") or "",
-                    "level": details.get("level") or "beginner",
+                    "level": details.get("level") or "",
                     "language": details.get("language") or "English",
                     "scriptingLanguage": details.get("scriptingLanguage") or "NA",
                     "evaluator": details.get("evaluator") or ""

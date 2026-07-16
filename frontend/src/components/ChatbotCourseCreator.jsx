@@ -539,9 +539,9 @@ export default function ChatbotCourseCreator({ onClose }) {
       startBatchGeneration(courseData);
       return;
     }
-    if (lowercaseText === "no, go back to outline" || lowercaseText === "no go back to outline") {
+    if ((lowercaseText === "no, go back to outline" || lowercaseText === "no go back to outline") && overrideStep !== 'OUTLINE_EDIT') {
       setCurrentStep('OUTLINE_EDIT');
-      handleSendMessage("Edit outline", 'OUTLINE_EDIT', courseData);
+      handleSendMessage("No, go back to outline", 'OUTLINE_EDIT', courseData);
       return;
     }
 
@@ -1865,11 +1865,11 @@ export default function ChatbotCourseCreator({ onClose }) {
           </div>
           <div className="flex gap-2">
             <span className="font-bold text-slate-500 w-28 flex-shrink-0">Difficulty Level:</span>
-            <span className="text-slate-800 capitalize font-medium">{metadata.currentLevel || 'beginner'}</span>
+            <span className="text-slate-800 capitalize font-medium">{metadata.currentLevel || 'Not set'}</span>
           </div>
           <div className="flex gap-2">
             <span className="font-bold text-slate-500 w-28 flex-shrink-0">Learning Style:</span>
-            <span className="text-slate-800 capitalize font-medium">{metadata.learningStyle || 'balanced combination'}</span>
+            <span className="text-slate-800 capitalize font-medium">{metadata.learningStyle || 'Not set'}</span>
           </div>
           <div className="flex gap-2">
             <span className="font-bold text-slate-500 w-28 flex-shrink-0">Duration:</span>
