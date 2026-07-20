@@ -771,6 +771,18 @@ export default function ChatbotCourseCreator({ onClose }) {
       const res = await chatWithChatbotBuilder(historyForApi, nextStepToUse, nextCourseData, activeDraftId);
 
       if (res && res.status === 'success') {
+        if (res.metadata && res.metadata.next_step) {
+          setCurrentStep(res.metadata.next_step);
+        }
+
+        if (res.metadata) {
+          if (res.metadata.modules && Array.isArray(res.metadata.modules)) {
+            setCourseData(prev => ({ ...prev, structure: { modules: res.metadata.modules } }));
+          } else if (res.metadata.pending_goal === "CLEAR" || res.metadata.pending_topic === "CLEAR" || res.metadata.clear_course_data) {
+            setCourseData(prev => ({ ...prev, structure: { modules: [] }, content: [] }));
+          }
+        }
+
         const assistantMsg = {
           role: 'assistant',
           content: res.reply || '',

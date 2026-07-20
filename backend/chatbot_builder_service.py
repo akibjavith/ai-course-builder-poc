@@ -156,8 +156,9 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
                     cleared_any = True
         if has_edit_verb and "goal" in lowercase_msg:
             if not is_newly_extracted("learningGoal"):
-                slots["learningGoal"] = None
-                cleared_any = True
+                if not has_existing_structure:
+                    slots["learningGoal"] = None
+                    cleared_any = True
         if has_edit_verb and ("level" in lowercase_msg or "experience" in lowercase_msg or "difficulty" in lowercase_msg):
             if not is_newly_extracted("currentLevel"):
                 slots["currentLevel"] = None

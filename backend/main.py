@@ -896,12 +896,62 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                     lowercase_msg = user_message.lower()
                     
             elif is_reduce_req:
-                is_reduce_one = any(phrase in lowercase_msg for phrase in ["reduce one module", "reduce 1 module", "remove one module", "delete one module", "reduce a module", "reduce 1"]) or count == 1
-                is_reduce_to = ("reduce to" in lowercase_msg or "down to" in lowercase_msg) and ("reduce to " in lowercase_msg or "down to " in lowercase_msg or re.search(r'\breduce\s+(it\s+)?to\b', lowercase_msg) is not None)
+                is_reduce_to = bool(re.search(r'\b(reduce|shrink|cut|bring|drop)\s+(it\s+)?to\b', lowercase_msg)) or "down to" in lowercase_msg
+                is_reduce_one = (any(phrase in lowercase_msg for phrase in ["reduce one module", "reduce 1 module", "remove one module", "delete one module", "reduce a module", "reduce 1"]) or count == 1) and not is_reduce_to
                 
-                if is_reduce_one and not is_reduce_to:
-                    diff = 1
-                    target_count = max(1, current_count - 1)
+                if is_reduce_one and not is_specific_edit:
+                    current_modules = current_structure.get("modules", [])
+                    if len(current_modules) <= 1:
+                        return JSONResponse({
+                            "status": "success",
+                            "reply": "A course outline must contain at least 1 module. I cannot reduce the course below 1 module.",
+                            "metadata": {
+                                "next_step": "OUTLINE_EDIT"
+                            },
+                            "type": "details"
+                        })
+                    new_modules = current_modules[:-1]
+                    req.courseData["structure"]["modules"] = new_modules
+                    req.courseData["confirmed_outline"] = True
+                    return JSONResponse({
+                        "status": "success",
+                        "reply": f"I've reduced the outline by 1 module. The syllabus now contains {len(new_modules)} modules. Would you like to make any further modifications, or are you happy with this outline?",
+                        "quickReplies": ["Confirm Outline", "Reduce one module", "Add one module", "Rename modules/chapters"],
+                        "metadata": {
+                            "next_step": "OUTLINE_EDIT",
+                            "modules": new_modules
+                        },
+                        "type": "structure"
+                    })
+                elif is_reduce_to and not is_specific_edit and count is not None and count >= 1:
+                    current_modules = current_structure.get("modules", [])
+                    target_count = count
+                    if target_count < len(current_modules):
+                        new_modules = current_modules[:target_count]
+                        req.courseData["structure"]["modules"] = new_modules
+                        req.courseData["confirmed_outline"] = True
+                        return JSONResponse({
+                            "status": "success",
+                            "reply": f"I've reduced the outline down to {len(new_modules)} modules. The syllabus now contains {len(new_modules)} modules. Would you like to make any further modifications, or are you happy with this outline?",
+                            "quickReplies": ["Confirm Outline", "Reduce one module", "Add one module", "Rename modules/chapters"],
+                            "metadata": {
+                                "next_step": "OUTLINE_EDIT",
+                                "modules": new_modules
+                            },
+                            "type": "structure"
+                        })
+                    elif target_count == len(current_modules):
+                        return JSONResponse({
+                            "status": "success",
+                            "reply": f"The course outline already contains exactly {len(current_modules)} modules.",
+                            "metadata": {
+                                "next_step": "OUTLINE_EDIT"
+                            },
+                            "type": "details"
+                        })
+                    else:
+                        diff = count
+                        target_count = max(0, current_count - diff)
                 elif is_reduce_to:
                     target_count = max(0, count if count is not None else 1)
                     diff = max(0, current_count - target_count)
@@ -1065,7 +1115,7 @@ Expected JSON output format exactly:
             "language": "English"
         }
 
-        # If the user is starting a new course (step is ASK_TOPIC), discard any old slot values
+        # If the user is starting a new course (step is ASK_TOPIC), discard any old slot values and structure
         is_new_session = len(req.messages) <= 2 or all(m.get("content", "").lower().strip() in ["hi", "hello", "hey", "restart", "start", "create a new course"] for m in req.messages if m.get("role") == "user")
         if req.currentStep == "ASK_TOPIC" and is_new_session:
             current_slots = {
@@ -1076,10 +1126,15 @@ Expected JSON output format exactly:
                 "duration": "",
                 "language": "English"
             }
+            req.courseData["structure"] = {"modules": []}
+            req.courseData["content"] = []
+            req.courseData["confirmed_outline"] = False
 
-        # Check if the user is confirming/cancelling a topic change warning
+        # Check if the user is confirming/cancelling a topic or goal change warning
         is_topic_confirm = False
         is_topic_cancel = False
+        is_goal_confirm = False
+        is_goal_cancel = False
         
         lowercase_msg = user_message.lower()
         confirm_words = ["yes", "continue", "looks good", "proceed", "generate", "correct", "confirm", "happy", "fine", "ok", "go ahead"]
@@ -1090,19 +1145,28 @@ Expected JSON output format exactly:
                 if msg.get("role") == "assistant":
                     last_assistant_msg = msg.get("content", "").lower()
                     break
-            if "will require regenerating the syllabus outline" in last_assistant_msg:
+            if "changing the course topic" in last_assistant_msg or "topic change" in last_assistant_msg:
                 # User is replying to topic change warning
                 if any(w in lowercase_msg for w in confirm_words) or "change" in lowercase_msg:
                     is_topic_confirm = True
                 elif any(w in lowercase_msg for w in ["no", "cancel", "back", "stop"]):
                     is_topic_cancel = True
+            elif "changing your learning goal" in last_assistant_msg or "goal change" in last_assistant_msg:
+                # User is replying to goal change warning
+                if any(w in lowercase_msg for w in confirm_words) or "change" in lowercase_msg:
+                    is_goal_confirm = True
+                elif any(w in lowercase_msg for w in ["no", "cancel", "back", "stop"]):
+                    is_goal_cancel = True
 
         clear_course_data_flag = False
 
-        if is_topic_cancel:
+        if is_topic_cancel or is_goal_cancel:
             old_topic = details.get("topic") or details.get("subject") or details.get("courseName") or ""
             if old_topic:
                 current_slots["topic"] = old_topic
+            old_goal = details.get("learningGoal") or details.get("description") or ""
+            if old_goal:
+                current_slots["learningGoal"] = old_goal
             
             # Route back to previous state
             has_content = len(req.courseData.get("content", [])) > 0
@@ -1113,7 +1177,7 @@ Expected JSON output format exactly:
                 }
                 return JSONResponse({
                     "status": "success",
-                    "reply": "Topic change cancelled. The course structure has been finalized. Would you like me to start generating the complete course content?",
+                    "reply": "Modification cancelled. The course structure has been finalized. Would you like me to start generating the complete course content?",
                     "quickReplies": ["Yes, start generating", "No, go back to outline"],
                     "metadata": meta,
                     "type": "details"
@@ -1125,7 +1189,7 @@ Expected JSON output format exactly:
                 }
                 return JSONResponse({
                     "status": "success",
-                    "reply": "Topic change cancelled. Here are your course details. Would you like to review the details again or proceed with the course structure?",
+                    "reply": "Modification cancelled. Here are your course details. Would you like to review the details again or proceed with the course structure?",
                     "quickReplies": ["Confirm details & proceed", "Edit Details"],
                     "metadata": meta,
                     "type": "details_card"
@@ -1154,10 +1218,37 @@ Expected JSON output format exactly:
             if req.messages:
                 req.messages = [m for m in req.messages if m.get("role") == "user"][-1:]
 
-        # Check if topic change request is triggered
+        if is_goal_confirm:
+            current_slots["learningGoal"] = None
+            req.courseData["structure"] = {"modules": []}
+            req.courseData["content"] = []
+            req.courseData["confirmed_outline"] = False
+            clear_course_data_flag = True
+            
+            topic_str = current_slots.get("topic") or "your chosen subject"
+            goal_replies = ["Prepare for Certification", "Build Web Applications", "Master Core Concepts", "Get a Developer Job"]
+            if "java" in topic_str.lower():
+                goal_replies = ["Prepare for Java Certification", "Build Spring Boot Apps", "Master Java Concurrency", "Learn Java Fundamentals"]
+            elif "python" in topic_str.lower():
+                goal_replies = ["Data Analysis & AI", "Build Web Apps with Django", "Automate Daily Tasks", "Master Python Basics"]
+                
+            meta = {
+                "next_step": "ASK_GOAL",
+                **current_slots
+            }
+            return JSONResponse({
+                "status": "success",
+                "reply": f"What would you like to update your learning goal to for {topic_str}?",
+                "quickReplies": goal_replies,
+                "metadata": meta,
+                "type": "details"
+            })
+
+        # Check if topic or goal change request is triggered
         has_existing_structure = len(req.courseData.get("structure", {}).get("modules", [])) > 0
         has_existing_course = bool(current_slots.get("topic")) or has_existing_structure
         is_requesting_topic_change = False
+        is_requesting_goal_change = False
         
         # Temp NLU run to see if they specified a new topic in message
         temp_slots = {**current_slots}
@@ -1172,6 +1263,10 @@ Expected JSON output format exactly:
         if has_existing_course and not is_topic_confirm and not is_topic_cancel:
             if ("edit" in lowercase_msg or "change" in lowercase_msg or "choose" in lowercase_msg or "different" in lowercase_msg or "another" in lowercase_msg or "adjust" in lowercase_msg or "modify" in lowercase_msg or "update" in lowercase_msg) and ("topic" in lowercase_msg or "subject" in lowercase_msg):
                 is_requesting_topic_change = True
+
+        if has_existing_structure and not is_goal_confirm and not is_goal_cancel:
+            if ("edit" in lowercase_msg or "change" in lowercase_msg or "modify" in lowercase_msg or "update" in lowercase_msg) and ("goal" in lowercase_msg or "objective" in lowercase_msg or "description" in lowercase_msg):
+                is_requesting_goal_change = True
                 
         if is_requesting_topic_change:
             pending = new_topic_temp if (new_topic_temp and str(old_topic_temp).lower().strip() != str(new_topic_temp).lower().strip()) else "CLEAR"
@@ -1188,6 +1283,21 @@ Expected JSON output format exactly:
                 "status": "success",
                 "reply": reply,
                 "quickReplies": ["Yes, change topic", "Cancel"],
+                "metadata": meta,
+                "type": "details"
+            })
+
+        if is_requesting_goal_change:
+            meta = {
+                "next_step": "CONFIRM_DETAILS",
+                "pending_goal": "CLEAR",
+                **current_slots
+            }
+            reply = "Changing your learning goal will require regenerating your syllabus outline. Are you sure you want to proceed with this change?"
+            return JSONResponse({
+                "status": "success",
+                "reply": reply,
+                "quickReplies": ["Yes, change goal", "Cancel"],
                 "metadata": meta,
                 "type": "details"
             })
@@ -1404,6 +1514,49 @@ Expected JSON output format exactly:
         elif next_step == "OUTLINE_EDIT":
             type_val = "structure"
             
+            # Check if user already has a confirmed outline structure generated in the current session (and neither topic nor goal was reset)
+            has_confirmed_outline = req.courseData.get("confirmed_outline") is True
+            existing_modules = req.courseData.get("structure", {}).get("modules", [])
+            has_existing_valid_structure = has_confirmed_outline and len(existing_modules) > 0 and not clear_course_data_flag
+            
+            if has_existing_valid_structure and req.currentStep in ["CONFIRM_DETAILS", "EDIT_DETAILS_CHOICE"]:
+                if any(phrase in lowercase_msg for phrase in ["proceed to course generation", "course generation"]):
+                    meta = {
+                        "next_step": "CONFIRM_GENERATE",
+                        **updated_slots
+                    }
+                    return JSONResponse({
+                        "status": "success",
+                        "reply": "Great! Let's proceed to generate your course content.",
+                        "quickReplies": ["Yes, generate content", "No, go back to outline"],
+                        "metadata": meta,
+                        "type": "details"
+                    })
+                elif any(phrase in lowercase_msg for phrase in ["review syllabus outline", "review outline", "review"]):
+                    meta = {
+                        "next_step": "OUTLINE_EDIT",
+                        "modules": existing_modules
+                    }
+                    return JSONResponse({
+                        "status": "success",
+                        "reply": "Here is your personalized learning roadmap outline. Do you have anything to change in this, or would you like to add any modules?",
+                        "quickReplies": ["Confirm Outline", "Reduce one module", "Add one module", "Rename modules/chapters"],
+                        "metadata": meta,
+                        "type": "structure"
+                    })
+                elif "already have a generated module outline" in last_assistant_msg:
+                    meta = {
+                        "next_step": "CONFIRM_DETAILS",
+                        **updated_slots
+                    }
+                    return JSONResponse({
+                        "status": "success",
+                        "reply": "You already have a generated module outline. Would you like to proceed directly to course content generation with your updated details, or review your syllabus outline?",
+                        "quickReplies": ["Proceed to Course Generation", "Review Syllabus Outline"],
+                        "metadata": meta,
+                        "type": "details_card"
+                    })
+            
             # If details changed (e.g. topic, goal, level, style, duration), discard the old structure to trigger regeneration
             details = req.courseData.get("details", {})
             details_changed = False
@@ -1453,10 +1606,19 @@ Expected JSON output format exactly:
                         level=updated_slots.get("currentLevel") or "beginner"
                     )
                     modules = structure_res.get("modules", [])
+                    req.courseData["confirmed_outline"] = True
+                    req.courseData["structure"] = {"modules": modules}
                     metadata = {
                         "next_step": "OUTLINE_EDIT",
                         "modules": modules
                     }
+                    return JSONResponse({
+                        "status": "success",
+                        "reply": "Here is your personalized learning roadmap outline. Do you have anything to change in this, or would you like to add any modules?",
+                        "quickReplies": ["Confirm Outline", "Reduce one module", "Add one module", "Rename modules/chapters"],
+                        "metadata": metadata,
+                        "type": "structure"
+                    })
                 except Exception as structure_err:
                     logger.error(f"Failed to generate initial structure on the fly: {structure_err}")
                     metadata = {
