@@ -142,7 +142,10 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
     # 0. C. Conversational slot change requests override (only active during details questionnaire phase)
     if current_step in ["ASK_TOPIC", "ASK_GOAL", "ASK_LEVEL", "ASK_STYLE", "ASK_DURATION", "CONFIRM_DETAILS", "EDIT_DETAILS_CHOICE", "ASK_GENERATE_SKELETON"]:
         cleared_any = False
-        if any(w in lowercase_msg for w in ["change topic", "change the topic", "different topic", "another topic", "edit topic", "choose topic"]):
+        edit_verbs = ["change", "edit", "modify", "adjust", "update", "revise", "correct", "different", "another", "choose"]
+        has_edit_verb = any(v in lowercase_msg for v in edit_verbs)
+
+        if has_edit_verb and ("topic" in lowercase_msg or "subject" in lowercase_msg):
             if not is_newly_extracted("topic"):
                 if not has_existing_structure:
                     slots["topic"] = None
@@ -151,19 +154,19 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
                     slots["learningStyle"] = None
                     slots["duration"] = None
                     cleared_any = True
-        if any(w in lowercase_msg for w in ["change goal", "change the goal", "different goal", "another goal", "edit goal", "edit learning goal"]):
+        if has_edit_verb and "goal" in lowercase_msg:
             if not is_newly_extracted("learningGoal"):
                 slots["learningGoal"] = None
                 cleared_any = True
-        if any(w in lowercase_msg for w in ["change level", "change the level", "different level", "another level", "edit level", "edit difficulty level", "change experience"]):
+        if has_edit_verb and ("level" in lowercase_msg or "experience" in lowercase_msg or "difficulty" in lowercase_msg):
             if not is_newly_extracted("currentLevel"):
                 slots["currentLevel"] = None
                 cleared_any = True
-        if any(w in lowercase_msg for w in ["change style", "change the style", "different style", "another style", "edit style", "edit learning style"]):
+        if has_edit_verb and "style" in lowercase_msg:
             if not is_newly_extracted("learningStyle"):
                 slots["learningStyle"] = None
                 cleared_any = True
-        if any(w in lowercase_msg for w in ["change duration", "change the duration", "different duration", "another duration", "edit duration", "edit time", "edit hours"]):
+        if has_edit_verb and ("duration" in lowercase_msg or "time" in lowercase_msg or "hours" in lowercase_msg):
             if not is_newly_extracted("duration"):
                 slots["duration"] = None
                 cleared_any = True
@@ -224,13 +227,18 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
                 slots["duration"] = "8" # default standard
 
     # 2. Check validations or re-confirmations for special steps
+    if not slots.get("topic"):
+        return "ASK_TOPIC", None
+
     if current_step == "CONFIRM_DETAILS":
         lowercase_msg = user_message.lower()
-        if "edit" in lowercase_msg or "change" in lowercase_msg or "modify" in lowercase_msg:
+        edit_verbs = ["change", "edit", "modify", "adjust", "update", "revise", "correct", "different", "another", "choose"]
+        if any(v in lowercase_msg for v in edit_verbs):
             # Check if user specified any new slot value directly in the message
             has_new_val = any(is_newly_extracted(k) for k in ["topic", "learningGoal", "currentLevel", "learningStyle", "duration"])
             if not has_new_val:
-                return "EDIT_DETAILS_CHOICE", None
+                if not cleared_any:
+                    return "EDIT_DETAILS_CHOICE", None
         confirm_words = [
             "looks good", "looks fine", "looks ok", "continue", "confirm", "yes", "yep", "yeah",
             "correct", "fine", "ok", "sure", "proceed", "generate", "create", "structure", "start",
@@ -238,7 +246,8 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
         ]
         if any(w in lowercase_msg for w in confirm_words):
             return "OUTLINE_EDIT", None
-        return "CONFIRM_DETAILS", None
+        if not cleared_any:
+            return "CONFIRM_DETAILS", None
 
     elif current_step == "EDIT_DETAILS_CHOICE":
         lowercase_msg = user_message.lower()
@@ -246,7 +255,6 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
         if has_new_val:
             pass
         else:
-            cleared_any = False
             if "topic" in lowercase_msg or "subject" in lowercase_msg or "course name" in lowercase_msg:
                 if not has_existing_structure:
                     slots["topic"] = None
@@ -353,7 +361,13 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
 
     return "CONFIRM_DETAILS", None
 
-def build_builder_system_prompt(next_step: str, slots: Dict[str, Any], validation_error: Optional[str] = None) -> str:
+def build_builder_system_prompt(
+    next_step: str, 
+    slots: Dict[str, Any], 
+    validation_error: Optional[str] = None,
+    existing_courses: Optional[list] = None,
+    existing_drafts: Optional[list] = None
+) -> str:
     """
     Constructs a highly focused system prompt for the NLG step to ask the user
     for the next slot value in a natural way.
@@ -384,7 +398,7 @@ GLOBAL RULES:
    (Ensure all slot values matching the current state are populated; use empty strings "" if not yet gathered).
 
 5. DYNAMIC QUICK REPLIES: You MUST ALWAYS append dynamic quick replies at the very end of your conversational response (outside [METADATA] tags). Use EXACTLY the tag format: [quick_replies]["Option 1", "Option 2", ...][/quick_replies]. Generate 3 to 6 contextually appropriate suggestions.
-   - For ASK_TOPIC: Suggest popular subjects (e.g. ["Python Programming", "English Grammar", "Digital Marketing", "Machine Learning"]).
+   - For ASK_TOPIC: Suggest dynamic next-step learning topics based on their history if provided.
    - For ASK_GOAL: Suggest 3-4 goals specific to their chosen topic (e.g. if topic is Python: ["Build a Web App", "Automate Excel Tasks", "Data Analysis & AI", "Get a Developer Job"]).
    - For ASK_LEVEL: Suggest level selections: ["Complete Beginner / Start Fresh", "Intermediate / Some experience", "Advanced / Deep Dive"].
    - For ASK_STYLE: Suggest style options based on our blocks: ["Hands-on Coding", "Interactive Quizzes", "Detailed Explanations", "Balanced Combination"].
@@ -403,7 +417,33 @@ GLOBAL RULES:
 
     state_instructions = ""
     if next_step == "ASK_TOPIC":
-        state_instructions = """
+        # Formulate history string
+        history_desc = []
+        if existing_courses:
+            history_desc.append(f"Completed/Published Courses: {existing_courses}")
+        if existing_drafts:
+            history_desc.append(f"Draft/In-progress Courses: {existing_drafts}")
+            
+        history_context = ""
+        if history_desc:
+            history_str = "\n".join(history_desc)
+            history_context = f"""
+DYNAMIC TOPIC RECOMMENDATION RULE:
+The user has the following learning history:
+{history_str}
+
+Under the [quick_replies] block for this step (ASK_TOPIC), you MUST suggest 4 topics that represent a logical next step, intermediate/advanced progression, or related topics to what they have already built. Do NOT suggest the exact same courses they have already created.
+For example:
+- If they have built a beginner course, suggest intermediate or advanced sequels.
+- If they have built a course in a specific tech stack (e.g. HTML/CSS), suggest related tech (e.g. JavaScript, React, Web Backend).
+- Make the suggestions feel like a step forward in their learning journey!
+"""
+        else:
+            history_context = """
+Under the [quick_replies] block for this step (ASK_TOPIC), suggest exactly 4 popular beginner subjects, e.g. ["Python Programming", "English Grammar", "Digital Marketing", "Machine Learning"].
+"""
+
+        state_instructions = f"""
 Current State: ASK_TOPIC
 Goal: Ask the user what subject or topic they would like to learn.
 Conversational Guidance: Ask a natural, welcoming question to discover their desired topic. 
@@ -411,6 +451,7 @@ You MUST mirror the user's greeting tone and wording dynamically. For example:
 - If the user starts with "hi", "hello", "hey", respond with: "Hello! I'm excited to help you create a personalized learning roadmap. What subject or topic would you like to explore today?"
 - If the user starts with an informal/colloquial greeting like "hey dude", "yo", "sup", "what's up", respond in the same style: "Hey dude! I'm excited to help you create a personalized learning roadmap. What topic would you like to explore today?"
 - Adapt friendly and mirror their specific greeting style.
+{history_context}
 """
     elif next_step == "ASK_GOAL":
         state_instructions = f"""
@@ -456,7 +497,9 @@ Example: "Here is a summary of your course requirements. Would you like to modif
 CRITICAL RULE: Do NOT list, repeat, or output the course details (Topic, Goal, Level, Style, Duration) inside your conversational text. Keep it strictly to a short confirmation question.
 Do NOT output any metadata block for CONFIRM_DETAILS. Keep it purely as a conversational reply in the format above, immediately followed by the [quick_replies] block.
 
-Refusal Rule: If the user requests to modify the syllabus structure, add/remove modules, or edit chapters while they are in the CONFIRM_DETAILS step, politely refuse. Explain that they must confirm the details first to generate the syllabus outline.
+MODIFICATION ALLOWANCE RULE: If the user requests to modify or change any course detail (such as Topic, Goal, Level, Style, or Duration), ACCEPT their request immediately. Do NOT refuse or ask them to confirm details first.
+POST-EDIT RULE: If the user just completed updating or answering a detail, politely acknowledge that the detail was updated (e.g. "I've updated your course requirements. Please review the summary card below to proceed.") and ask if they are ready to confirm. Under NO circumstances should you repeat a question asking for topic, goal, level, style, or duration.
+Refusal Rule: Refuse ONLY if the user attempts to add, remove, or edit syllabus modules/chapters before generating the outline.
 """
     elif next_step == "EDIT_DETAILS_CHOICE":
         state_instructions = """
@@ -628,3 +671,52 @@ def reinject_quick_replies_into_history(messages: list, slots: dict) -> list:
         else:
             rebuilt.append(msg)
     return rebuilt
+
+def generate_dynamic_topic_suggestions(published_courses: list, draft_courses: list) -> list:
+    """
+    Invokes OpenAI to generate exactly 4 dynamic next-level or related topic suggestions
+    based on the user's published courses and drafts.
+    """
+    if not published_courses and not draft_courses:
+        return ["Python Programming", "English Grammar", "Digital Marketing", "Machine Learning"]
+        
+    client = get_openai_client()
+    
+    published_str = ", ".join(f"'{name}'" for name in published_courses) if published_courses else "None"
+    draft_str = ", ".join(f"'{name}'" for name in draft_courses) if draft_courses else "None"
+    
+    prompt = f"""You are a professional educational advisor.
+The user has previously created or draft courses on the following topics:
+- Published/Completed Courses: [{published_str}]
+- Draft/In-Progress Courses: [{draft_str}]
+
+Generate exactly 4 logical, progressive "next-step" or advanced learning topic suggestions that the user might want to create next.
+Rules:
+1. Ensure the suggestions represent a logical progression, a more advanced level, or a closely related sequel topic (e.g. if they built "Python Programming", suggest "Intermediate Python", "Data Analysis with Python", or "Introduction to Django").
+2. The suggestions must NOT duplicate any existing completed or draft courses.
+3. Keep each suggestion short and clean (2 to 5 words).
+4. Output your response as a valid JSON object with a single key "suggestions" containing a list of exactly 4 strings.
+"""
+    try:
+        response = client.chat.completions.create(
+            model=LLM_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": 'You are a helpful assistant. You must respond with a JSON object containing a "suggestions" list of exactly 4 strings, matching the schema: {"suggestions": ["Topic A", "Topic B", "Topic C", "Topic D"]}'
+                },
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            response_format={"type": "json_object"}
+        )
+        content = response.choices[0].message.content.strip()
+        data = json.loads(content)
+        if isinstance(data, dict) and "suggestions" in data:
+            return [str(item) for item in data["suggestions"][:4]]
+    except Exception as e:
+        logger.error(f"Error generating dynamic topic suggestions: {e}")
+        
+    # Final fallback if something goes wrong
+    return ["Python Programming", "English Grammar", "Digital Marketing", "Machine Learning"]
+

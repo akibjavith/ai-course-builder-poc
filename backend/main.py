@@ -1160,7 +1160,7 @@ Expected JSON output format exactly:
                 is_requesting_topic_change = True
                 
         if has_existing_structure and not is_topic_confirm and not is_topic_cancel:
-            if any(w in lowercase_msg for w in ["change topic", "change the topic", "different topic", "another topic", "edit topic", "choose topic", "edit subject", "change subject"]):
+            if ("edit" in lowercase_msg or "change" in lowercase_msg or "choose" in lowercase_msg or "different" in lowercase_msg or "another" in lowercase_msg) and ("topic" in lowercase_msg or "subject" in lowercase_msg):
                 is_requesting_topic_change = True
                 
         if is_requesting_topic_change:
@@ -1179,7 +1179,7 @@ Expected JSON output format exactly:
                 "reply": reply,
                 "quickReplies": ["Yes, change topic", "Cancel"],
                 "metadata": meta,
-                "type": "details_card"
+                "type": "details"
             })
 
         # Stage 1: Run NLU Slot Extraction
@@ -1253,7 +1253,7 @@ Expected JSON output format exactly:
                     "pending_details_change": "true",
                     **updated_slots
                 },
-                "type": "details_card"
+                "type": "details"
             })
 
         if is_structure_regenerate:
@@ -1266,7 +1266,33 @@ Expected JSON output format exactly:
                 next_step = "CONFIRM_GENERATE"
 
         # Stage 3: Dynamic NLG Prompt Generation
-        system_prompt = build_builder_system_prompt(next_step, updated_slots, validation_error)
+        published_names = []
+        try:
+            from database import get_courses_from_mysql
+            courses = get_courses_from_mysql()
+            for c in courses:
+                if c.get("details", {}).get("courseName"):
+                    published_names.append(c["details"]["courseName"])
+        except Exception as e:
+            logger.error(f"Error fetching existing courses for dynamic suggestions: {e}")
+
+        draft_names = []
+        try:
+            from database import get_chatbot_drafts
+            drafts = get_chatbot_drafts()
+            for d in drafts:
+                if d.get("course_name"):
+                    draft_names.append(d["course_name"])
+        except Exception as e:
+            logger.error(f"Error fetching drafts for dynamic suggestions: {e}")
+
+        system_prompt = build_builder_system_prompt(
+            next_step, 
+            updated_slots, 
+            validation_error, 
+            existing_courses=published_names, 
+            existing_drafts=draft_names
+        )
 
         cleaned_history = reinject_quick_replies_into_history(req.messages, updated_slots)
 
@@ -1312,7 +1338,8 @@ Expected JSON output format exactly:
             is_programming = any(x in topic_lower for x in ["python", "java", "c++", "coding", "program", "developer", "react", "javascript", "typescript", "sql", "backend", "frontend", "software", "git", "c#", "html", "css", "database", "node", "express"])
             
             if next_step == "ASK_TOPIC":
-                quick_replies = ["Python Programming", "English Grammar", "Digital Marketing", "Machine Learning"]
+                from chatbot_builder_service import generate_dynamic_topic_suggestions
+                quick_replies = generate_dynamic_topic_suggestions(published_names, draft_names)
             elif next_step == "ASK_GOAL":
                 quick_replies = ["Build a Web App", "Automate Excel Tasks", "Data Analysis & AI", "Get a Developer Job"]
             elif next_step == "ASK_LEVEL":
@@ -1432,7 +1459,7 @@ Expected JSON output format exactly:
                 metadata["next_step"] = "OUTLINE_EDIT"
                 metadata["modules"] = current_structure_modules
         else:
-            if next_step in ["CONFIRM_DETAILS", "EDIT_DETAILS_CHOICE"]:
+            if next_step == "CONFIRM_DETAILS":
                 type_val = "details_card"
             else:
                 type_val = "details"
@@ -1449,7 +1476,7 @@ Expected JSON output format exactly:
 
             # Enforce details type and strip pre-generated modules when in details questionnaire steps
             if next_step in ["CONFIRM_DETAILS", "EDIT_DETAILS_CHOICE", "ASK_TOPIC", "ASK_GOAL", "ASK_LEVEL", "ASK_STYLE", "ASK_DURATION"]:
-                type_val = "details_card" if next_step in ["CONFIRM_DETAILS", "EDIT_DETAILS_CHOICE"] else "details"
+                type_val = "details_card" if next_step == "CONFIRM_DETAILS" else "details"
                 if isinstance(metadata, dict):
                     metadata.pop("modules", None)
 
@@ -1777,6 +1804,42 @@ def api_rename_chatbot_draft(draft_id: str, req: RenameDraftRequest):
     except Exception as e:
         logger.error(f"Error renaming chatbot draft {draft_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# Suggest learning topics dynamically based on history
+@app.get("/course/chatbot-builder/suggest-topics")
+def api_suggest_topics():
+    try:
+        from database import get_courses_from_mysql, get_chatbot_drafts
+        from chatbot_builder_service import generate_dynamic_topic_suggestions
+        
+        # 1. Fetch published courses names
+        published_names = []
+        try:
+            courses = get_courses_from_mysql()
+            for c in courses:
+                if c.get("details", {}).get("courseName"):
+                    published_names.append(c["details"]["courseName"])
+        except Exception as e:
+            logger.error(f"Error fetching existing courses for dynamic suggestions: {e}")
+            
+        # 2. Fetch draft names
+        draft_names = []
+        try:
+            drafts = get_chatbot_drafts()
+            for d in drafts:
+                if d.get("course_name"):
+                    draft_names.append(d["course_name"])
+        except Exception as e:
+            logger.error(f"Error fetching drafts for dynamic suggestions: {e}")
+            
+        # 3. Generate suggestions
+        suggestions = generate_dynamic_topic_suggestions(published_names, draft_names)
+        return {"status": "success", "topics": suggestions}
+    except Exception as e:
+        logger.error(f"Error suggesting topics: {e}")
+        # Default safety fallback
+        return {"status": "success", "topics": ["Python Programming", "English Grammar", "Digital Marketing", "Machine Learning"]}
+
 
 
 

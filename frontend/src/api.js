@@ -231,6 +231,12 @@ export const cancelBgGeneration = async (draftId) => {
   return response.data;
 };
 
+export const getSuggestedTopics = async () => {
+  const response = await axios.get(`${API_URL}/course/chatbot-builder/suggest-topics`);
+  return response.data;
+};
+
+
 
 
 

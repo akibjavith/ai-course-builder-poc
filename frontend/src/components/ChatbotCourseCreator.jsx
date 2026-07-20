@@ -7,7 +7,7 @@ import {
   RotateCcw, X, Search, Bell, Info, Plus, PanelLeft, Edit,
   Pause, Play
 } from 'lucide-react';
-import { chatWithChatbotBuilder, createCourse, uploadDoc, generateLessonContent, saveChatbotDraft, getChatbotDrafts, getChatbotDraft, deleteChatbotDraft, renameChatbotDraft, getSubjects, getCourseById, generateStructure, startBgGeneration, getBgGenerationStatus, cancelBgGeneration } from '../api';
+import { chatWithChatbotBuilder, createCourse, uploadDoc, generateLessonContent, saveChatbotDraft, getChatbotDrafts, getChatbotDraft, deleteChatbotDraft, renameChatbotDraft, getSubjects, getCourseById, generateStructure, startBgGeneration, getBgGenerationStatus, cancelBgGeneration, getSuggestedTopics } from '../api';
 import logo from '../assets/logo.png';
 import LessonPreviewEditorModal from './LessonPreviewEditorModal';
 
@@ -23,6 +23,52 @@ const STEPS = [
   { id: 'OUTLINE_EDIT', label: 'Outline', icon: Layers },
   { id: 'READY', label: 'Publish', icon: CheckCircle }
 ];
+
+const getElaboratedSentence = (reply) => {
+  const mapping = {
+    "edit outline": "I would like to edit the course outline.",
+    "confirm outline": "I confirm the outline looks good. Let's proceed.",
+    "reduce modules": "I would like to reduce the number of modules in the outline.",
+    "add new module": "I would like to add a new module to the outline.",
+    "rename modules/chapters": "I want to rename some modules or chapters.",
+    "edit topic": "I would like to edit the course topic.",
+    "edit learning goal": "I would like to edit the learning goal.",
+    "edit difficulty level": "I would like to change the difficulty level.",
+    "edit learning style": "I want to change the learning style.",
+    "edit duration": "I want to edit the course duration.",
+    "yes, start again": "Yes, please start generating the course content again.",
+    "yes start again": "Yes, please start generating the course content again.",
+    "no, go back to outline": "No, let's go back to the course outline.",
+    "no go back to outline": "No, let's go back to the course outline.",
+    "yes, generate modules!": "Yes, please generate the course modules!",
+    "yes generate modules!": "Yes, please generate the course modules!",
+    "go back": "Please go back to the previous step.",
+    "confirm details & proceed": "I confirm all details are correct. Let's proceed to generate the course skeleton.",
+    "confirm details and proceed": "I confirm all details are correct. Let's proceed to generate the course skeleton.",
+    "change topic": "I would like to change the course topic.",
+    "change duration": "I would like to adjust the course duration.",
+    "change level": "I want to change the difficulty level.",
+    "yes, generate content": "Yes, please generate the course content.",
+    "yes generate content": "Yes, please generate the course content.",
+    "reduce by 1 module": "Please reduce the outline by 1 module.",
+    "reduce by 2 modules": "Please reduce the outline by 2 modules.",
+    "your choice (reduce by 2)": "Please reduce the outline by 2 modules of your choice.",
+    "your choice": "Please make a choice for me.",
+    "add specific topic": "I would like to add a specific topic to the outline.",
+    "reorder modules": "I want to reorder some of the modules.",
+  };
+
+  const key = reply.trim().toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
+  if (mapping[reply.trim().toLowerCase()]) {
+    return mapping[reply.trim().toLowerCase()];
+  }
+  const cleanKey = reply.trim().toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
+  if (mapping[cleanKey]) {
+    return mapping[cleanKey];
+  }
+  return reply;
+};
+
 
 export default function ChatbotCourseCreator({ onClose }) {
   // States
@@ -227,15 +273,68 @@ export default function ChatbotCourseCreator({ onClose }) {
     }
   };
 
+  const fetchDynamicSuggestions = async () => {
+    try {
+      const res = await getSuggestedTopics();
+      if (res && res.status === 'success' && Array.isArray(res.topics)) {
+        setQuickReplies(res.topics);
+      }
+    } catch (err) {
+      console.error("Failed to fetch suggested topics", err);
+    }
+  };
+
+  const setQuickRepliesForStep = async (step, currentCourseData) => {
+    const details = currentCourseData?.details || {};
+    const topic = details.topic || details.subject || details.courseName || '';
+    const topicLower = topic.toLowerCase();
+    const isProgramming = ['python', 'java', 'c++', 'coding', 'program', 'developer', 'react', 'javascript', 'typescript', 'sql', 'backend', 'frontend', 'software', 'git', 'c#', 'html', 'css', 'database', 'node', 'express'].some(x => topicLower.includes(x));
+
+    if (step === 'ASK_TOPIC') {
+      await fetchDynamicSuggestions();
+    } else if (step === 'ASK_GOAL') {
+      const goals = getObjectiveSuggestions(topic);
+      setQuickReplies(goals);
+    } else if (step === 'ASK_LEVEL') {
+      setQuickReplies(["Complete Beginner / Start Fresh", "Intermediate / Some experience", "Advanced / Deep Dive"]);
+    } else if (step === 'ASK_STYLE') {
+      if (isProgramming) {
+        setQuickReplies(["Hands-on Coding", "Interactive Quizzes", "Detailed Explanations", "Balanced Combination"]);
+      } else {
+        setQuickReplies(["Detailed Explanations", "Interactive Quizzes", "Structured Tables", "Balanced Combination"]);
+      }
+    } else if (step === 'ASK_DURATION') {
+      setQuickReplies(["1 Hour", "2 Hours", "5 Hours", "10 Hours", "15 Hours", "20 Hours"]);
+    } else if (step === 'CONFIRM_DETAILS') {
+      setQuickReplies(["Confirm details & proceed", "Change topic", "Change duration", "Change level"]);
+    } else if (step === 'EDIT_DETAILS_CHOICE') {
+      setQuickReplies(["Edit Topic", "Edit Learning Goal", "Edit Difficulty Level", "Edit Learning Style", "Edit Duration"]);
+    } else if (step === 'ASK_GENERATE_SKELETON') {
+      setQuickReplies(["Yes, generate modules!", "Go back"]);
+    } else if (step === 'OUTLINE_EDIT') {
+      setQuickReplies(["Confirm Outline", "Reduce modules", "Add new module", "Rename modules/chapters"]);
+    } else if (step === 'CONFIRM_GENERATE') {
+      setQuickReplies(["Generate Course Content", "Go back to outline"]);
+    } else if (step === 'READY') {
+      setQuickReplies(["Yes, start again", "No, go back to outline"]);
+    } else {
+      setQuickReplies([]);
+    }
+  };
+
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlDraftId = params.get('draftId');
     if (urlDraftId) {
       loadSpecificDraft(urlDraftId);
+    } else {
+      fetchDynamicSuggestions();
     }
     fetchDraftsList();
     loadDbSubjects();
   }, []);
+
 
   // Auto-save active draft to MySQL DB when state updates
   useEffect(() => {
@@ -510,7 +609,7 @@ export default function ChatbotCourseCreator({ onClose }) {
     }
   };
 
-  const handleSendMessage = async (textToSend, overrideStep = null, overrideCourseData = null) => {
+  const handleSendMessage = async (textToSend, overrideStep = null, overrideCourseData = null, displayedText = null) => {
     if (!textToSend || !textToSend.trim()) return;
     if (loading || isBatchGenerating) return;
 
@@ -558,7 +657,7 @@ export default function ChatbotCourseCreator({ onClose }) {
         } else {
           const userMsg = {
             role: 'user',
-            content: textToSend,
+            content: displayedText || textToSend,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           };
           setMessages(prev => [...prev, userMsg]);
@@ -621,7 +720,7 @@ export default function ChatbotCourseCreator({ onClose }) {
         if (wantsGenerate) {
           const userMsg = {
             role: 'user',
-            content: textToSend,
+            content: displayedText || textToSend,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           };
           setMessages(prev => [...prev, userMsg]);
@@ -639,7 +738,7 @@ export default function ChatbotCourseCreator({ onClose }) {
       }
     }
 
-    let finalMessageText = textToSend;
+    let finalMessageText = displayedText || textToSend;
 
     if (!started) {
       setStarted(true);
@@ -1084,6 +1183,7 @@ export default function ChatbotCourseCreator({ onClose }) {
           quiz: []
         });
         setCurrentStep(d.currentStep || 'ASK_TOPIC');
+        setQuickRepliesForStep(d.currentStep || 'ASK_TOPIC', d.courseData);
         setStarted(true);
         if (d.courseData?.details) {
           setActiveCardDetails({ ...d.courseData.details, price: "0" });
@@ -1179,7 +1279,7 @@ export default function ChatbotCourseCreator({ onClose }) {
     });
     setStarted(false);
     setCurrentStep('ASK_TOPIC');
-    setQuickReplies([]);
+    fetchDynamicSuggestions();
     setActiveCardDetails(null);
     setAttachedFile(null);
     setGenerationStatus('idle');
@@ -2324,6 +2424,22 @@ export default function ChatbotCourseCreator({ onClose }) {
               </div>
             </div>
 
+            {quickReplies.length > 0 && (
+              <div className="flex flex-wrap gap-2 justify-center max-w-2xl mt-4 animate-fade-in">
+                <span className="text-[10px] text-slate-400 uppercase tracking-widest font-black block w-full text-center mb-1">Suggested Topics:</span>
+                {quickReplies.map((reply, index) => (
+                  <button
+                    key={index}
+                    onClick={() => handleSendMessage(reply, null, null, getElaboratedSentence(reply))}
+                    className="bg-white/80 hover:bg-indigo-50 text-indigo-600 hover:text-indigo-805 border border-slate-200/80 hover:border-indigo-300 px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-sm transition active:scale-95"
+                  >
+                    {reply}
+                  </button>
+                ))}
+              </div>
+            )}
+
+
             {/* Native file upload input hook */}
             <input 
               type="file" 
@@ -2649,7 +2765,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                   {quickReplies.map((reply, index) => (
                     <button
                        key={index}
-                       onClick={() => handleSendMessage(reply)}
+                       onClick={() => handleSendMessage(reply, null, null, getElaboratedSentence(reply))}
                        className="bg-white/90 hover:bg-indigo-50 text-indigo-600 hover:text-indigo-800 border border-slate-200/80 hover:border-indigo-300 px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-sm transition active:scale-95"
                     >
                       {reply}
