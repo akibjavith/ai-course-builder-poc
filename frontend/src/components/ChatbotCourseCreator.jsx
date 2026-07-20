@@ -28,9 +28,12 @@ const getElaboratedSentence = (reply) => {
   const mapping = {
     "edit outline": "I would like to edit the course outline.",
     "confirm outline": "I confirm the outline looks good. Let's proceed.",
-    "reduce modules": "I would like to reduce the number of modules in the outline.",
-    "add new module": "I would like to add a new module to the outline.",
+    "reduce modules": "I would like to reduce one module from the outline.",
+    "reduce one module": "I would like to reduce one module from the outline.",
+    "add new module": "I would like to add one module to the outline.",
+    "add one module": "I would like to add one module to the outline.",
     "rename modules/chapters": "I want to rename some modules or chapters.",
+    "edit details": "I would like to edit the course details.",
     "edit topic": "I would like to edit the course topic.",
     "edit learning goal": "I would like to edit the learning goal.",
     "edit difficulty level": "I would like to change the difficulty level.",
@@ -738,7 +741,7 @@ export default function ChatbotCourseCreator({ onClose }) {
       }
     }
 
-    let finalMessageText = displayedText || textToSend;
+    let finalMessageText = displayedText || getElaboratedSentence(textToSend);
 
     if (!started) {
       setStarted(true);

@@ -405,7 +405,7 @@ GLOBAL RULES:
    - For ASK_DURATION: Suggest hour limits: ["1 Hour", "2 Hours", "5 Hours", "10 Hours", "15 Hours", "20 Hours"].
    - For CONFIRM_DETAILS: Suggest confirmation: ["Confirm details & proceed", "Change topic", "Change duration", "Change level"].
    - For ASK_GENERATE_SKELETON: Suggest: ["Yes, generate modules!", "Go back"].
-   - For OUTLINE_EDIT: Suggest: ["Looks good! Proceed to content", "Reduce modules", "Add new module", "Rename modules/chapters"].
+   - For OUTLINE_EDIT: Suggest: ["Looks good! Proceed to content", "Reduce one module", "Add one module", "Rename modules/chapters"].
    - For CONFIRM_GENERATE: Suggest: ["Generate Course Content", "Go back to outline"].
 
  6. CONCISENESS & NO RECAPS: Keep your conversational responses extremely brief, clean, and direct. Do NOT repeat, recap, list, confirm, or summarize the user's previous answers or course requirements (like Topic, Goal, Level, Style, Duration) in your conversational text under any circumstances. Never output a text-based bullet summary of the requirements. Keep the recap strictly to the interactive Details card, and output only the direct conversational question/response in text.
@@ -413,6 +413,7 @@ GLOBAL RULES:
 8. LANGUAGE: Do NOT ask any questions about language. Language is always English.
 9. NO EARLY ROADMAP GENERATION: Do NOT generate or list the course outline modules, chapters, or syllabus structure in your conversational text at any point during the questionnaire phase (ASK_TOPIC, ASK_GOAL, ASK_LEVEL, ASK_STYLE, ASK_DURATION, CONFIRM_DETAILS). Only answer the user, ask the corresponding slot question, or recap details. You will generate the outline structure only when you transition to the OUTLINE_EDIT step.
 10. NEVER CONFIRM OR LIST SLOTS IN TEXT: Under no circumstances should you list or print the course details (such as "Topic: ...", "Difficulty: ...", "Duration: ...") as text in your conversational response. This includes confirming updated values when details are edited. Do NOT repeat or print them back to the user. Simply state that you have updated or saved the details, and prompt them to confirm or proceed, relying entirely on the visual Details suggestion card to show the current values.
+11. NO TEXT SUGGESTION LISTS: Under NO circumstances should you list, print, bullet-point, or introduce quick reply suggestion options in your conversational text output (e.g. NEVER output "Here are some options to consider:", "Build a Web App", etc. in your message text). Keep all suggestion options strictly inside the [quick_replies] block at the end.
 """
 
     state_instructions = ""

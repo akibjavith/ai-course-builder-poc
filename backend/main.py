@@ -700,7 +700,7 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                 return {
                     "status": "success",
                     "reply": "Here is your course outline. You can rename, add, or remove modules, or click 'Confirm Outline' to proceed.",
-                    "quickReplies": ["Confirm Outline", "Reduce modules", "Add new module", "Rename modules/chapters"],
+                    "quickReplies": ["Confirm Outline", "Reduce one module", "Add one module", "Rename modules/chapters"],
                     "metadata": meta,
                     "type": "structure"
                 }
@@ -733,7 +733,7 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
             return JSONResponse({
                 "status": "success",
                 "reply": "Here is your course outline. You can rename, add, or remove modules, or click 'Confirm Outline' to proceed.",
-                "quickReplies": ["Confirm Outline", "Reduce modules", "Add new module", "Rename modules/chapters"],
+                "quickReplies": ["Confirm Outline", "Reduce one module", "Add one module", "Rename modules/chapters"],
                 "metadata": meta,
                 "type": "structure"
             })
@@ -788,9 +788,11 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                 "type": "details"
             })
 
-        # No clarifying redirect since we directly edit the outline without asking questions
+        # Only trigger JSON mode outline modification if user specified an active edit action
         if not is_confirmation and not is_details_redirect:
-            if lowercase_msg.strip() != "edit outline":
+            generic_outline_phrases = ["edit outline", "i would like to edit the course outline.", "i would like to edit the outline.", "edit the outline", "edit syllabus", "modify outline"]
+            is_generic_edit_request = lowercase_msg.strip() in generic_outline_phrases or (has_structure_noun and not has_action_verb and has_edit_verb)
+            if not is_generic_edit_request:
                 is_outline_edit_req = True
 
     if is_outline_edit_req:
@@ -894,21 +896,23 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                     lowercase_msg = user_message.lower()
                     
             elif is_reduce_req:
-                if count is None:
-                    count = 1
-                    
-                is_reduce_to = "to " in lowercase_msg or "reduce to" in lowercase_msg
-                if is_reduce_to:
-                    target_count = max(0, count)
+                is_reduce_one = any(phrase in lowercase_msg for phrase in ["reduce one module", "reduce 1 module", "remove one module", "delete one module", "reduce a module", "reduce 1"]) or count == 1
+                is_reduce_to = ("reduce to" in lowercase_msg or "down to" in lowercase_msg) and ("reduce to " in lowercase_msg or "down to " in lowercase_msg or re.search(r'\breduce\s+(it\s+)?to\b', lowercase_msg) is not None)
+                
+                if is_reduce_one and not is_reduce_to:
+                    diff = 1
+                    target_count = max(1, current_count - 1)
+                elif is_reduce_to:
+                    target_count = max(0, count if count is not None else 1)
                     diff = max(0, current_count - target_count)
                 else:
-                    diff = count
+                    diff = count if count is not None else 1
                     target_count = max(0, current_count - diff)
                     
                 if target_count == current_count:
                     return JSONResponse({
                         "status": "success",
-                        "reply": f"The course outline already contains exactly {current_count} modules. I cannot reduce it to {target_count}.",
+                        "reply": f"The course outline already contains exactly {current_count} modules. I cannot reduce it further.",
                         "metadata": {
                             "next_step": "OUTLINE_EDIT"
                         },
@@ -924,7 +928,7 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                         "type": "details"
                     })
                 else:
-                    user_message = f"Reduce exactly {diff} modules of your choice from the outline. The final outline MUST contain exactly {target_count} modules."
+                    user_message = f"Remove EXACTLY {diff} module(s) of your choice from the outline. The final output 'modules' JSON array MUST contain EXACTLY {target_count} items. Keep {target_count} modules."
                     lowercase_msg = user_message.lower()
 
             # 1. Programmatic Shuffle Interceptor (only for random shuffle requests)
@@ -1021,7 +1025,7 @@ Expected JSON output format exactly:
             return {
                 "status": "success",
                 "reply": "Here is the updated course structure outline. Please take a moment to review it. Would you like to make any further modifications, or are you happy with this outline?",
-                "quickReplies": ["Confirm Outline", "Reduce modules", "Add new module", "Rename modules/chapters"],
+                "quickReplies": ["Confirm Outline", "Reduce one module", "Add one module", "Rename modules/chapters"],
                 "metadata": structure_json,
                 "type": "structure"
             }
@@ -1128,11 +1132,12 @@ Expected JSON output format exactly:
                 })
 
         pending_topic = details.get("pending_topic")
-        if is_topic_confirm and pending_topic:
-            if pending_topic == "CLEAR":
-                current_slots["topic"] = None
-            else:
-                current_slots["topic"] = pending_topic
+        if is_topic_confirm:
+            if pending_topic:
+                if pending_topic == "CLEAR":
+                    current_slots["topic"] = None
+                else:
+                    current_slots["topic"] = pending_topic
             
             # Clear all other details slots to force re-answering them
             current_slots["learningGoal"] = ""
@@ -1145,8 +1150,13 @@ Expected JSON output format exactly:
             req.courseData["content"] = []
             clear_course_data_flag = True
 
+            # Programmatically trim prior history so LLM doesn't see old topic session
+            if req.messages:
+                req.messages = [m for m in req.messages if m.get("role") == "user"][-1:]
+
         # Check if topic change request is triggered
         has_existing_structure = len(req.courseData.get("structure", {}).get("modules", [])) > 0
+        has_existing_course = bool(current_slots.get("topic")) or has_existing_structure
         is_requesting_topic_change = False
         
         # Temp NLU run to see if they specified a new topic in message
@@ -1156,11 +1166,11 @@ Expected JSON output format exactly:
         new_topic_temp = temp_updated.get("topic")
         
         if old_topic_temp and new_topic_temp and str(old_topic_temp).lower().strip() != str(new_topic_temp).lower().strip():
-            if has_existing_structure and not is_topic_confirm and not is_topic_cancel:
+            if has_existing_course and not is_topic_confirm and not is_topic_cancel:
                 is_requesting_topic_change = True
                 
-        if has_existing_structure and not is_topic_confirm and not is_topic_cancel:
-            if ("edit" in lowercase_msg or "change" in lowercase_msg or "choose" in lowercase_msg or "different" in lowercase_msg or "another" in lowercase_msg) and ("topic" in lowercase_msg or "subject" in lowercase_msg):
+        if has_existing_course and not is_topic_confirm and not is_topic_cancel:
+            if ("edit" in lowercase_msg or "change" in lowercase_msg or "choose" in lowercase_msg or "different" in lowercase_msg or "another" in lowercase_msg or "adjust" in lowercase_msg or "modify" in lowercase_msg or "update" in lowercase_msg) and ("topic" in lowercase_msg or "subject" in lowercase_msg):
                 is_requesting_topic_change = True
                 
         if is_requesting_topic_change:
@@ -1362,15 +1372,15 @@ Expected JSON output format exactly:
             elif next_step == "ASK_ADD_TOPIC":
                 quick_replies = ["Your choice", "Add specific topic"]
             elif next_step == "OUTLINE_EDIT":
-                quick_replies = ["Confirm Outline", "Reduce modules", "Add new module", "Rename modules/chapters"]
+                quick_replies = ["Confirm Outline", "Reduce one module", "Add one module", "Rename modules/chapters"]
                 current_modules = req.courseData.get("structure", {}).get("modules", [])
                 if len(current_modules) <= 1:
-                    quick_replies = ["Confirm Outline", "Add new module", "Rename modules/chapters"]
+                    quick_replies = ["Confirm Outline", "Add one module", "Rename modules/chapters"]
             elif next_step == "EDIT_OUTLINE_CHOICE":
-                quick_replies = ["Reduce modules", "Add new module", "Rename modules/chapters", "Reorder modules"]
+                quick_replies = ["Reduce one module", "Add one module", "Rename modules/chapters", "Reorder modules"]
                 current_modules = req.courseData.get("structure", {}).get("modules", [])
                 if len(current_modules) <= 1:
-                    quick_replies = ["Add new module", "Rename modules/chapters", "Reorder modules"]
+                    quick_replies = ["Add one module", "Rename modules/chapters", "Reorder modules"]
             elif next_step == "CONFIRM_GENERATE":
                 quick_replies = ["Yes, generate content", "No, go back to outline"]
 
@@ -1429,8 +1439,8 @@ Expected JSON output format exactly:
                         details_changed = True
 
             current_structure_modules = req.courseData.get("structure", {}).get("modules", [])
-            if details_changed:
-                logger.info("Course details changed by user. Discarding old outline structure for regeneration.")
+            if details_changed or clear_course_data_flag or req.currentStep in ["CONFIRM_DETAILS", "EDIT_DETAILS_CHOICE"]:
+                logger.info("Transitioning into outline from details confirmation. Discarding old outline structure for fresh generation.")
                 current_structure_modules = []
                 
             if not current_structure_modules:
@@ -1474,8 +1484,8 @@ Expected JSON output format exactly:
                     **updated_slots
                 }
 
-            # Enforce details type and strip pre-generated modules when in details questionnaire steps
-            if next_step in ["CONFIRM_DETAILS", "EDIT_DETAILS_CHOICE", "ASK_TOPIC", "ASK_GOAL", "ASK_LEVEL", "ASK_STYLE", "ASK_DURATION"]:
+            # Enforce details type and strip pre-generated modules when in details/edit questionnaire steps
+            if next_step in ["CONFIRM_DETAILS", "EDIT_DETAILS_CHOICE", "EDIT_OUTLINE_CHOICE", "ASK_TOPIC", "ASK_GOAL", "ASK_LEVEL", "ASK_STYLE", "ASK_DURATION"]:
                 type_val = "details_card" if next_step == "CONFIRM_DETAILS" else "details"
                 if isinstance(metadata, dict):
                     metadata.pop("modules", None)
