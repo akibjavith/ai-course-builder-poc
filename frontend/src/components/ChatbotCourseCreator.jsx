@@ -652,69 +652,7 @@ export default function ChatbotCourseCreator({ onClose }) {
     let nextCourseData = { ...courseData };
 
     if (!overrideStep) {
-      if (currentStep === 'ASK_GENERATE_SKELETON') {
-        const lowercaseMsg = textToSend.toLowerCase();
-        const wantsGoBack = lowercaseMsg.includes("back") || lowercaseMsg.includes("no") || lowercaseMsg.includes("change") || lowercaseMsg.includes("edit");
-        if (wantsGoBack) {
-          nextStepToUse = 'ASK_GENERATE_SKELETON';
-        } else {
-          const userMsg = {
-            role: 'user',
-            content: displayedText || textToSend,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          };
-          setMessages(prev => [...prev, userMsg]);
-          setInputMessage('');
-        setLoading(true);
-        setQuickReplies([]);
-        try {
-          const details = nextCourseData.details || {};
-          const safeDetails = {
-            courseType: details.courseType || 'Custom Course',
-            subject: details.subject || details.courseName || 'General',
-            courseName: details.courseName || details.subject || 'Custom Course',
-            description: details.description || details.goal || 'Learn the subject',
-            price: details.price || '0',
-            duration: String(details.duration || '5'),
-            requirements: details.requirements || '',
-            level: details.level || 'beginner',
-            language: details.language || 'English',
-            scriptingLanguage: details.scriptingLanguage || 'NA',
-            evaluator: details.evaluator || ''
-          };
-          const structureRes = await generateStructure('external', safeDetails);
-          const rawModules = structureRes?.data?.modules || structureRes?.modules;
-          if (rawModules && rawModules.length > 0) {
-            const normalizedModules = rawModules.map(m => {
-              if (!m) return null;
-              const normalizedChapters = (m.chapters || []).map(c => {
-                if (!c) return null;
-                return { ...c, contents: c.contents || [], content: c.content || { content_type: 'html', html_content: '', completed: false } };
-              }).filter(Boolean);
-              return { ...m, chapters: normalizedChapters };
-            }).filter(Boolean);
-            const flatChapters = [];
-            normalizedModules.forEach(m => m.chapters?.forEach(c => flatChapters.push({ module: m.title || '', title: c.title || '' })));
-            setMessages(prev => [...prev, {
-              role: 'assistant',
-              content: 'Here is your personalized learning roadmap outline. Do you have anything to change in this, or would you like to add any modules?',
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              metadata: { next_step: 'OUTLINE_EDIT', modules: normalizedModules },
-              metadataType: 'structure'
-            }]);
-            setCurrentStep('OUTLINE_EDIT');
-            setCourseData(prev => ({
-              ...prev,
-              structure: { modules: normalizedModules },
-              content: flatChapters.map(fc => ({ module_title: fc.module, chapter_title: fc.title, contents: [] }))
-            }));
-          }
-        } catch (e) { console.error('Structure fallback error:', e); }
-        finally { setLoading(false); }
-        return;
-      }
-
-      } else if (currentStep === 'OUTLINE_EDIT') {
+      if (currentStep === 'OUTLINE_EDIT') {
         // In OUTLINE_EDIT, the user edits/refines. Confirming the outline card moves to CONFIRM_GENERATE.
         nextStepToUse = 'OUTLINE_EDIT';
       } else if (currentStep === 'CONFIRM_GENERATE') {

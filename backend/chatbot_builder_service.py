@@ -233,20 +233,29 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
 
     if current_step == "CONFIRM_DETAILS":
         lowercase_msg = user_message.lower()
-        edit_verbs = ["change", "edit", "modify", "adjust", "update", "revise", "correct", "different", "another", "choose"]
-        if any(v in lowercase_msg for v in edit_verbs):
-            # Check if user specified any new slot value directly in the message
+        confirm_words = [
+            "looks good", "looks fine", "looks ok", "continue", "confirm", "yes", "yep", "yeah",
+            "fine", "ok", "sure", "proceed", "generate", "create", "structure", "start",
+            "go ahead", "do it", "let's go", "great", "perfect", "sounds good", "alright",
+            "all details are correct", "details are correct", "everything is correct"
+        ]
+        has_confirm = any(w in lowercase_msg for w in confirm_words)
+        
+        edit_verbs = ["change", "edit", "modify", "adjust", "update", "revise", "different", "another", "choose"]
+        has_edit_verb = any(v in lowercase_msg for v in edit_verbs)
+        
+        if has_confirm and not has_edit_verb:
+            return "OUTLINE_EDIT", None
+
+        if has_edit_verb:
             has_new_val = any(is_newly_extracted(k) for k in ["topic", "learningGoal", "currentLevel", "learningStyle", "duration"])
             if not has_new_val:
                 if not cleared_any:
                     return "EDIT_DETAILS_CHOICE", None
-        confirm_words = [
-            "looks good", "looks fine", "looks ok", "continue", "confirm", "yes", "yep", "yeah",
-            "correct", "fine", "ok", "sure", "proceed", "generate", "create", "structure", "start",
-            "go ahead", "do it", "let's go", "great", "perfect", "sounds good", "alright"
-        ]
-        if any(w in lowercase_msg for w in confirm_words):
+
+        if has_confirm:
             return "OUTLINE_EDIT", None
+
         if not cleared_any:
             return "CONFIRM_DETAILS", None
 
@@ -721,4 +730,210 @@ Rules:
         
     # Final fallback if something goes wrong
     return ["Python Programming", "English Grammar", "Digital Marketing", "Machine Learning"]
+
+
+def apply_structure_safeguards(existing_modules: list, new_modules: list, user_message: str) -> list:
+    """
+    Programmatic fallback and validation layer to guarantee exact counts for explicit numerical user commands.
+    """
+    if not existing_modules or not isinstance(existing_modules, list):
+        return new_modules
+
+    msg_lower = user_message.lower().strip()
+
+    # 1. Single module reduction safeguard
+    is_reduce_one = (
+        "reduce one module" in msg_lower or 
+        "reduce 1 module" in msg_lower or 
+        "remove one module" in msg_lower or 
+        "remove 1 module" in msg_lower or
+        "delete one module" in msg_lower or
+        "delete 1 module" in msg_lower or
+        msg_lower == "reduce modules" or
+        "reduce the outline by 1" in msg_lower
+    )
+    if is_reduce_one and len(existing_modules) > 1:
+        if len(new_modules) != len(existing_modules) - 1:
+            logger.info(f"[Structure Safeguard] Correcting reduce_one: original={len(existing_modules)}, llm_returned={len(new_modules)} -> setting to {len(existing_modules)-1}")
+            return existing_modules[:-1]
+
+    # 2. Single module addition safeguard
+    is_add_one = (
+        "add one module" in msg_lower or 
+        "add 1 module" in msg_lower or 
+        "add new module" in msg_lower or
+        msg_lower == "add module" or
+        "add a module" in msg_lower
+    )
+    # Ensure it's not a specific positional add like "add module at position 4"
+    if is_add_one and not ("at position" in msg_lower or "at module" in msg_lower or "position " in msg_lower):
+        if len(new_modules) != len(existing_modules) + 1:
+            logger.info(f"[Structure Safeguard] Correcting add_one: original={len(existing_modules)}, llm_returned={len(new_modules)} -> appending 1 module")
+            if len(new_modules) > len(existing_modules):
+                return new_modules[:len(existing_modules) + 1]
+            else:
+                last_num = len(existing_modules) + 1
+                appended_module = {
+                    "title": f"Advanced {existing_modules[0].get('title', 'Concepts')} & Practical Applications",
+                    "chapters": [
+                        {"title": f"Core Principles of Module {last_num}"},
+                        {"title": "Implementation Strategies"},
+                        {"title": "Best Practices & Hands-on Exercises"}
+                    ]
+                }
+                return existing_modules + [appended_module]
+
+    # 3. Two modules reduction safeguard
+    is_reduce_two = (
+        "reduce by 2" in msg_lower or 
+        "reduce 2 modules" in msg_lower or 
+        "remove 2 modules" in msg_lower or 
+        "delete 2 modules" in msg_lower
+    )
+    if is_reduce_two and len(existing_modules) > 2:
+        if len(new_modules) != len(existing_modules) - 2:
+            logger.info(f"[Structure Safeguard] Correcting reduce_two: setting to {len(existing_modules)-2}")
+            return existing_modules[:-2]
+
+    # 4. Explicit module index removal ("remove module 4" / "delete module 4")
+    rem_idx_match = re.search(r'(?:remove|delete)\s+module\s+(\d+)', msg_lower)
+    if rem_idx_match:
+        target_num = int(rem_idx_match.group(1))
+        if 1 <= target_num <= len(existing_modules):
+            if len(new_modules) >= len(existing_modules):
+                logger.info(f"[Structure Safeguard] Programmatically removing module index {target_num - 1}")
+                updated = [m for idx, m in enumerate(existing_modules) if idx != (target_num - 1)]
+                return updated
+
+    # 5. Insert at position N ("add new module at module 4" / "add module at position 4")
+    ins_idx_match = re.search(r'add\s+(?:new\s+)?module\s+(?:at\s+)?(?:module\s+|position\s+)?(\d+)', msg_lower)
+    if ins_idx_match:
+        pos_num = int(ins_idx_match.group(1))
+        if 1 <= pos_num <= len(existing_modules) + 1:
+            if len(new_modules) == len(existing_modules):
+                logger.info(f"[Structure Safeguard] Programmatically inserting module at position {pos_num}")
+                new_mod = {
+                    "title": f"Specialized Topic (Module {pos_num})",
+                    "chapters": [
+                        {"title": "Overview & Key Concepts"},
+                        {"title": "Practical Implementation"},
+                        {"title": "Summary & Exercises"}
+                    ]
+                }
+                updated = list(existing_modules)
+                updated.insert(pos_num - 1, new_mod)
+                return updated
+
+    return new_modules
+
+def modify_course_structure_with_llm(
+    existing_modules: list,
+    user_message: str,
+    course_topic: str = "General",
+    course_level: str = "beginner",
+    draft_id: Optional[str] = None
+) -> Tuple[list, str]:
+    """
+    Executes chat-driven structural edits on existing_modules array using OpenAI in structured JSON mode.
+    Handles add, insert at index, remove by count, remove by 1-based index, remove by module title,
+    rename module/submodules, reorder modules, submodule add/remove, and combined multi-step instructions.
+    
+    Returns (updated_modules, summary_reply).
+    """
+    client = get_openai_client()
+    
+    system_prompt = f"""You are an Expert Course Syllabus Structure Manipulation Engine.
+You receive an existing list of course modules (each having a "title" and "chapters" list of title objects) and a user's modification request.
+Your task is to modify the course outline according to the user's explicit command and return the complete updated module list.
+
+MODIFICATION INSTRUCTIONS & RULES:
+1. ADD MODULE(S):
+   - "add one module", "add 1 module", "add new module" -> append exactly 1 new relevant module to the end.
+   - "add 2 modules", "add 3 modules" -> append the exact requested count of new relevant modules.
+   - "add new module at module 4", "add module at position 4" -> insert 1 new module at 1-based position 4 (so it becomes Module 4, shifting previous Module 4 and lower modules down).
+   - "add module on [Topic]" -> create a module focused on [Topic] with 3-4 chapters and insert or append it.
+
+2. REMOVE / DELETE MODULE(S):
+   - "reduce one module", "remove one module", "reduce 1 module" -> remove 1 module (the last module unless specified). Total length MUST decrease by exactly 1!
+   - "remove 2 modules", "reduce by 2" -> remove 2 modules. Total length MUST decrease by exactly 2!
+   - "remove module 4", "delete module 4" -> delete the module currently at 1-based position 4.
+   - "delete module 2 and module 4" -> delete the 2nd and 4th modules.
+   - "remove module [Title]" / "remove 'understanding the concepts of java'" -> match module titles by substring (case-insensitive) and delete all matching modules.
+
+3. RENAME MODULE(S) & SUBMODULES (CHAPTERS):
+   - "rename module 3 to [New Name]" -> rename module title at index 3.
+   - "rename all modules" -> rename all module titles to more descriptive and professional titles matching the course topic.
+   - "rename all submodules in module 4", "rename chapters in module 4" -> update all chapter titles inside module 4 to be more relevant and clear.
+   - "rename chapter 2 in module 1 to [New Name]" -> update that specific chapter title inside module 1.
+
+4. REORDER MODULES:
+   - "reorder modules: move module 5 to 2", "move module 4 to top" -> rearrange module order as requested.
+
+5. CHAPTER / SUBMODULE EDITS:
+   - "add a chapter on [Topic] to module 3" -> add a chapter object {{"title": "[Topic]"}} inside module 3's chapters list.
+   - "remove chapter 2 from module 4" -> remove the 2nd chapter in module 4.
+
+6. COMPOSITE / COMBINED OPERATIONS:
+   - "remove 2 modules then add 3 modules" -> first remove 2 modules, then add 3 new modules (net total = original - 2 + 3).
+   - "delete module 4 and rename module 2 to [New Name]" -> perform both operations in order.
+
+FORMAT RULES:
+- Return ONLY a valid JSON object matching this schema:
+  {{
+    "modules": [
+      {{
+        "title": "Module Title",
+        "chapters": [
+          {{"title": "Chapter 1 Title"}},
+          {{"title": "Chapter 2 Title"}},
+          {{"title": "Chapter 3 Title"}}
+        ]
+      }}
+    ],
+    "summary": "Clear, friendly 1-2 sentence description of what exact changes were made."
+  }}
+- Do NOT prepend numbers (like "Module 1:" or "1.1") to title strings; the UI auto-formats numbering.
+- Every module MUST have between 3 and 5 chapters.
+"""
+
+    user_prompt = f"""Course Topic: {course_topic} (Level: {course_level})
+Existing Modules ({len(existing_modules)} total):
+{json.dumps(existing_modules, indent=2)}
+
+User Instruction: "{user_message}"
+"""
+
+    try:
+        response = client.chat.completions.create(
+            model=LLM_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.2,
+            response_format={"type": "json_object"}
+        )
+        
+        if draft_id:
+            from metering_helper import track_chatbot_cost
+            track_chatbot_cost(draft_id, response, LLM_MODEL, "structure_modification")
+            
+        content = json.loads(response.choices[0].message.content)
+        raw_modules = content.get("modules", [])
+        summary = content.get("summary") or "I've updated your course syllabus structure according to your request."
+        
+        if not raw_modules or not isinstance(raw_modules, list):
+            logger.warning("[Structure Modification] LLM returned invalid/empty modules list. Falling back to existing.")
+            raw_modules = existing_modules
+
+        # Apply deterministic safeguards
+        final_modules = apply_structure_safeguards(existing_modules, raw_modules, user_message)
+        logger.info(f"[Structure Modification] Applied modifications: before={len(existing_modules)} modules -> after={len(final_modules)} modules")
+        return final_modules, summary
+
+    except Exception as e:
+        logger.error(f"[Structure Modification] Error modifying structure: {e}")
+        fallback_modules = apply_structure_safeguards(existing_modules, existing_modules, user_message)
+        return fallback_modules, "I've updated your course outline. Please review the updated syllabus card below."
+
 

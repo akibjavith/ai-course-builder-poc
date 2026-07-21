@@ -1244,9 +1244,8 @@ Expected JSON output format exactly:
                 "type": "details"
             })
 
-        # Check if topic or goal change request is triggered
+        # Check if topic or goal change request is triggered (ONLY warn if structure/modules exist!)
         has_existing_structure = len(req.courseData.get("structure", {}).get("modules", [])) > 0
-        has_existing_course = bool(current_slots.get("topic")) or has_existing_structure
         is_requesting_topic_change = False
         is_requesting_goal_change = False
         
@@ -1257,10 +1256,10 @@ Expected JSON output format exactly:
         new_topic_temp = temp_updated.get("topic")
         
         if old_topic_temp and new_topic_temp and str(old_topic_temp).lower().strip() != str(new_topic_temp).lower().strip():
-            if has_existing_course and not is_topic_confirm and not is_topic_cancel:
+            if has_existing_structure and not is_topic_confirm and not is_topic_cancel:
                 is_requesting_topic_change = True
                 
-        if has_existing_course and not is_topic_confirm and not is_topic_cancel:
+        if has_existing_structure and not is_topic_confirm and not is_topic_cancel:
             if ("edit" in lowercase_msg or "change" in lowercase_msg or "choose" in lowercase_msg or "different" in lowercase_msg or "another" in lowercase_msg or "adjust" in lowercase_msg or "modify" in lowercase_msg or "update" in lowercase_msg) and ("topic" in lowercase_msg or "subject" in lowercase_msg):
                 is_requesting_topic_change = True
 
@@ -1310,12 +1309,12 @@ Expected JSON output format exactly:
         if is_topic_cancel:
             updated_slots["pending_topic"] = None
 
-        # Check if topic changed and we already have structure/content
+        # Check if topic changed or was reset, and clear all subsequent details slots
         old_topic = current_slots.get("topic")
         new_topic = updated_slots.get("topic")
         
-        # If topic changed, clear all subsequent details slots
-        if old_topic and new_topic and str(old_topic).lower().strip() != str(new_topic).lower().strip():
+        # If topic changed or is reset/empty, clear all subsequent details slots
+        if (old_topic and not new_topic) or (old_topic and new_topic and str(old_topic).lower().strip() != str(new_topic).lower().strip()):
             if not has_existing_structure or is_topic_confirm:
                 updated_slots["learningGoal"] = ""
                 updated_slots["currentLevel"] = ""
@@ -1333,6 +1332,20 @@ Expected JSON output format exactly:
             raw_extracted,
             has_existing_structure=has_existing_structure
         )
+
+        # Ensure that if next_step is ASK_TOPIC, all subsequent slots in updated_slots and courseData are thoroughly reset
+        if next_step == "ASK_TOPIC":
+            updated_slots["topic"] = None
+            updated_slots["learningGoal"] = ""
+            updated_slots["currentLevel"] = ""
+            updated_slots["learningStyle"] = ""
+            updated_slots["duration"] = ""
+            if "details" in req.courseData:
+                req.courseData["details"]["topic"] = ""
+                req.courseData["details"]["learningGoal"] = ""
+                req.courseData["details"]["currentLevel"] = ""
+                req.courseData["details"]["learningStyle"] = ""
+                req.courseData["details"]["duration"] = ""
 
         # Check if the user is confirming/cancelling existing structure reuse
         is_structure_confirm = False
@@ -1626,10 +1639,52 @@ Expected JSON output format exactly:
                         "modules": []
                     }
             else:
-                if not metadata:
-                    metadata = {}
-                metadata["next_step"] = "OUTLINE_EDIT"
-                metadata["modules"] = current_structure_modules
+                # User is in OUTLINE_EDIT step and we already have a generated module structure
+                # Check if user instruction is asking to modify or confirm the structure
+                confirm_words = ["confirm outline", "looks good", "happy with outline", "proceed to content", "generate content", "yes, generate content", "yes generate content"]
+                is_confirm = any(w in lowercase_msg for w in confirm_words)
+                
+                if is_confirm:
+                    req.courseData["confirmed_outline"] = True
+                    return JSONResponse({
+                        "status": "success",
+                        "reply": "The course structure has been finalized. Would you like me to start generating the complete course content?",
+                        "quickReplies": ["Yes, generate content", "No, go back to outline"],
+                        "metadata": {
+                            "next_step": "CONFIRM_GENERATE"
+                        },
+                        "type": "details"
+                    })
+                else:
+                    from chatbot_builder_service import modify_course_structure_with_llm
+                    topic_val = updated_slots.get("topic") or "General"
+                    level_val = updated_slots.get("currentLevel") or "beginner"
+                    
+                    updated_mods, mod_summary = modify_course_structure_with_llm(
+                        existing_modules=current_structure_modules,
+                        user_message=user_message,
+                        course_topic=topic_val,
+                        course_level=level_val,
+                        draft_id=req.draft_id
+                    )
+                    
+                    req.courseData["structure"] = {"modules": updated_mods}
+                    req.courseData["confirmed_outline"] = True
+                    
+                    q_replies = ["Confirm Outline", "Reduce one module", "Add one module", "Rename modules/chapters", "Reorder modules"]
+                    if len(updated_mods) <= 1:
+                        q_replies = ["Confirm Outline", "Add one module", "Rename modules/chapters", "Reorder modules"]
+                        
+                    return JSONResponse({
+                        "status": "success",
+                        "reply": mod_summary,
+                        "quickReplies": q_replies,
+                        "metadata": {
+                            "next_step": "OUTLINE_EDIT",
+                            "modules": updated_mods
+                        },
+                        "type": "structure"
+                    })
         else:
             if next_step == "CONFIRM_DETAILS":
                 type_val = "details_card"
