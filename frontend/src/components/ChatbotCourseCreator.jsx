@@ -5,7 +5,7 @@ import {
   Trash2, Loader2, Award, FileText, Check, Paperclip, 
   Mic, Lightbulb, Compass, ThumbsUp, ThumbsDown, Copy, 
   RotateCcw, X, Search, Bell, Info, Plus, PanelLeft, Edit,
-  Pause, Play
+  Pause, Play, ListChecks, CheckCircle2, Circle
 } from 'lucide-react';
 import { chatWithChatbotBuilder, createCourse, uploadDoc, generateLessonContent, saveChatbotDraft, getChatbotDrafts, getChatbotDraft, deleteChatbotDraft, renameChatbotDraft, getSubjects, getCourseById, generateStructure, startBgGeneration, getBgGenerationStatus, cancelBgGeneration, getSuggestedTopics } from '../api';
 import logo from '../assets/logo.png';
@@ -174,6 +174,7 @@ export default function ChatbotCourseCreator({ onClose }) {
   const [subjectDropdownOpen, setSubjectDropdownOpen] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [messageFeedback, setMessageFeedback] = useState({});
+  const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
   
   // Course data state
   const [courseData, setCourseData] = useState({
@@ -520,13 +521,16 @@ export default function ChatbotCourseCreator({ onClose }) {
             pollingIntervalRef.current = null;
             setGenerationStatus('cancelled');
             setIsBatchGenerating(false);
-            const cancelMsg = {
-              role: 'assistant',
-              content: "Course content generation has been cancelled. Let me know if you want to resume or make adjustments to the syllabus outline.",
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            };
-            setMessages(prev => [...prev, cancelMsg]);
-            setQuickReplies([]);
+            setMessages(prev => {
+              const filtered = prev.filter(m => !m.isProgressCard);
+              const stopMsg = {
+                role: 'assistant',
+                content: "Course creation has been stopped. Do you want to start again?",
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              };
+              return [...filtered, stopMsg];
+            });
+            setQuickReplies(["Yes, start again", "Go back to outline"]);
           } else if (res.status === 'failed') {
             clearInterval(pollingIntervalRef.current);
             pollingIntervalRef.current = null;
@@ -542,7 +546,7 @@ export default function ChatbotCourseCreator({ onClose }) {
   };
 
   // Batch sequential content generation loop
-  const startBatchGeneration = async (currentCourseData) => {
+  const startBatchGeneration = async (currentCourseData, userMessageObj = null) => {
     setLoading(true);
     setQuickReplies([]);
     const prepareMsg = {
@@ -551,11 +555,18 @@ export default function ChatbotCourseCreator({ onClose }) {
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isProgressCard: true
     };
-    setMessages(prev => [...prev, prepareMsg]);
+    if (userMessageObj) {
+      setMessages(prev => {
+        const withoutUserMsg = prev.filter(m => m !== userMessageObj && m.content !== userMessageObj.content);
+        return [...withoutUserMsg, userMessageObj, prepareMsg];
+      });
+    } else {
+      setMessages(prev => [...prev, prepareMsg]);
+    }
 
     try {
       const historyForApi = messages
-        .concat({ role: 'user', content: "Confirm outline and generate detailed prompt blueprints for all chapters." })
+        .concat(userMessageObj || { role: 'user', content: "Confirm outline and generate detailed prompt blueprints for all chapters." })
         .filter(m => m && typeof m.content === 'string')
         .map(m => ({ role: m.role || 'user', content: m.content || '' }));
 
@@ -591,11 +602,11 @@ export default function ChatbotCourseCreator({ onClose }) {
       setLoading(false);
 
       if (activeDraftId) {
-        const updatedMessages = [...messages, prepareMsg];
+        const currentMsgs = userMessageObj ? [...messages, userMessageObj, prepareMsg] : [...messages, prepareMsg];
         await startBgGeneration({
           draft_id: activeDraftId,
           courseData: nextCourseData,
-          messages: updatedMessages
+          messages: currentMsgs
         });
 
         // Trigger polling
@@ -638,12 +649,19 @@ export default function ChatbotCourseCreator({ onClose }) {
       return;
     }
     if (lowercaseText === "yes, start again" || lowercaseText === "yes start again") {
-      startBatchGeneration(courseData);
+      const userMsg = {
+        role: 'user',
+        content: displayedText || textToSend,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setMessages(prev => [...prev, userMsg]);
+      setInputMessage('');
+      startBatchGeneration(courseData, userMsg);
       return;
     }
-    if ((lowercaseText === "no, go back to outline" || lowercaseText === "no go back to outline") && overrideStep !== 'OUTLINE_EDIT') {
+    if ((lowercaseText === "go back to outline" || lowercaseText === "no, go back to outline" || lowercaseText === "no go back to outline") && overrideStep !== 'OUTLINE_EDIT') {
       setCurrentStep('OUTLINE_EDIT');
-      handleSendMessage("No, go back to outline", 'OUTLINE_EDIT', courseData);
+      handleSendMessage("Go back to outline", 'OUTLINE_EDIT', courseData);
       return;
     }
 
@@ -656,7 +674,7 @@ export default function ChatbotCourseCreator({ onClose }) {
         // In OUTLINE_EDIT, the user edits/refines. Confirming the outline card moves to CONFIRM_GENERATE.
         nextStepToUse = 'OUTLINE_EDIT';
       } else if (currentStep === 'CONFIRM_GENERATE') {
-        const generateKeywords = ["generate course", "generate content", "generate", "yes", "continue", "start", "proceed", "let's go", "go ahead", "sure", "ok", "yep", "yeah"];
+        const generateKeywords = ["generate course", "generate content", "generate", "yes", "continue", "start", "proceed", "let's go", "go ahead", "sure", "ok", "yep", "yeah", "create", "build"];
         const wantsGenerate = generateKeywords.some(kw => lowercaseText.includes(kw));
         if (wantsGenerate) {
           const userMsg = {
@@ -666,7 +684,7 @@ export default function ChatbotCourseCreator({ onClose }) {
           };
           setMessages(prev => [...prev, userMsg]);
           setInputMessage('');
-          startBatchGeneration(courseData);
+          startBatchGeneration(courseData, userMsg);
           return;
         } else {
           nextStepToUse = 'CONFIRM_GENERATE';
@@ -1254,12 +1272,14 @@ export default function ChatbotCourseCreator({ onClose }) {
       // 2. Category Filter
       const isPublished = d.currentStep === 'READY' && d.courseData?.mysql_id;
       const isUnpublished = d.currentStep === 'READY' && !d.courseData?.mysql_id;
-      const isInProgress = d.currentStep === 'CONFIRM_GENERATE';
+      const isInProgress = d.currentStep === 'CONFIRM_GENERATE' && (d.id === activeDraftId ? isBatchGenerating || generationStatus === 'generating' : false);
+      const isOnHold = d.currentStep === 'CONFIRM_GENERATE' && !isInProgress;
       const isOutline = !['READY', 'CONFIRM_GENERATE'].includes(d.currentStep);
 
       if (activeFilter === 'published') return isPublished;
       if (activeFilter === 'unpublished') return isUnpublished;
       if (activeFilter === 'progress') return isInProgress;
+      if (activeFilter === 'on_hold') return isOnHold;
       if (activeFilter === 'outline') return isOutline;
 
       return true; // 'all'
@@ -2008,6 +2028,169 @@ export default function ChatbotCourseCreator({ onClose }) {
     );
   };
 
+  // High-impact highlighted banner for assistant instructions above suggestion cards
+  const renderCardIntroBanner = (content, metadataType) => {
+    if (!content || !content.trim()) return null;
+    const cleanedText = metadataType === 'structure' ? cleanStructureText(content) : content;
+    if (!cleanedText.trim()) return null;
+
+    const isStructure = metadataType === 'structure';
+
+    return (
+      <div className="relative overflow-hidden mb-3 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3.5 rounded-xl shadow-lg border border-indigo-500/30 font-sans animate-fade-in text-left">
+        {/* Glowing background light spots */}
+        <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-indigo-500/15 rounded-full blur-xl pointer-events-none" />
+        <div className="absolute -left-6 -top-6 w-24 h-24 bg-rose-500/15 rounded-full blur-xl pointer-events-none" />
+
+        <div className="flex items-start gap-3 relative z-10">
+          <div className="p-2 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex-shrink-0 mt-0.5 shadow-sm">
+            {isStructure ? (
+              <Sparkles className="w-4 h-4 text-indigo-400 animate-pulse" />
+            ) : (
+              <Info className="w-4 h-4 text-indigo-400" />
+            )}
+          </div>
+          <div className="flex-1 space-y-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] font-black uppercase tracking-widest text-indigo-300 bg-indigo-500/20 px-2 py-0.5 rounded border border-indigo-500/30">
+                {isStructure ? 'Syllabus Proposal' : 'Requirements Summary'}
+              </span>
+            </div>
+            <div className="text-xs font-bold text-slate-100 leading-relaxed pt-0.5 [&_*]:!text-slate-100 [&_p]:!text-slate-100 [&_span]:!text-slate-100">
+              {formatChatMessage(cleanedText)}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Render live detailed progress breakdown modal overlay
+  const renderDetailedProgressModal = () => {
+    if (!isProgressModalOpen) return null;
+
+    const modules = courseData?.structure?.modules || [];
+    let globalChapterIndex = 0;
+
+    return (
+      <div 
+        className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"
+        onClick={() => setIsProgressModalOpen(false)}
+      >
+        <div 
+          className="bg-white border border-slate-200/80 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden text-slate-800 animate-scale-up"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-indigo-500/20">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                <ListChecks className="w-5 h-5 text-indigo-400" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  Live Course Generation Roadmap
+                  <span className="text-[9px] font-black uppercase tracking-widest bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/30">
+                    {batchTotal > 0 ? `${Math.round((batchCompleted / batchTotal) * 100)}%` : '0%'}
+                  </span>
+                </h3>
+                <p className="text-[11px] text-indigo-200/80">
+                  Completed {batchCompleted} of {batchTotal} total chapters
+                </p>
+              </div>
+            </div>
+            <button 
+              onClick={() => setIsProgressModalOpen(false)}
+              className="p-1.5 rounded-lg text-indigo-200 hover:text-white hover:bg-white/10 transition"
+              title="Close live progress"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Module List Body */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin scrollbar-thumb-slate-200">
+            {modules.length === 0 ? (
+              <p className="text-xs text-slate-500 italic text-center py-6">No structure modules available yet.</p>
+            ) : (
+              modules.map((mod, mIdx) => {
+                const chapters = mod.chapters || [];
+                return (
+                  <div key={mIdx} className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-md bg-indigo-100 text-indigo-700 font-extrabold text-[10px] flex items-center justify-center">
+                          {mIdx + 1}
+                        </span>
+                        {mod.title}
+                      </h4>
+                      <span className="text-[10px] text-slate-400 font-semibold">
+                        {chapters.length} Chapters
+                      </span>
+                    </div>
+
+                    {/* Submodules / Chapters Checklist */}
+                    <div className="space-y-2 pl-2 border-l-2 border-indigo-100 ml-2">
+                      {chapters.map((chap, cIdx) => {
+                        const currentChapterIdx = globalChapterIndex++;
+                        const isDone = currentChapterIdx < batchCompleted || generationStatus === 'completed';
+                        const isGenerating = currentChapterIdx === batchCompleted && isBatchGenerating && generationStatus !== 'completed';
+
+                        return (
+                          <div 
+                            key={cIdx} 
+                            className={`flex items-center justify-between p-2.5 rounded-lg text-xs transition border ${
+                              isDone ? 'bg-emerald-50/60 border-emerald-200/60 text-emerald-950' :
+                              isGenerating ? 'bg-indigo-50 border-indigo-200 text-indigo-950 font-medium shadow-sm animate-pulse' :
+                              'bg-white border-slate-200/60 text-slate-600'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                              {isDone ? (
+                                <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                              ) : isGenerating ? (
+                                <Loader2 className="w-4 h-4 text-indigo-600 animate-spin flex-shrink-0" />
+                              ) : (
+                                <Circle className="w-4 h-4 text-slate-300 flex-shrink-0" />
+                              )}
+                              <span className="truncate text-xs font-medium">
+                                {chap.title}
+                              </span>
+                            </div>
+
+                            {/* Status Badge */}
+                            <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0 ${
+                              isDone ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
+                              isGenerating ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' :
+                              'bg-slate-100 text-slate-400 border border-slate-200'
+                            }`}>
+                              {isDone ? '✓ Completed' : isGenerating ? '⚡ Generating...' : '• Pending'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Footer Action */}
+          <div className="bg-slate-50 border-t border-slate-200/80 px-6 py-3 flex items-center justify-between text-xs text-slate-500">
+            <span>Real-time generation state</span>
+            <button
+              onClick={() => setIsProgressModalOpen(false)}
+              className="px-5 py-2 bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl text-xs font-bold transition shadow-md shadow-indigo-500/20 active:scale-95"
+            >
+              Close Roadmap
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (reactError) {
     return (
       <div className="p-6 max-w-2xl mx-auto my-10 bg-rose-50 border border-rose-200 rounded-2xl shadow-md text-slate-800">
@@ -2092,7 +2275,7 @@ export default function ChatbotCourseCreator({ onClose }) {
             {/* Filter Tabs Chips */}
             {sidebarOpen && (
               <div className="flex flex-wrap gap-1 pb-1 px-0.5">
-                {['all', 'published', 'unpublished', 'progress', 'outline'].map((filter) => (
+                {['all', 'published', 'unpublished', 'progress', 'on_hold', 'outline'].map((filter) => (
                   <button
                     key={filter}
                     onClick={() => setActiveFilter(filter)}
@@ -2106,6 +2289,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                     {filter === 'published' && 'Published'}
                     {filter === 'unpublished' && 'Drafts'}
                     {filter === 'progress' && 'In Progress'}
+                    {filter === 'on_hold' && 'On Hold'}
                     {filter === 'outline' && 'Outlines'}
                   </button>
                 ))}
@@ -2168,7 +2352,8 @@ export default function ChatbotCourseCreator({ onClose }) {
                                   {(() => {
                                     const isPublished = d.currentStep === 'READY' && d.courseData?.mysql_id;
                                     const isUnpublished = d.currentStep === 'READY' && !d.courseData?.mysql_id;
-                                    const isInProgress = d.currentStep === 'CONFIRM_GENERATE';
+                                    const isInProgress = d.currentStep === 'CONFIRM_GENERATE' && (d.id === activeDraftId ? isBatchGenerating || generationStatus === 'generating' : false);
+                                    const isOnHold = d.currentStep === 'CONFIRM_GENERATE' && !isInProgress;
                                     
                                     return (
                                       <span className={`text-[8px] px-1 py-0.2 rounded-md font-extrabold uppercase tracking-wider mt-0.5 ${
@@ -2176,10 +2361,11 @@ export default function ChatbotCourseCreator({ onClose }) {
                                           ? 'bg-white/20 text-white border border-white/10'
                                           : isPublished ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
                                             isUnpublished ? 'bg-indigo-50 text-indigo-600 border border-indigo-150' :
-                                            isInProgress ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                                            isInProgress ? 'bg-sky-50 text-sky-600 border border-sky-200 animate-pulse' :
+                                            isOnHold ? 'bg-amber-50 text-amber-600 border border-amber-200' :
                                             'bg-slate-100 text-slate-500 border border-slate-200/60'
                                       }`}>
-                                        {isPublished ? 'Published' : isUnpublished ? 'Draft' : isInProgress ? 'In Progress' : 'Outline'}
+                                        {isPublished ? 'Published' : isUnpublished ? 'Draft' : isInProgress ? 'In Progress' : isOnHold ? 'On Hold' : 'Outline'}
                                       </span>
                                     );
                                   })()}
@@ -2356,16 +2542,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                   }
                 }}
               />
-              <div className="flex justify-between items-center border-t border-slate-100 pt-2 px-2">
-                <div className="flex gap-2 items-center">
-                  <button 
-                    onClick={() => setDeepThinkActive(prev => !prev)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${deepThinkActive ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-100'}`}
-                  >
-                    <Lightbulb className="w-3.5 h-3.5" />
-                    <span>Deep Think</span>
-                  </button>
-                </div>
+              <div className="flex justify-end items-center border-t border-slate-100 pt-2 px-2">
                 <button
                   onClick={() => handleSendMessage(inputMessage)}
                   disabled={!inputMessage.trim()}
@@ -2501,10 +2678,14 @@ export default function ChatbotCourseCreator({ onClose }) {
                             ? 'bg-indigo-600 text-white rounded-2xl rounded-br-none' 
                             : 'bg-white border border-slate-200/80 text-slate-800 rounded-2xl rounded-bl-none'
                         } ${(!isUser && (msg.metadataType === 'structure' || msg.metadataType === 'details_card')) ? 'w-full' : ''}`}>
-                           {msg.content && msg.content.trim() && (
-                             <div className="space-y-0.5">
-                               {formatChatMessage(msg.metadataType === 'structure' ? cleanStructureText(msg.content) : msg.content)}
-                             </div>
+                           {!isUser && (msg.metadataType === 'structure' || msg.metadataType === 'details_card') ? (
+                             renderCardIntroBanner(msg.content, msg.metadataType)
+                           ) : (
+                             msg.content && msg.content.trim() && (
+                               <div className="space-y-0.5">
+                                 {formatChatMessage(msg.metadataType === 'structure' ? cleanStructureText(msg.content) : msg.content)}
+                               </div>
+                             )
                            )}
 
                            {/* Render custom metadata cards inline inside the bubble */}
@@ -2518,7 +2699,7 @@ export default function ChatbotCourseCreator({ onClose }) {
 
                         {/* Render Inline Progress Card if flagged */}
                         {!isUser && msg.isProgressCard && (
-                          <div className="bg-white border border-slate-200 shadow-md p-5 rounded-2xl rounded-bl-none w-full flex flex-col gap-4 text-slate-800 mt-3 animate-fade-in">
+                          <div className="bg-gradient-to-br from-white via-indigo-50/50 to-purple-50/30 border border-indigo-200/80 shadow-lg shadow-indigo-500/5 p-5 rounded-2xl rounded-bl-none w-full flex flex-col gap-4 text-slate-800 mt-3 animate-fade-in">
                             <div className="flex items-center gap-4">
                               <div className="relative w-12 h-12 flex-shrink-0">
                                 {/* Background circle */}
@@ -2528,7 +2709,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                                     cy="24"
                                     r="20"
                                     strokeWidth="3.5"
-                                    stroke="#f1f5f9"
+                                    stroke="#e2e8f0"
                                     fill="transparent"
                                   />
                                   {/* Animated progress circle */}
@@ -2563,7 +2744,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                                   {generationStatus === 'completed' ? '100%' : `${batchTotal > 0 ? Math.round((batchCompleted / batchTotal) * 100) : 0}%`}
                                 </div>
                               </div>
-                              <div className="flex-1 space-y-1">
+                              <div className="flex-1 space-y-1 text-left">
                                 <span className={`text-[9px] uppercase tracking-widest font-black block ${
                                   generationStatus === 'completed' ? 'text-emerald-600' :
                                   generationStatus === 'paused' ? 'text-amber-500' :
@@ -2573,7 +2754,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                                   {generationStatus === 'completed' ? 'Content Generation Complete' :
                                    generationStatus === 'paused' ? 'Generation Paused' :
                                    (generationStatus === 'cancelled' || generationStatus === 'failed' || (generationStatus === 'idle' && currentStep !== 'READY')) ? 'Generation Suspended' :
-                                   'Writing Course Material'}
+                                   'Generating Course Material'}
                                 </span>
                                 <h5 className="text-xs font-bold text-slate-800 line-clamp-1">
                                   {generationStatus === 'completed' ? 'All lessons generated successfully!' :
@@ -2587,48 +2768,56 @@ export default function ChatbotCourseCreator({ onClose }) {
                               </div>
                             </div>
 
+                            {/* View Detailed Progress Roadmap Button */}
+                            <button
+                              onClick={() => setIsProgressModalOpen(true)}
+                              className="w-full bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 hover:from-indigo-500 hover:to-violet-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all duration-200 active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-indigo-500/25 hover:shadow-indigo-500/40 border border-indigo-400/30 mt-1"
+                            >
+                              <ListChecks className="w-3.5 h-3.5 text-indigo-200" /> View Live Progress Roadmap 📋
+                            </button>
+
                             {/* Action Buttons inside Card */}
                             {isBatchGenerating && (
-                              <div className="border-t border-slate-100 pt-3 flex gap-2.5">
+                              <div className="border-t border-indigo-100/60 pt-3 flex gap-2.5">
                                 <button
                                   onClick={() => handlePauseGeneration()}
-                                  className="flex-1 bg-amber-50 hover:bg-amber-100 text-amber-600 border border-amber-200/50 font-bold py-2 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1 shadow-sm"
+                                  className="flex-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20"
                                 >
-                                  <Pause className="w-3.5 h-3.5" /> Pause Generation
+                                  <Pause className="w-3.5 h-3.5 text-white" /> Pause Generation
                                 </button>
                                 <button
                                   onClick={() => handleCancelGeneration()}
-                                  className="flex-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/50 font-bold py-2 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1 shadow-sm"
+                                  className="flex-1 bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-rose-500/20"
                                 >
-                                  <X className="w-3.5 h-3.5" /> Cancel Generation
+                                  <X className="w-3.5 h-3.5 text-white" /> Cancel Generation
                                 </button>
                               </div>
                             )}
 
                             {(generationStatus === 'paused' || generationStatus === 'cancelled' || generationStatus === 'failed' || (generationStatus === 'idle' && currentStep !== 'READY')) && (
-                              <div className="border-t border-slate-100 pt-3 flex gap-2.5">
+                              <div className="border-t border-indigo-100/60 pt-3 flex gap-2.5">
                                 <button
                                   onClick={() => handleResumeGeneration()}
-                                  className="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-200/50 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm"
+                                  className="flex-1 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-indigo-500/20"
                                 >
-                                  <Play className="w-3.5 h-3.5" /> Resume Generation
+                                  <Play className="w-3.5 h-3.5 text-white" /> Resume Generation
                                 </button>
                                 <button
                                   onClick={() => handleCancelGeneration()}
-                                  className="flex-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/50 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm"
+                                  className="flex-1 bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-rose-500/20"
                                 >
-                                  <X className="w-3.5 h-3.5" /> Cancel Generation
+                                  <X className="w-3.5 h-3.5 text-white" /> Cancel Generation
                                 </button>
                               </div>
                             )}
 
                             {generationStatus === 'completed' && (
-                              <div className="border-t border-slate-100 pt-3 flex gap-2.5">
+                              <div className="border-t border-indigo-100/60 pt-3 flex gap-2.5">
                                 <button
                                   onClick={() => setIsPreviewOpen(true)}
-                                  className="flex-1 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/60 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm"
+                                  className="flex-1 bg-white/90 hover:bg-white text-indigo-900 border border-indigo-200/80 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm"
                                 >
-                                  <Eye className="w-3.5 h-3.5" /> Preview Course
+                                  <Eye className="w-3.5 h-3.5 text-indigo-600" /> Preview Course
                                 </button>
                                 {courseData.mysql_id ? (
                                   <div className="flex-1 bg-emerald-50 text-emerald-600 border border-emerald-250 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-inner">
@@ -2637,7 +2826,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                                 ) : (
                                   <button
                                     onClick={() => handlePublish()}
-                                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-indigo-900/10"
+                                    className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/20"
                                   >
                                     <CheckCircle className="w-3.5 h-3.5" /> Publish Course
                                   </button>
@@ -2649,44 +2838,18 @@ export default function ChatbotCourseCreator({ onClose }) {
 
                         {/* Assistant Actions Bar */}
                         {!isUser && (
-                          <div className="flex items-center justify-between px-1 text-slate-400 mt-2">
-                            <div className="flex gap-2">
-                              <button 
-                                onClick={() => handleFeedback(idx, 'like')} 
-                                className={`transition ${
-                                  messageFeedback[idx] === 'like' 
-                                    ? 'text-emerald-600 scale-105' 
-                                    : 'hover:text-slate-800'
-                                }`} 
-                                title="Like"
-                              >
-                                <ThumbsUp className={`w-3.5 h-3.5 ${messageFeedback[idx] === 'like' ? 'fill-current' : ''}`} />
-                              </button>
-                              
-                              <button 
-                                onClick={() => handleFeedback(idx, 'dislike')} 
-                                className={`transition ${
-                                  messageFeedback[idx] === 'dislike' 
-                                    ? 'text-rose-600 scale-105' 
-                                    : 'hover:text-slate-800'
-                                }`} 
-                                title="Dislike"
-                              >
-                                <ThumbsDown className={`w-3.5 h-3.5 ${messageFeedback[idx] === 'dislike' ? 'fill-current' : ''}`} />
-                              </button>
-
-                              <button 
-                                onClick={() => handleCopyText(msg.content, idx)} 
-                                className="hover:text-slate-800 transition" 
-                                title="Copy"
-                              >
-                                {copiedIndex === idx ? (
-                                  <Check className="w-3.5 h-3.5 text-emerald-600 animate-fade-in" />
-                                ) : (
-                                  <Copy className="w-3.5 h-3.5" />
-                                )}
-                              </button>
-                            </div>
+                          <div className="flex items-center justify-end px-1 text-slate-400 mt-1">
+                            <button 
+                              onClick={() => handleCopyText(msg.content, idx)} 
+                              className="hover:text-slate-800 transition p-1 rounded hover:bg-slate-100" 
+                              title="Copy response"
+                            >
+                              {copiedIndex === idx ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-600 animate-fade-in" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5" />
+                              )}
+                            </button>
                           </div>
                         )}
 
@@ -2737,31 +2900,25 @@ export default function ChatbotCourseCreator({ onClose }) {
                   onChange={(e) => setInputMessage(e.target.value)}
                    placeholder={isBatchGenerating ? "Generating course content..." : "Tell the AI architect what to add or modify..."}
                   className="w-full bg-transparent resize-none focus:outline-none text-sm text-slate-800 placeholder-slate-400 px-2 py-1 h-14"
-                  disabled={loading || isBatchGenerating}
+                  disabled={loading}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
-                      handleSendMessage(inputMessage);
+                      if (!isBatchGenerating && !loading && inputMessage.trim()) {
+                        handleSendMessage(inputMessage);
+                      }
                     }
                   }}
                 />
-                <div className="flex justify-between items-center border-t border-slate-100/60 pt-2 px-2">
-                  <div className="flex gap-2 items-center">
-                    <button 
-                      onClick={() => !isBatchGenerating && setDeepThinkActive(prev => !prev)}
-                      disabled={isBatchGenerating}
-                      className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition ${deepThinkActive ? 'bg-indigo-50/80 text-indigo-600 border border-indigo-100' : 'text-slate-500 hover:bg-slate-150/40'} ${isBatchGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                      <Lightbulb className="w-3.5 h-3.5" />
-                      <span>Deep Think</span>
-                    </button>
-
-
-                  </div>
+                <div className="flex justify-end items-center border-t border-slate-100/60 pt-2 px-2">
                   <button
                     onClick={() => handleSendMessage(inputMessage)}
                     disabled={!inputMessage.trim() || loading || isBatchGenerating}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1 transition shadow active:scale-95 disabled:opacity-50"
+                    className={`font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1 transition shadow active:scale-95 ${
+                      isBatchGenerating || loading || !inputMessage.trim()
+                        ? 'bg-slate-300 text-slate-500 opacity-40 cursor-not-allowed pointer-events-none shadow-none'
+                        : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                    }`}
                   >
                     <span>Send</span>
                     <Send className="w-3.5 h-3.5" />
@@ -2829,6 +2986,9 @@ export default function ChatbotCourseCreator({ onClose }) {
           onClose={() => setIsPreviewOpen(false)}
         />
       )}
+
+      {/* 5. Live Module Progress Roadmap Modal Overlay */}
+      {renderDetailedProgressModal()}
     </div>
   );
 }
