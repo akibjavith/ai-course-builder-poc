@@ -797,11 +797,18 @@ export default function ChatbotCourseCreator({ onClose }) {
           setCourseData(prev => {
             const updated = { ...prev };
             if (res.type === 'details' || res.type === 'details_card') {
-              const tVal = res.metadata.topic !== undefined ? res.metadata.topic : (res.metadata.subject || res.metadata.courseName || prev.details?.topic);
-              const gVal = res.metadata.learningGoal !== undefined ? res.metadata.learningGoal : (res.metadata.description || res.metadata.goal || res.metadata.objective || prev.details?.learningGoal);
-              const lVal = res.metadata.currentLevel !== undefined ? res.metadata.currentLevel : (res.metadata.level || res.metadata.experience || prev.details?.currentLevel);
-              const sVal = res.metadata.learningStyle !== undefined ? res.metadata.learningStyle : (res.metadata.requirements || res.metadata.style || prev.details?.learningStyle);
-              const dVal = res.metadata.duration !== undefined ? (res.metadata.duration !== null ? String(res.metadata.duration) : null) : (res.metadata.courseDuration || res.metadata.hours || prev.details?.duration || "");
+              let tVal = res.metadata.topic !== undefined ? res.metadata.topic : (res.metadata.subject || res.metadata.courseName || prev.details?.topic);
+              let gVal = res.metadata.learningGoal !== undefined ? res.metadata.learningGoal : (res.metadata.description || res.metadata.goal || res.metadata.objective || prev.details?.learningGoal);
+              let lVal = res.metadata.currentLevel !== undefined ? res.metadata.currentLevel : (res.metadata.level || res.metadata.experience || prev.details?.currentLevel);
+              let sVal = res.metadata.learningStyle !== undefined ? res.metadata.learningStyle : (res.metadata.requirements || res.metadata.style || prev.details?.learningStyle);
+              let dVal = res.metadata.duration !== undefined ? (res.metadata.duration !== null ? String(res.metadata.duration) : null) : (res.metadata.courseDuration || res.metadata.hours || prev.details?.duration || "");
+
+              if (res.metadata && res.metadata.next_step === 'ASK_TOPIC') {
+                gVal = '';
+                lVal = '';
+                sVal = '';
+                dVal = '';
+              }
 
               const normalizedMetadata = {
                 ...res.metadata,

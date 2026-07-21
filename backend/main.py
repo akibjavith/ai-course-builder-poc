@@ -1115,20 +1115,23 @@ Expected JSON output format exactly:
             "language": "English"
         }
 
-        # If the user is starting a new course (step is ASK_TOPIC), discard any old slot values and structure
+        # If the step is ASK_TOPIC (starting a new session OR changing topic), discard old downstream slots and structure
         is_new_session = len(req.messages) <= 2 or all(m.get("content", "").lower().strip() in ["hi", "hello", "hey", "restart", "start", "create a new course"] for m in req.messages if m.get("role") == "user")
-        if req.currentStep == "ASK_TOPIC" and is_new_session:
-            current_slots = {
-                "topic": "",
-                "learningGoal": "",
-                "currentLevel": "",
-                "learningStyle": "",
-                "duration": "",
-                "language": "English"
-            }
+        if req.currentStep == "ASK_TOPIC":
+            if is_new_session:
+                current_slots["topic"] = ""
+            current_slots["learningGoal"] = ""
+            current_slots["currentLevel"] = ""
+            current_slots["learningStyle"] = ""
+            current_slots["duration"] = ""
             req.courseData["structure"] = {"modules": []}
             req.courseData["content"] = []
             req.courseData["confirmed_outline"] = False
+            if "details" in req.courseData and isinstance(req.courseData["details"], dict):
+                req.courseData["details"]["learningGoal"] = ""
+                req.courseData["details"]["currentLevel"] = ""
+                req.courseData["details"]["learningStyle"] = ""
+                req.courseData["details"]["duration"] = ""
 
         # Check if the user is confirming/cancelling a topic or goal change warning
         is_topic_confirm = False
@@ -1226,11 +1229,8 @@ Expected JSON output format exactly:
             clear_course_data_flag = True
             
             topic_str = current_slots.get("topic") or "your chosen subject"
-            goal_replies = ["Prepare for Certification", "Build Web Applications", "Master Core Concepts", "Get a Developer Job"]
-            if "java" in topic_str.lower():
-                goal_replies = ["Prepare for Java Certification", "Build Spring Boot Apps", "Master Java Concurrency", "Learn Java Fundamentals"]
-            elif "python" in topic_str.lower():
-                goal_replies = ["Data Analysis & AI", "Build Web Apps with Django", "Automate Daily Tasks", "Master Python Basics"]
+            from chatbot_builder_service import generate_dynamic_goal_suggestions
+            goal_replies = generate_dynamic_goal_suggestions(topic_str)
                 
             meta = {
                 "next_step": "ASK_GOAL",
@@ -1474,7 +1474,8 @@ Expected JSON output format exactly:
                 from chatbot_builder_service import generate_dynamic_topic_suggestions
                 quick_replies = generate_dynamic_topic_suggestions(published_names, draft_names)
             elif next_step == "ASK_GOAL":
-                quick_replies = ["Build a Web App", "Automate Excel Tasks", "Data Analysis & AI", "Get a Developer Job"]
+                from chatbot_builder_service import generate_dynamic_goal_suggestions
+                quick_replies = generate_dynamic_goal_suggestions(updated_slots.get("topic", ""))
             elif next_step == "ASK_LEVEL":
                 quick_replies = ["Complete Beginner / Start Fresh", "Intermediate / Some experience", "Advanced / Deep Dive"]
             elif next_step == "ASK_STYLE":

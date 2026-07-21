@@ -347,6 +347,12 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
         slots["duration"] = None
         return "ASK_TOPIC", None
 
+    # If answering ASK_TOPIC, reset downstream slots so flow proceeds step-by-step to ASK_GOAL
+    if current_step == "ASK_TOPIC" and slots.get("topic"):
+        for sub_slot in ["learningGoal", "currentLevel", "learningStyle", "duration"]:
+            if not is_newly_extracted(sub_slot):
+                slots[sub_slot] = None
+
     if current_step not in ["EDIT_DETAILS_CHOICE", "ASK_TOPIC", "ASK_GOAL", "ASK_LEVEL", "ASK_STYLE", "ASK_DURATION"]:
         if not slots.get("learningGoal") and (slots.get("learningStyle") or slots.get("duration")):
             slots["learningGoal"] = f"Learn {slots.get('topic')}"
@@ -469,6 +475,7 @@ You MUST mirror the user's greeting tone and wording dynamically. For example:
 Current State: ASK_GOAL
 Goal: Discover the user's objective or goal for studying {topic_name}.
 Conversational Guidance: Ask a natural, friendly question about what they hope to achieve (e.g. "What is your main goal for learning {topic_name}?").
+Under the [quick_replies] block for this step (ASK_GOAL), you MUST suggest 4 goal options that are specifically tailored to learning {topic_name}. Do NOT output generic coding options unless the topic is programming.
 """
     elif next_step == "ASK_LEVEL":
         state_instructions = f"""
@@ -655,7 +662,8 @@ def reinject_quick_replies_into_history(messages: list, slots: dict) -> list:
                 if "subject" in content_lower or "topic" in content_lower or "what would you like to explore" in content_lower:
                     content += '\n\n[quick_replies]["Python Programming", "English Grammar", "Digital Marketing", "Machine Learning"][/quick_replies]'
                 elif "goal" in content_lower or "objective" in content_lower or "hope to achieve" in content_lower:
-                    content += '\n\n[quick_replies]["Build a Web App", "Automate Excel Tasks", "Data Analysis & AI", "Get a Developer Job"][/quick_replies]'
+                    dynamic_goals = generate_dynamic_goal_suggestions(slots.get("topic", ""))
+                    content += f'\n\n[quick_replies]{json.dumps(dynamic_goals)}[/quick_replies]'
                 elif "level" in content_lower or "experience" in content_lower or "familiar" in content_lower:
                     content += '\n\n[quick_replies]["Complete Beginner / Start Fresh", "Intermediate / Some experience", "Advanced / Deep Dive"][/quick_replies]'
                 elif "style" in content_lower or "prefer" in content_lower or "enjoy learning" in content_lower:
@@ -730,6 +738,64 @@ Rules:
         
     # Final fallback if something goes wrong
     return ["Python Programming", "English Grammar", "Digital Marketing", "Machine Learning"]
+
+
+def generate_dynamic_goal_suggestions(topic: str) -> list:
+    """
+    Invokes OpenAI to generate exactly 4 dynamic, topic-relevant learning goal suggestions
+    for the specified course topic.
+    """
+    if not topic or str(topic).strip() == "":
+        return ["Master Core Concepts", "Build Practical Projects", "Career Advancement", "Exam Preparation"]
+        
+    client = get_openai_client()
+    
+    prompt = f"""You are an expert curriculum designer and educational advisor.
+The user wants to build a course on the topic: "{topic}".
+
+Generate exactly 4 realistic, motivating, and highly topic-specific learning goals or practical objectives that a learner studying "{topic}" would want to achieve.
+
+Examples:
+- If topic is "Python Programming": ["Build Web Apps with Django", "Automate Daily Excel Tasks", "Data Analysis & AI Basics", "Get a Python Developer Job"]
+- If topic is "English Grammar": ["Master Professional Email Writing", "Improve Speaking Fluency", "Prepare for IELTS / TOEFL", "Clear Grammar Foundations"]
+- If topic is "Digital Marketing": ["Run Paid Ad Campaigns", "Master SEO & Organic Reach", "Build a Content Strategy", "Grow Brand Social Media"]
+
+Rules:
+1. All 4 suggestions MUST be directly relevant to the topic "{topic}".
+2. Keep each suggestion concise, professional, and clear (2 to 5 words).
+3. Output your response as a valid JSON object with a single key "suggestions" containing a list of exactly 4 strings.
+"""
+    try:
+        response = client.chat.completions.create(
+            model=LLM_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": 'You are a helpful curriculum assistant. You must respond with a JSON object containing a "suggestions" list of exactly 4 strings, matching the schema: {"suggestions": ["Goal A", "Goal B", "Goal C", "Goal D"]}'
+                },
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            response_format={"type": "json_object"}
+        )
+        content = response.choices[0].message.content.strip()
+        data = json.loads(content)
+        if isinstance(data, dict) and "suggestions" in data:
+            return [str(item) for item in data["suggestions"][:4]]
+    except Exception as e:
+        logger.error(f"Error generating dynamic goal suggestions for topic '{topic}': {e}")
+        
+    topic_lower = topic.lower()
+    if "python" in topic_lower:
+        return ["Build Web Apps", "Automate Excel Tasks", "Data Analysis & AI", "Get a Developer Job"]
+    elif "java" in topic_lower:
+        return ["Prepare for Java Certification", "Build Spring Boot Apps", "Master Concurrency", "Learn Java Fundamentals"]
+    elif "english" in topic_lower or "grammar" in topic_lower:
+        return ["Master Business Communication", "Improve Writing Skills", "Prepare for IELTS/TOEFL", "Learn Grammar Fundamentals"]
+    elif "marketing" in topic_lower:
+        return ["Run Paid Ad Campaigns", "Master SEO Strategy", "Social Media Growth", "Learn Marketing Fundamentals"]
+    
+    return [f"Master {topic} Basics", f"Build Practical {topic} Projects", f"Apply {topic} in Work", f"Advanced {topic} Concepts"]
 
 
 def apply_structure_safeguards(existing_modules: list, new_modules: list, user_message: str) -> list:
