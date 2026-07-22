@@ -1972,6 +1972,12 @@ def api_get_chatbot_drafts():
     try:
         from database import get_chatbot_drafts
         drafts = get_chatbot_drafts()
+        for d in drafts:
+            draft_id = d["id"]
+            if draft_id in bg_generation_registry:
+                d["bgStatus"] = bg_generation_registry[draft_id].get("status")
+            else:
+                d["bgStatus"] = "idle"
         return {"status": "success", "drafts": drafts}
     except Exception as e:
         logger.error(f"Error fetching chatbot drafts: {e}")

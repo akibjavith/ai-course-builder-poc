@@ -394,6 +394,18 @@ export default function ChatbotCourseCreator({ onClose }) {
     }
   }, [messages, courseData, currentStep, activeDraftId]);
 
+  // Periodically refresh drafts list if any draft is generating in the background
+  useEffect(() => {
+    const hasGenerating = draftsList.some(d => d.bgStatus === 'generating' || (d.id === activeDraftId && (isBatchGenerating || generationStatus === 'generating')));
+    if (!hasGenerating) return;
+
+    const interval = setInterval(() => {
+      fetchDraftsList();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [draftsList, isBatchGenerating, generationStatus, activeDraftId]);
+
   // Scroll to bottom on new messages and focus input
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -2359,21 +2371,58 @@ export default function ChatbotCourseCreator({ onClose }) {
                                   {(() => {
                                     const isPublished = d.currentStep === 'READY' && d.courseData?.mysql_id;
                                     const isUnpublished = d.currentStep === 'READY' && !d.courseData?.mysql_id;
-                                    const isInProgress = d.currentStep === 'CONFIRM_GENERATE' && (d.id === activeDraftId ? isBatchGenerating || generationStatus === 'generating' : false);
+                                    const isInProgress = d.currentStep === 'CONFIRM_GENERATE' && (
+                                      d.id === activeDraftId
+                                        ? isBatchGenerating || generationStatus === 'generating'
+                                        : d.bgStatus === 'generating'
+                                    );
                                     const isOnHold = d.currentStep === 'CONFIRM_GENERATE' && !isInProgress;
                                     
+                                    // Calculate progress percentage
+                                    const modules = d.courseData?.structure?.modules || [];
+                                    let totalChapters = 0;
+                                    let completedChapters = 0;
+                                    modules.forEach(mod => {
+                                      (mod?.chapters || []).forEach(chap => {
+                                        totalChapters++;
+                                        if (chap.contents && chap.contents.length > 0) {
+                                          completedChapters++;
+                                        }
+                                      });
+                                    });
+
+                                    if (d.id === activeDraftId && (isBatchGenerating || generationStatus === 'generating' || generationStatus === 'paused')) {
+                                      totalChapters = batchTotal;
+                                      completedChapters = batchCompleted;
+                                    }
+
+                                    const percent = totalChapters > 0 ? Math.round((completedChapters / totalChapters) * 100) : 0;
+                                    const showPercent = isInProgress || isOnHold;
+
                                     return (
-                                      <span className={`text-[8px] px-1 py-0.2 rounded-md font-extrabold uppercase tracking-wider mt-0.5 ${
-                                        isActive
-                                          ? 'bg-white/20 text-white border border-white/10'
-                                          : isPublished ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
-                                            isUnpublished ? 'bg-indigo-50 text-indigo-600 border border-indigo-150' :
-                                            isInProgress ? 'bg-sky-50 text-sky-600 border border-sky-200 animate-pulse' :
-                                            isOnHold ? 'bg-amber-50 text-amber-600 border border-amber-200' :
-                                            'bg-slate-100 text-slate-500 border border-slate-200/60'
-                                      }`}>
-                                        {isPublished ? 'Published' : isUnpublished ? 'Draft' : isInProgress ? 'In Progress' : isOnHold ? 'On Hold' : 'Outline'}
-                                      </span>
+                                      <div className="flex items-center gap-1.5 mt-0.5">
+                                        <span className={`text-[8px] px-1 py-0.2 rounded-md font-extrabold uppercase tracking-wider ${
+                                          isActive
+                                            ? 'bg-white/20 text-white border border-white/10'
+                                            : isPublished ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                                              isUnpublished ? 'bg-indigo-50 text-indigo-600 border border-indigo-150' :
+                                              isInProgress ? 'bg-sky-50 text-sky-600 border border-sky-200 animate-pulse' :
+                                              isOnHold ? 'bg-amber-50 text-amber-600 border border-amber-200' :
+                                              'bg-slate-100 text-slate-500 border border-slate-200/60'
+                                        }`}>
+                                          {isPublished ? 'Published' : isUnpublished ? 'Draft' : isInProgress ? 'In Progress' : isOnHold ? 'On Hold' : 'Outline'}
+                                        </span>
+                                        {showPercent && (
+                                          <span className={`text-[8px] px-1 py-0.2 rounded-md font-black tracking-wide ${
+                                            isActive
+                                              ? 'bg-white/30 text-white'
+                                              : isInProgress ? 'bg-sky-100 text-sky-700 border border-sky-150' :
+                                                'bg-amber-100 text-amber-700 border border-amber-150'
+                                          }`}>
+                                            {percent}%
+                                          </span>
+                                        )}
+                                      </div>
                                     );
                                   })()}
                                 </div>
