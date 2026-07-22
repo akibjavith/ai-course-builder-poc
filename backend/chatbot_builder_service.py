@@ -145,6 +145,7 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
         edit_verbs = ["change", "edit", "modify", "adjust", "update", "revise", "correct", "different", "another", "choose"]
         has_edit_verb = any(v in lowercase_msg for v in edit_verbs)
 
+        # Topic Edit Override
         if has_edit_verb and ("topic" in lowercase_msg or "subject" in lowercase_msg):
             if not is_newly_extracted("topic"):
                 if not has_existing_structure:
@@ -154,21 +155,39 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
                     slots["learningStyle"] = None
                     slots["duration"] = None
                     cleared_any = True
-        if has_edit_verb and "goal" in lowercase_msg:
-            if not is_newly_extracted("learningGoal"):
+
+        # Goal Edit Override
+        if has_edit_verb and ("goal" in lowercase_msg or "objective" in lowercase_msg):
+            simple_goal_phrases = ["edit goal", "change goal", "edit learning goal", "change learning goal", "i would like to edit the learning goal.", "i want to change the learning goal.", "i would like to edit the goal.", "i want to change the goal."]
+            is_simple_intent = lowercase_msg.strip() in simple_goal_phrases or not is_newly_extracted("learningGoal")
+            if is_simple_intent:
                 if not has_existing_structure:
                     slots["learningGoal"] = None
                     cleared_any = True
+
+        # Level Edit Override
         if has_edit_verb and ("level" in lowercase_msg or "experience" in lowercase_msg or "difficulty" in lowercase_msg):
-            if not is_newly_extracted("currentLevel"):
+            level_keywords = ["beginner", "intermediate", "advanced", "novice", "scratch", "start", "medium", "expert", "difficulty", "easy", "hard", "experience", "basic"]
+            msg_tokens = [w for w in lowercase_msg.replace("difficulty", "").replace("experience", "").replace("level", "").split()]
+            has_value_in_msg = any(k in msg_tokens for k in level_keywords)
+            if not has_value_in_msg or not is_newly_extracted("currentLevel"):
                 slots["currentLevel"] = None
                 cleared_any = True
+
+        # Style Edit Override
         if has_edit_verb and "style" in lowercase_msg:
-            if not is_newly_extracted("learningStyle"):
+            style_keywords = ["code", "coding", "quiz", "quizzes", "text", "read", "table", "tables", "visual", "video", "combination", "hands", "practical", "diagram", "diagrams", "matrix"]
+            msg_tokens = [w for w in lowercase_msg.replace("style", "").split()]
+            has_value_in_msg = any(k in msg_tokens for k in style_keywords)
+            if not has_value_in_msg or not is_newly_extracted("learningStyle"):
                 slots["learningStyle"] = None
                 cleared_any = True
+
+        # Duration Edit Override
         if has_edit_verb and ("duration" in lowercase_msg or "time" in lowercase_msg or "hours" in lowercase_msg):
-            if not is_newly_extracted("duration"):
+            has_digits = bool(re.search(r'\d+', lowercase_msg))
+            has_duration_word = any(w in lowercase_msg for w in ["quick", "short", "crash", "standard", "medium", "moderate", "comprehensive", "long", "deep"])
+            if (not has_digits and not has_duration_word) or not is_newly_extracted("duration"):
                 slots["duration"] = None
                 cleared_any = True
 
@@ -354,7 +373,7 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
             if not is_newly_extracted(sub_slot):
                 slots[sub_slot] = None
 
-    if current_step not in ["EDIT_DETAILS_CHOICE", "ASK_TOPIC", "ASK_GOAL", "ASK_LEVEL", "ASK_STYLE", "ASK_DURATION"]:
+    if current_step not in ["EDIT_DETAILS_CHOICE", "ASK_TOPIC", "ASK_GOAL", "ASK_LEVEL", "ASK_STYLE", "ASK_DURATION", "CONFIRM_DETAILS", "CONFIRM_GENERATE", "READY"]:
         if not slots.get("learningGoal") and (slots.get("learningStyle") or slots.get("duration")):
             slots["learningGoal"] = f"Learn {slots.get('topic')}"
 
