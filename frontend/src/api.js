@@ -236,6 +236,11 @@ export const getSuggestedTopics = async () => {
   return response.data;
 };
 
+export const getSuggestedGoals = async (topic) => {
+  const response = await axios.get(`${API_URL}/course/chatbot-builder/suggest-goals?topic=${encodeURIComponent(topic)}`);
+  return response.data;
+};
+
 
 
 

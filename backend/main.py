@@ -1414,8 +1414,8 @@ Expected JSON output format exactly:
             from database import get_chatbot_drafts
             drafts = get_chatbot_drafts()
             for d in drafts:
-                if d.get("course_name"):
-                    draft_names.append(d["course_name"])
+                if d.get("courseName"):
+                    draft_names.append(d["courseName"])
         except Exception as e:
             logger.error(f"Error fetching drafts for dynamic suggestions: {e}")
 
@@ -1465,6 +1465,8 @@ Expected JSON output format exactly:
         # Parse quick-replies lists first to prevent clean_reply_text in parse_metadata from stripping them
         ai_reply, quick_replies = parse_quick_replies(ai_reply)
 
+
+
         # If LLM failed to output quick replies, apply fallback safety net choices based on next_step
         if not quick_replies:
             topic_lower = str(updated_slots.get("topic", "")).lower()
@@ -1507,6 +1509,10 @@ Expected JSON output format exactly:
                     quick_replies = ["Add one module", "Rename modules/chapters", "Reorder modules"]
             elif next_step == "CONFIRM_GENERATE":
                 quick_replies = ["Yes, generate content", "No, go back to outline"]
+
+        # Clean reply text to strip any leaked suggestions or list items
+        from chatbot_builder_service import strip_suggestions_from_reply
+        ai_reply = strip_suggestions_from_reply(ai_reply, quick_replies)
 
         # Parse metadata suggestions
         reply_text, metadata, type_val = parse_metadata(
@@ -2059,10 +2065,11 @@ def api_suggest_topics():
         # 2. Fetch draft names
         draft_names = []
         try:
+            from database import get_chatbot_drafts
             drafts = get_chatbot_drafts()
             for d in drafts:
-                if d.get("course_name"):
-                    draft_names.append(d["course_name"])
+                if d.get("courseName"):
+                    draft_names.append(d["courseName"])
         except Exception as e:
             logger.error(f"Error fetching drafts for dynamic suggestions: {e}")
             
@@ -2073,6 +2080,27 @@ def api_suggest_topics():
         logger.error(f"Error suggesting topics: {e}")
         # Default safety fallback
         return {"status": "success", "topics": ["Python Programming", "English Grammar", "Digital Marketing", "Machine Learning"]}
+
+
+# Suggest learning goals for a topic dynamically
+@app.get("/course/chatbot-builder/suggest-goals")
+def api_suggest_goals(topic: str):
+    try:
+        from chatbot_builder_service import generate_dynamic_goal_suggestions
+        goals = generate_dynamic_goal_suggestions(topic)
+        return {"status": "success", "goals": goals}
+    except Exception as e:
+        logger.error(f"Error suggesting goals: {e}")
+        # Return fallback templates using the custom topic
+        capitalized = topic.capitalize() if topic else "this subject"
+        return {
+            "status": "success",
+            "goals": [
+                f"Learn the core fundamentals of {capitalized}",
+                f"Master advanced techniques and tools in {capitalized}",
+                f"Build practical real-world projects with {capitalized}"
+            ]
+        }
 
 
 

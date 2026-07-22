@@ -486,6 +486,7 @@ Goal: Ask the user what subject or topic they would like to learn.
 Conversational Guidance: Ask a natural, welcoming question to discover their desired topic. 
 You MUST mirror the user's greeting tone and wording dynamically. For example:
 - If the user starts with "hi", "hello", "hey", respond with: "Hello! I'm excited to help you create a personalized learning roadmap. What subject or topic would you like to explore today?"
+- If the user is confirming a topic change or restart (e.g. the user says "Yes, change topic", "change topic", or is resetting), respond with: "Sure! What subject or topic would you like to explore today?"
 - If the user starts with an informal/colloquial greeting like "hey dude", "yo", "sup", "what's up", respond in the same style: "Hey dude! I'm excited to help you create a personalized learning roadmap. What topic would you like to explore today?"
 - Adapt friendly and mirror their specific greeting style.
 {history_context}
@@ -816,6 +817,51 @@ Rules:
         return ["Run Paid Ad Campaigns", "Master SEO Strategy", "Social Media Growth", "Learn Marketing Fundamentals"]
     
     return [f"Master {topic} Basics", f"Build Practical {topic} Projects", f"Apply {topic} in Work", f"Advanced {topic} Concepts"]
+
+
+def strip_suggestions_from_reply(reply_text: str, quick_replies: list) -> str:
+    """
+    Strips any redundant bullet lists or suggestions that match the quick reply options
+    from the conversational text.
+    """
+    if not quick_replies or not reply_text:
+        return reply_text
+        
+    lines = reply_text.split("\n")
+    cleaned_lines = []
+    
+    for line in lines:
+        is_bullet_suggestion = False
+        for option in quick_replies:
+            opt_lower = option.lower().strip()
+            # Remove leading bullet markers, numbering, and whitespace
+            clean_line = re.sub(r'^[\s\-*•\d\.\)]+', '', line).strip().lower()
+            if clean_line == opt_lower or (opt_lower in clean_line and len(clean_line) < len(opt_lower) + 5):
+                is_bullet_suggestion = True
+                break
+                
+        if is_bullet_suggestion:
+            continue
+            
+        cleaned_lines.append(line)
+        
+    result = "\n".join(cleaned_lines)
+    
+    # Strip common introductory phrases introducing suggestions
+    intro_patterns = [
+        r'(?i)[^\n]*here are some suggestions[^\n]*\n*',
+        r'(?i)[^\n]*here are a few suggestions[^\n]*\n*',
+        r'(?i)[^\n]*consider these suggestions[^\n]*\n*',
+        r'(?i)[^\n]*options to consider[^\n]*\n*',
+        r'(?i)[^\n]*choose from[^\n]*\n*',
+        r'(?i)[^\n]*feel free to choose one[^\n]*\n*',
+        r'(?i)[^\n]*feel free to select[^\n]*\n*'
+    ]
+    for pattern in intro_patterns:
+        result = re.sub(pattern, '', result)
+        
+    result = re.sub(r'\n{3,}', '\n\n', result)
+    return result.strip()
 
 
 def apply_structure_safeguards(existing_modules: list, new_modules: list, user_message: str) -> list:

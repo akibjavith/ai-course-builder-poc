@@ -7,7 +7,7 @@ import {
   RotateCcw, X, Search, Bell, Info, Plus, PanelLeft, Edit,
   Pause, Play, ListChecks, CheckCircle2, Circle
 } from 'lucide-react';
-import { chatWithChatbotBuilder, createCourse, uploadDoc, generateLessonContent, saveChatbotDraft, getChatbotDrafts, getChatbotDraft, deleteChatbotDraft, renameChatbotDraft, getSubjects, getCourseById, generateStructure, startBgGeneration, getBgGenerationStatus, cancelBgGeneration, getSuggestedTopics } from '../api';
+import { chatWithChatbotBuilder, createCourse, uploadDoc, generateLessonContent, saveChatbotDraft, getChatbotDrafts, getChatbotDraft, deleteChatbotDraft, renameChatbotDraft, getSubjects, getCourseById, generateStructure, startBgGeneration, getBgGenerationStatus, cancelBgGeneration, getSuggestedTopics, getSuggestedGoals } from '../api';
 import logo from '../assets/logo.png';
 import LessonPreviewEditorModal from './LessonPreviewEditorModal';
 
@@ -297,8 +297,16 @@ export default function ChatbotCourseCreator({ onClose }) {
     if (step === 'ASK_TOPIC') {
       await fetchDynamicSuggestions();
     } else if (step === 'ASK_GOAL') {
-      const goals = getObjectiveSuggestions(topic);
-      setQuickReplies(goals);
+      try {
+        const res = await getSuggestedGoals(topic);
+        if (res && res.status === 'success' && Array.isArray(res.goals)) {
+          setQuickReplies(res.goals);
+        } else {
+          setQuickReplies(getObjectiveSuggestions(topic));
+        }
+      } catch (err) {
+        setQuickReplies(getObjectiveSuggestions(topic));
+      }
     } else if (step === 'ASK_LEVEL') {
       setQuickReplies(["Complete Beginner / Start Fresh", "Intermediate / Some experience", "Advanced / Deep Dive"]);
     } else if (step === 'ASK_STYLE') {
@@ -774,7 +782,23 @@ export default function ChatbotCourseCreator({ onClose }) {
         // Dynamically override or supplement quick replies based on the NEXT step
         let replies = res.quickReplies || [];
         const activeStep = (res.metadata && res.metadata.next_step) || nextStepToUse;
-        setQuickReplies(replies);
+        
+        if (activeStep === 'ASK_TOPIC') {
+          fetchDynamicSuggestions();
+        } else if (activeStep === 'ASK_GOAL') {
+          const topic = res.metadata?.topic || res.metadata?.subject || res.metadata?.courseName || '';
+          getSuggestedGoals(topic)
+            .then(goalRes => {
+              if (goalRes && goalRes.status === 'success' && Array.isArray(goalRes.goals)) {
+                setQuickReplies(goalRes.goals);
+              } else {
+                setQuickReplies(getObjectiveSuggestions(topic));
+              }
+            })
+            .catch(() => setQuickReplies(getObjectiveSuggestions(topic)));
+        } else {
+          setQuickReplies(replies);
+        }
 
         // Update currentStep state if returned in metadata, otherwise use robust keyword fallbacks
         if (res.metadata && res.metadata.next_step) {
