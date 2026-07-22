@@ -234,10 +234,11 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
     if current_step == "CONFIRM_DETAILS":
         lowercase_msg = user_message.lower()
         confirm_words = [
-            "looks good", "looks fine", "looks ok", "continue", "confirm", "yes", "yep", "yeah",
-            "fine", "ok", "sure", "proceed", "generate", "create", "structure", "start",
-            "go ahead", "do it", "let's go", "great", "perfect", "sounds good", "alright",
-            "all details are correct", "details are correct", "everything is correct"
+            "confirm details", "confirm detail", "confirm & proceed", "confirm and proceed",
+            "looks good", "looks fine", "looks ok", "details look good", "details look fine",
+            "proceed with details", "proceed to structure", "generate structure", "create structure",
+            "all details are correct", "details are correct", "everything is correct",
+            "confirm", "proceed"
         ]
         has_confirm = any(w in lowercase_msg for w in confirm_words)
         

@@ -1913,7 +1913,7 @@ export default function ChatbotCourseCreator({ onClose }) {
   };
 
   // 2.5 Details Summary Card Tree Renderer
-  const renderInlineDetailsCard = (metadata) => {
+  const renderInlineDetailsCard = (metadata, isLatest = true) => {
     if (!metadata) return null;
     return (
       <div className="mt-4 bg-white border border-slate-200 shadow-lg rounded-2xl p-5 space-y-4 text-left animate-fade-in">
@@ -1922,16 +1922,16 @@ export default function ChatbotCourseCreator({ onClose }) {
             <FileText className="w-3.5 h-3.5" /> Course Details Summary
           </h4>
           <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold flex items-center gap-1 ${
-            (currentStep === 'CONFIRM_DETAILS' || currentStep === 'EDIT_DETAILS_CHOICE')
+            (isLatest && (currentStep === 'CONFIRM_DETAILS' || currentStep === 'EDIT_DETAILS_CHOICE'))
               ? 'bg-amber-50 text-amber-600 border border-amber-200'
               : 'bg-emerald-50 text-emerald-600 border border-emerald-250'
           }`}>
             <span className={`w-1.5 h-1.5 rounded-full ${
-              (currentStep === 'CONFIRM_DETAILS' || currentStep === 'EDIT_DETAILS_CHOICE')
+              (isLatest && (currentStep === 'CONFIRM_DETAILS' || currentStep === 'EDIT_DETAILS_CHOICE'))
                 ? 'bg-amber-500 animate-pulse'
                 : 'bg-emerald-500'
             }`} />
-            {(currentStep === 'CONFIRM_DETAILS' || currentStep === 'EDIT_DETAILS_CHOICE') ? 'Awaiting Review' : 'Confirmed'}
+            {(isLatest && (currentStep === 'CONFIRM_DETAILS' || currentStep === 'EDIT_DETAILS_CHOICE')) ? 'Awaiting Review' : 'Confirmed'}
           </span>
         </div>
         <div className="space-y-2.5 text-xs text-slate-700">
@@ -1956,7 +1956,7 @@ export default function ChatbotCourseCreator({ onClose }) {
             <span className="text-slate-800 font-semibold">{metadata.duration ? `${metadata.duration} Hours` : 'Not set'}</span>
           </div>
         </div>
-        {(currentStep === 'CONFIRM_DETAILS' || currentStep === 'EDIT_DETAILS_CHOICE') && (
+        {isLatest && (currentStep === 'CONFIRM_DETAILS' || currentStep === 'EDIT_DETAILS_CHOICE') && (
           <div className="border-t border-slate-100 pt-3 flex gap-2.5">
             <button
               onClick={() => {
@@ -2697,7 +2697,7 @@ export default function ChatbotCourseCreator({ onClose }) {
 
                            {/* Render custom metadata cards inline inside the bubble */}
                            {!isUser && msg.metadataType === 'structure' && renderInlineStructure(msg.metadata)}
-                           {!isUser && msg.metadataType === 'details_card' && renderInlineDetailsCard(msg.metadata)}
+                           {!isUser && msg.metadataType === 'details_card' && renderInlineDetailsCard(msg.metadata, idx === messages.length - 1)}
                           
                           <div className="text-[9px] text-right mt-1.5 opacity-60">
                             {msg.timestamp}
