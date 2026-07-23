@@ -908,79 +908,157 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
             if re.search(r'\b\d+\s+and\s+\d+\b', lowercase_msg):
                 is_specific_edit = True
             
+            # Explicit module addition intent check
+            has_add_verb = any(w in lowercase_msg for w in ["add", "create", "make", "insert", "append", "generate", "build", "plus"])
+            has_structure_word = any(w in lowercase_msg for w in ["module", "modules", "syllabus", "roadmap", "unit", "units"])
+            is_explicit_add_command = has_add_verb and has_structure_word
+
+            if is_explicit_add_command:
+                # Unless they explicitly specify a position clause ("after module 2", "at index 3"), treat as module addition
+                has_position_clause = any(w in lowercase_msg for w in ["after", "before", "at position", "at index", "position", "index"])
+                if not has_position_clause:
+                    is_specific_edit = False
+
             # Check reduce vs add
             is_reduce_req = False
             is_add_req = False
             if not is_specific_edit:
                 is_reduce_req = any(w in lowercase_msg for w in ["reduce", "shrink", "delete", "remove", "cut", "decrease"]) and not any(w in lowercase_msg for w in ["chapter", "chapters", "subtopic", "subtopics", "lesson", "lessons", "topic", "topics"])
-                is_add_req = ("add" in lowercase_msg and any(w in lowercase_msg for w in ["module", "modules", "syllabus", "roadmap"])) or is_pending_add_confirm
+                is_add_req = is_explicit_add_command or ("add" in lowercase_msg and any(w in lowercase_msg for w in ["module", "modules", "syllabus", "roadmap"])) or is_pending_add_confirm
+            elif is_explicit_add_command:
+                is_add_req = True
             
             if is_add_req:
                 if count is None:
                     count = 1
                 
                 # Naming/topic extraction helper
-                topic_focus = "a relevant topic of your choice"
+                topic_focus = "relevant topics for the course"
                 for prep in ["focused on", "focusing on", "focus on", "named", "called", "about", "on", "for"]:
                     if f" {prep} " in f" {lowercase_msg} ":
                         idx = lowercase_msg.find(prep)
                         topic_focus = user_message[idx + len(prep):].strip()
                         topic_focus = topic_focus.strip('."\'?? ')
                         break
-                        
-                target_count = current_count + count
-                if target_count > 10:
+
+                current_modules = current_structure.get("modules", [])
+                current_count = len(current_modules)
+
+                if current_count >= 10:
+                    return JSONResponse({
+                        "status": "success",
+                        "reply": "Your course already has 10 modules, which is the maximum limit. I cannot add any more modules.",
+                        "quickReplies": ["Confirm Outline", "Reduce one module", "Rename modules/chapters"],
+                        "metadata": {
+                            "next_step": "OUTLINE_EDIT",
+                            "modules": current_modules
+                        },
+                        "type": "structure"
+                    })
+
+                if current_count + count > 10 and not is_pending_add_confirm:
                     allowable_add = 10 - current_count
-                    if allowable_add <= 0:
-                        return JSONResponse({
-                            "status": "success",
-                            "reply": "Your course already has 10 modules, which is the maximum limit. I cannot add any more modules.",
-                            "metadata": {
-                                "next_step": "OUTLINE_EDIT"
-                            },
-                            "type": "details"
-                        })
-                    else:
-                        return JSONResponse({
-                            "status": "success",
-                            "reply": f"I can only create up to 10 modules. I can add {allowable_add} modules to bring your course to the maximum limit of 10. Would you like me to do that?",
-                            "quickReplies": ["Yes, add modules", "Cancel"],
-                            "metadata": {
-                                "next_step": "OUTLINE_EDIT"
-                            },
-                            "type": "details"
-                        })
-                else:
-                    is_generic_add = lowercase_msg.strip() in generic_add_phrases
-                    if is_generic_add:
-                        user_message = f"Add exactly {count} new modules focused on '{topic_focus}' to the outline. The final outline MUST contain exactly {target_count} modules."
-                    else:
-                        user_message = (
-                            f"{user_message}\n\n"
-                            f"CRITICAL STRUCTURAL CONSTRAINT:\n"
-                            f"- Current count of modules: {current_count}\n"
-                            f"- Modules to add: {count}\n"
-                            f"- You MUST generate exactly {count} new modules.\n"
-                            f"- The output JSON 'modules' array MUST contain EXACTLY {target_count} modules in total. Do not generate {target_count - 1} or {target_count + 1}."
-                        )
-                    lowercase_msg = user_message.lower()
+                    return JSONResponse({
+                        "status": "success",
+                        "reply": f"I can only create up to 10 modules in total. Your course currently has {current_count} modules, so I can add {allowable_add} modules to reach the maximum limit of 10. Would you like me to do that?",
+                        "quickReplies": [f"Yes, add {allowable_add} modules", "Cancel"],
+                        "metadata": {
+                            "next_step": "OUTLINE_EDIT"
+                        },
+                        "type": "details"
+                    })
+
+                num_to_add = min(10 - current_count, count)
+
+                gen_prompt = f"""You are an expert curriculum designer.
+Course Subject: {details.get("subject") or details.get("courseName") or "Custom Course"}
+Course Description/Goal: {details.get("description") or "Comprehensive Course"}
+Level: {details.get("level") or "beginner"}
+
+Existing Modules in Course ({current_count} modules):
+{json.dumps([m.get("title") for m in current_modules], indent=2)}
+
+User Request: "{user_message}"
+
+Task:
+Generate EXACTLY {num_to_add} NEW, unique, non-overlapping module objects to add to this course.
+Focus on: {topic_focus}.
+Each new module MUST contain a title and a list of 3-4 chapters.
+Do NOT include any of the existing modules in your JSON output list. Output ONLY the {num_to_add} new modules.
+
+Output JSON format:
+{{
+  "new_modules": [
+    {{
+      "title": "New Module Title",
+      "chapters": [
+        {{"title": "Chapter 1 Title"}},
+        {{"title": "Chapter 2 Title"}},
+        {{"title": "Chapter 3 Title"}}
+      ]
+    }}
+  ]
+}}"""
+
+                try:
+                    response = openai_client.chat.completions.create(
+                        model=LLM_MODEL,
+                        messages=[
+                            {"role": "system", "content": "You are a curriculum design expert. Output only valid JSON conforming to the schema. No markdown, no extra text."},
+                            {"role": "user", "content": gen_prompt}
+                        ],
+                        temperature=0.3,
+                        max_tokens=2500,
+                        response_format={"type": "json_object"}
+                    )
+                    from metering_helper import track_chatbot_cost
+                    track_chatbot_cost(req.draft_id, response, LLM_MODEL, "add_modules")
+                    res_data = json.loads(response.choices[0].message.content)
+                    new_mods = res_data.get("new_modules") or res_data.get("modules") or []
+                    
+                    if len(new_mods) > num_to_add:
+                        new_mods = new_mods[:num_to_add]
+                    
+                    combined_modules = current_modules + new_mods
+                    req.courseData["structure"]["modules"] = combined_modules
+                    req.courseData["confirmed_outline"] = True
+                    
+                    reply_msg = f"I've added {len(new_mods)} new module(s) to your course outline. The syllabus now contains {len(combined_modules)} modules in total."
+                    
+                    return JSONResponse({
+                        "status": "success",
+                        "reply": reply_msg,
+                        "quickReplies": ["Confirm Outline", "Reduce one module", "Add one module", "Rename modules/chapters"],
+                        "metadata": {
+                            "next_step": "OUTLINE_EDIT",
+                            "modules": combined_modules
+                        },
+                        "type": "structure"
+                    })
+                except Exception as err:
+                    logger.error(f"Error in programmatic add_modules: {err}")
                     
             elif is_reduce_req:
                 is_reduce_to = bool(re.search(r'\b(reduce|shrink|cut|bring|drop)\s+(it\s+)?to\b', lowercase_msg)) or "down to" in lowercase_msg
                 is_generic_reduce = lowercase_msg.strip() in generic_reduce_phrases
                 is_reduce_one = is_generic_reduce and not is_reduce_to
                 
+                current_modules = current_structure.get("modules", [])
+                current_count = len(current_modules)
+
+                if current_count <= 1:
+                    return JSONResponse({
+                        "status": "success",
+                        "reply": "A course outline must contain at least 1 module. I cannot reduce the course below 1 module.",
+                        "quickReplies": ["Confirm Outline", "Add one module", "Rename modules/chapters"],
+                        "metadata": {
+                            "next_step": "OUTLINE_EDIT",
+                            "modules": current_modules
+                        },
+                        "type": "structure"
+                    })
+
                 if is_reduce_one and not is_specific_edit:
-                    current_modules = current_structure.get("modules", [])
-                    if len(current_modules) <= 1:
-                        return JSONResponse({
-                            "status": "success",
-                            "reply": "A course outline must contain at least 1 module. I cannot reduce the course below 1 module.",
-                            "metadata": {
-                                "next_step": "OUTLINE_EDIT"
-                            },
-                            "type": "details"
-                        })
                     new_modules = current_modules[:-1]
                     req.courseData["structure"]["modules"] = new_modules
                     req.courseData["confirmed_outline"] = True
@@ -994,10 +1072,32 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                         },
                         "type": "structure"
                     })
-                elif is_reduce_to and not is_specific_edit and is_generic_reduce and count is not None and count >= 1:
-                    current_modules = current_structure.get("modules", [])
-                    target_count = count
-                    if target_count < len(current_modules):
+                elif not is_specific_edit and count is not None and count >= 1:
+                    target_count = current_count - count if not is_reduce_to else count
+                    if target_count < 1:
+                        allowable_reduce = current_count - 1
+                        if allowable_reduce <= 0:
+                            return JSONResponse({
+                                "status": "success",
+                                "reply": "A course outline must contain at least 1 module. I cannot reduce the course below 1 module.",
+                                "quickReplies": ["Confirm Outline", "Add one module", "Rename modules/chapters"],
+                                "metadata": {
+                                    "next_step": "OUTLINE_EDIT",
+                                    "modules": current_modules
+                                },
+                                "type": "structure"
+                            })
+                        else:
+                            return JSONResponse({
+                                "status": "success",
+                                "reply": f"A course outline must contain at least 1 module. Your course currently has {current_count} modules, so I can reduce it by {allowable_reduce} module(s) to leave 1 module in your outline. Would you like me to do that?",
+                                "quickReplies": [f"Yes, reduce to 1 module", "Cancel"],
+                                "metadata": {
+                                    "next_step": "OUTLINE_EDIT"
+                                },
+                                "type": "details"
+                            })
+                    elif target_count < current_count:
                         new_modules = current_modules[:target_count]
                         req.courseData["structure"]["modules"] = new_modules
                         req.courseData["confirmed_outline"] = True
@@ -1440,12 +1540,13 @@ Expected JSON output format exactly:
                 req.courseData["details"]["learningStyle"] = ""
                 req.courseData["details"]["duration"] = ""
 
-        # Deterministic Refusal Interceptor for premature skips during questionnaire phase
+        # Deterministic Refusal Interceptor for premature skips / unhandled inputs during questionnaire phase
         is_questionnaire_step = req.currentStep in ["ASK_TOPIC", "ASK_GOAL", "ASK_LEVEL", "ASK_STYLE", "ASK_DURATION"]
         has_skip_request = any(w in lowercase_msg for w in [
             "module", "modules", "chapter", "chapters", "outline", "syllabus", "roadmap", "content", "lesson", "lessons", "structure",
-            "detail summary", "details summary", "summary card", "summary", "info", "card", "details card", "view details", "show details", "basic info", "basic information"
-        ])
+            "detail summary", "details summary", "summary card", "summary", "info", "card", "details card", "view details", "show details", "basic info", "basic information",
+            "go to", "please go", "show me", "view", "see"
+        ]) or (isinstance(raw_extracted, dict) and len([v for v in raw_extracted.values() if v is not None]) == 0 and not any(ans in lowercase_msg for ans in ["beginner", "intermediate", "advanced", "coding", "quizzes", "hour", "hours"]))
         details_incomplete = not (updated_slots.get("topic") and updated_slots.get("learningGoal") and updated_slots.get("currentLevel") and updated_slots.get("learningStyle") and updated_slots.get("duration"))
         
         if is_questionnaire_step and has_skip_request and details_incomplete:
