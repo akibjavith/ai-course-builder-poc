@@ -725,6 +725,42 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
             is_go_back_to_outline = True
 
         if is_go_back_to_outline:
+            # Check if basic course details are complete before displaying outline
+            updated_slots = req.courseData.get("details", {})
+            details_incomplete = not (updated_slots.get("topic") and updated_slots.get("learningGoal") and updated_slots.get("currentLevel") and updated_slots.get("learningStyle") and updated_slots.get("duration"))
+            if details_incomplete:
+                empty_step = "ASK_TOPIC"
+                if not updated_slots.get("topic"):
+                    empty_step = "ASK_TOPIC"
+                elif not updated_slots.get("learningGoal"):
+                    empty_step = "ASK_GOAL"
+                elif not updated_slots.get("currentLevel"):
+                    empty_step = "ASK_LEVEL"
+                elif not updated_slots.get("learningStyle"):
+                    empty_step = "ASK_STYLE"
+                elif not updated_slots.get("duration"):
+                    empty_step = "ASK_DURATION"
+                
+                quick_replies = ["Beginner", "Intermediate", "Advanced"]
+                if empty_step == "ASK_TOPIC":
+                    quick_replies = ["Python Programming", "Web Development", "Data Science"]
+                elif empty_step == "ASK_GOAL":
+                    quick_replies = ["Get a job", "Build projects", "Learn fundamentals"]
+                elif empty_step == "ASK_STYLE":
+                    quick_replies = ["Hands-on Coding", "Interactive Quizzes", "Detailed Explanations", "Balanced Combination"]
+                elif empty_step == "ASK_DURATION":
+                    quick_replies = ["1 Hour", "2 Hours", "5 Hours", "10 Hours", "15 Hours", "20 Hours"]
+
+                return JSONResponse({
+                    "status": "success",
+                    "reply": "We haven't completed or confirmed your course details yet. Please answer all basic detail questions step-by-step first so I can construct your course outline correctly.",
+                    "quickReplies": quick_replies,
+                    "metadata": {
+                        "next_step": empty_step
+                    },
+                    "type": "details"
+                })
+
             current_structure = req.courseData.get("structure", {})
             meta = {
                 "next_step": "OUTLINE_EDIT",
@@ -1403,6 +1439,54 @@ Expected JSON output format exactly:
                 req.courseData["details"]["currentLevel"] = ""
                 req.courseData["details"]["learningStyle"] = ""
                 req.courseData["details"]["duration"] = ""
+
+        # Deterministic Refusal Interceptor for premature skips during questionnaire phase
+        is_questionnaire_step = req.currentStep in ["ASK_TOPIC", "ASK_GOAL", "ASK_LEVEL", "ASK_STYLE", "ASK_DURATION"]
+        has_skip_request = any(w in lowercase_msg for w in [
+            "module", "modules", "chapter", "chapters", "outline", "syllabus", "roadmap", "content", "lesson", "lessons", "structure",
+            "detail summary", "details summary", "summary card", "summary", "info", "card", "details card", "view details", "show details", "basic info", "basic information"
+        ])
+        details_incomplete = not (updated_slots.get("topic") and updated_slots.get("learningGoal") and updated_slots.get("currentLevel") and updated_slots.get("learningStyle") and updated_slots.get("duration"))
+        
+        if is_questionnaire_step and has_skip_request and details_incomplete:
+            topic_str = updated_slots.get("topic") or "your course topic"
+            prompt_text = ""
+            quick_replies = []
+            
+            if next_step == "ASK_TOPIC":
+                prompt_text = "Before we can view your outline or details summary, let's complete your course details step-by-step first. What course topic or subject would you like to build?"
+                from chatbot_builder_service import generate_dynamic_topic_suggestions
+                quick_replies = generate_dynamic_topic_suggestions(published_names if 'published_names' in locals() else [], draft_names if 'draft_names' in locals() else [])
+            elif next_step == "ASK_GOAL":
+                prompt_text = f"We haven't finished setting up your course details yet. Please answer all questions first. What is your primary learning goal for {topic_str}?"
+                from chatbot_builder_service import generate_dynamic_goal_suggestions
+                quick_replies = generate_dynamic_goal_suggestions(topic_str)
+            elif next_step == "ASK_LEVEL":
+                prompt_text = f"We haven't finished setting up your course details yet. Please answer all questions first. What is your target audience's skill level for {topic_str}?"
+                quick_replies = ["Complete Beginner / Start Fresh", "Intermediate / Some experience", "Advanced / Deep Dive"]
+            elif next_step == "ASK_STYLE":
+                topic_lower = topic_str.lower()
+                is_prog = any(x in topic_lower for x in ["python", "java", "coding", "program", "react", "javascript", "sql", "backend", "frontend", "html", "css", "django"])
+                prompt_text = f"We haven't finished setting up your course details yet. Please answer all questions first. How would you like the lessons for {topic_str} to be structured?"
+                if is_prog:
+                    quick_replies = ["Hands-on Coding", "Interactive Quizzes", "Detailed Explanations", "Balanced Combination"]
+                else:
+                    quick_replies = ["Detailed Explanations", "Interactive Quizzes", "Structured Tables", "Balanced Combination"]
+            elif next_step == "ASK_DURATION":
+                prompt_text = f"We haven't finished setting up your course details yet. Please answer all questions first. How much total duration or depth would you like for {topic_str}?"
+                quick_replies = ["1 Hour", "2 Hours", "5 Hours", "10 Hours", "15 Hours", "20 Hours"]
+
+            meta = {
+                "next_step": next_step,
+                **updated_slots
+            }
+            return JSONResponse({
+                "status": "success",
+                "reply": prompt_text,
+                "quickReplies": quick_replies,
+                "metadata": meta,
+                "type": "details"
+            })
 
         # Check if the user is confirming/cancelling existing structure reuse
         is_structure_confirm = False

@@ -33,6 +33,14 @@ def extract_slots_from_message(user_message: str, current_slots: Dict[str, Any],
     Invokes OpenAI in structured JSON mode to extract slot values from the latest user message
     and merge them with existing slot values. Returns a tuple of (merged_slots, raw_extracted_slots).
     """
+    lowercase_msg = user_message.lower()
+    has_skip_keywords = any(w in lowercase_msg for w in [
+        "module", "modules", "chapter", "chapters", "outline", "syllabus", "roadmap", "content", "lesson", "lessons", "structure",
+        "detail summary", "details summary", "summary card", "summary", "info", "card", "details card", "view details", "show details"
+    ])
+    if has_skip_keywords:
+        return current_slots, {}
+
     client = get_openai_client()
     
     system_prompt = """You are a slot extraction module for a course builder assistant.
@@ -113,8 +121,11 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
 
     lowercase_msg = user_message.lower()
 
-    # 0. A. Skip-ahead protection: prevent going to structure or content before basic details are complete
-    has_skip_keywords = any(w in lowercase_msg for w in ["module", "modules", "chapter", "chapters", "outline", "syllabus", "roadmap", "content", "lesson", "lessons", "structure"])
+    # 0. A. Skip-ahead protection: prevent going to structure, summary card, or content before basic details are complete
+    has_skip_keywords = any(w in lowercase_msg for w in [
+        "module", "modules", "chapter", "chapters", "outline", "syllabus", "roadmap", "content", "lesson", "lessons", "structure",
+        "detail summary", "details summary", "summary card", "summary", "info", "card", "details card", "view details", "show details"
+    ])
     details_incomplete = not (slots.get("topic") and slots.get("learningGoal") and slots.get("currentLevel") and slots.get("learningStyle") and slots.get("duration"))
     if current_step in ["ASK_TOPIC", "ASK_GOAL", "ASK_LEVEL", "ASK_STYLE", "ASK_DURATION"] and has_skip_keywords and details_incomplete:
         empty_step = "ASK_TOPIC"
@@ -128,7 +139,7 @@ def determine_next_step(current_step: str, slots: Dict[str, Any], user_message: 
             empty_step = "ASK_STYLE"
         elif not slots.get("duration"):
             empty_step = "ASK_DURATION"
-        return empty_step, "We need to complete the basic course details first. Let's complete the questions step-by-step so I can construct your course correctly."
+        return empty_step, "We haven't completed or confirmed your course details yet. Please answer all basic detail questions step-by-step first so I can construct your course correctly."
 
     # 0. B. Universal details redirect: if user explicitly requests detail changes during outline or content phase
     if current_step in ["OUTLINE_EDIT", "EDIT_OUTLINE_CHOICE", "CONFIRM_GENERATE", "PROMPT_GEN", "READY"]:
