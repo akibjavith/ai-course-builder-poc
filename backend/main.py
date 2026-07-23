@@ -768,7 +768,7 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
             has_edit_verb = any(w in lowercase_msg for w in ["edit", "change", "modify", "update", "adjust"])
             has_detail_noun = any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration", "objective", "requirements", "hours", "basic info", "info", "basic"])
             has_structure_noun = any(w in lowercase_msg for w in ["module", "modules", "chapter", "chapters", "outline", "syllabus", "roadmap", "lesson", "lessons"])
-            has_action_verb = any(w in lowercase_msg for w in ["add", "remove", "delete", "reduce", "shrink", "decrease", "cut", "rename", "reorder", "shuffle", "move", "swap"])
+            has_action_verb = any(w in lowercase_msg for w in ["add", "remove", "delete", "reduce", "shrink", "decrease", "cut", "rename", "reorder", "shuffle", "move", "swap", "create", "split", "make", "generate", "build", "divide", "separate", "extract"])
             
             if has_edit_verb and not has_detail_noun and not has_structure_noun:
                 is_ambiguous = True
@@ -790,8 +790,17 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
 
         # Only trigger JSON mode outline modification if user specified an active edit action
         if not is_confirmation and not is_details_redirect:
-            generic_outline_phrases = ["edit outline", "i would like to edit the course outline.", "i would like to edit the outline.", "edit the outline", "edit syllabus", "modify outline"]
-            is_generic_edit_request = lowercase_msg.strip() in generic_outline_phrases or (has_structure_noun and not has_action_verb and has_edit_verb)
+            generic_outline_phrases = [
+                "edit outline", "i would like to edit the course outline.", "i would like to edit the outline.", 
+                "edit the outline", "edit syllabus", "modify outline", "change outline", "change the outline",
+                "edit modules", "change modules", "modify modules", "edit chapters", "change chapters", "modify chapters"
+            ]
+            is_generic_edit_request = lowercase_msg.strip() in generic_outline_phrases or (
+                len(lowercase_msg.split()) <= 4 and 
+                any(w in lowercase_msg for w in ["edit", "change", "modify", "update", "adjust"]) and 
+                any(w in lowercase_msg for w in ["outline", "modules", "chapters", "syllabus", "roadmap"]) and 
+                not any(w in lowercase_msg for w in ["add", "remove", "delete", "reduce", "shrink", "decrease", "cut", "rename", "reorder", "shuffle", "move", "swap", "to", "about", "on", "for", "first", "second", "third", "last", "1", "2", "3", "4", "5", "6", "7", "8", "9"])
+            )
             if not is_generic_edit_request:
                 is_outline_edit_req = True
 
@@ -808,6 +817,20 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                         user_message = msg.get("content", "")
                         break
             lowercase_msg = user_message.lower()
+
+            generic_add_phrases = [
+                "add new module", "add one module", "add module", "add modules", "add a module",
+                "i would like to add one module to the outline.", "i would like to add a module.",
+                "please add a module.", "please add one module.", "add module to the outline",
+                "add one module to the outline"
+            ]
+            generic_reduce_phrases = [
+                "reduce modules", "reduce one module", "reduce by 1 module", "reduce by 2 modules", "your choice (reduce by 2)",
+                "i would like to reduce one module from the outline.", "please reduce the outline by 1 module.",
+                "please reduce the outline by 2 modules.", "please reduce the outline by 2 modules of your choice.",
+                "reduce 1 module", "remove one module", "delete one module", "reduce a module", "reduce 1",
+                "remove 1 module", "delete 1 module", "reduce by 1", "reduce by 2"
+            ]
 
             # Custom modification prompt builder for clarifying steps
             current_count = len(current_structure.get("modules", []))
@@ -853,7 +876,7 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
             is_reduce_req = False
             is_add_req = False
             if not is_specific_edit:
-                is_reduce_req = any(w in lowercase_msg for w in ["reduce", "shrink", "delete", "remove", "cut", "decrease"])
+                is_reduce_req = any(w in lowercase_msg for w in ["reduce", "shrink", "delete", "remove", "cut", "decrease"]) and not any(w in lowercase_msg for w in ["chapter", "chapters", "subtopic", "subtopics", "lesson", "lessons", "topic", "topics"])
                 is_add_req = ("add" in lowercase_msg and any(w in lowercase_msg for w in ["module", "modules", "syllabus", "roadmap"])) or is_pending_add_confirm
             
             if is_add_req:
@@ -866,7 +889,7 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                     if f" {prep} " in f" {lowercase_msg} ":
                         idx = lowercase_msg.find(prep)
                         topic_focus = user_message[idx + len(prep):].strip()
-                        topic_focus = topic_focus.strip('."\'? ')
+                        topic_focus = topic_focus.strip('."\'?? ')
                         break
                         
                 target_count = current_count + count
@@ -892,12 +915,24 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                             "type": "details"
                         })
                 else:
-                    user_message = f"Add exactly {count} new modules focused on '{topic_focus}' to the outline. The final outline MUST contain exactly {target_count} modules."
+                    is_generic_add = lowercase_msg.strip() in generic_add_phrases
+                    if is_generic_add:
+                        user_message = f"Add exactly {count} new modules focused on '{topic_focus}' to the outline. The final outline MUST contain exactly {target_count} modules."
+                    else:
+                        user_message = (
+                            f"{user_message}\n\n"
+                            f"CRITICAL STRUCTURAL CONSTRAINT:\n"
+                            f"- Current count of modules: {current_count}\n"
+                            f"- Modules to add: {count}\n"
+                            f"- You MUST generate exactly {count} new modules.\n"
+                            f"- The output JSON 'modules' array MUST contain EXACTLY {target_count} modules in total. Do not generate {target_count - 1} or {target_count + 1}."
+                        )
                     lowercase_msg = user_message.lower()
                     
             elif is_reduce_req:
                 is_reduce_to = bool(re.search(r'\b(reduce|shrink|cut|bring|drop)\s+(it\s+)?to\b', lowercase_msg)) or "down to" in lowercase_msg
-                is_reduce_one = (any(phrase in lowercase_msg for phrase in ["reduce one module", "reduce 1 module", "remove one module", "delete one module", "reduce a module", "reduce 1"]) or count == 1) and not is_reduce_to
+                is_generic_reduce = lowercase_msg.strip() in generic_reduce_phrases
+                is_reduce_one = is_generic_reduce and not is_reduce_to
                 
                 if is_reduce_one and not is_specific_edit:
                     current_modules = current_structure.get("modules", [])
@@ -923,7 +958,7 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                         },
                         "type": "structure"
                     })
-                elif is_reduce_to and not is_specific_edit and count is not None and count >= 1:
+                elif is_reduce_to and not is_specific_edit and is_generic_reduce and count is not None and count >= 1:
                     current_modules = current_structure.get("modules", [])
                     target_count = count
                     if target_count < len(current_modules):
@@ -978,7 +1013,28 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
                         "type": "details"
                     })
                 else:
-                    user_message = f"Remove EXACTLY {diff} module(s) of your choice from the outline. The final output 'modules' JSON array MUST contain EXACTLY {target_count} items. Keep {target_count} modules."
+                    if is_generic_reduce:
+                        user_message = f"Remove EXACTLY {diff} module(s) of your choice from the outline. The final output 'modules' JSON array MUST contain EXACTLY {target_count} items. Keep {target_count} modules."
+                    else:
+                        user_message = (
+                            f"{user_message}\n\n"
+                            f"CRITICAL STRUCTURAL CONSTRAINT:\n"
+                            f"- Current count of modules: {current_count}\n"
+                            f"- Modules to remove: {diff}\n"
+                            f"- You MUST remove exactly {diff} modules from the current outline.\n"
+                            f"- The output JSON 'modules' array MUST contain EXACTLY {target_count} modules in total. Do not generate {target_count - 1} or {target_count + 1}."
+                        )
+                    lowercase_msg = user_message.lower()
+
+            else:
+                # Neither is_add_req nor is_reduce_req triggered (or it was a specific edit).
+                # If the user is modifying chapters or other content, ensure module count is preserved.
+                has_chapter_keyword = any(w in lowercase_msg for w in ["chapter", "chapters", "subtopic", "subtopics", "lesson", "lessons", "topic", "topics"])
+                if has_chapter_keyword or is_specific_edit:
+                    user_message = (
+                        f"{user_message}\n\n"
+                        f"Constraint: You MUST preserve the exact number of modules ({current_count}) in the current outline. Do not add or remove any modules. Only modify the modules or chapters according to the user request."
+                    )
                     lowercase_msg = user_message.lower()
 
             # 1. Programmatic Shuffle Interceptor (only for random shuffle requests)
@@ -1035,11 +1091,12 @@ User's Modification Request:
 
 Rules:
 1. STRICT COMPLETE OUTPUT RULE: You MUST output the ENTIRE updated course syllabus JSON including all unchanged modules. Never omit, truncate, or drop any module or chapter from the current outline.
-2. CHAPTERS GENERATION RULE: Every module in the output (including newly added ones) MUST contain a list of relevant chapters. The 'chapters' list must NEVER be empty. If a new module is added, you MUST generate at least 3-4 relevant chapters (subtopics) for it.
+2. CHAPTERS GENERATION RULE: Every module in the output (including newly added ones) MUST contain a list of relevant chapters. The 'chapters' list must NEVER be empty. By default, generate 3-4 chapters per module, unless the user request explicitly specifies a different number of chapters/subtopics per module (e.g., "two subtopics", "2 chapters").
 3. EXACT COUNT RULE: The final outline in the JSON output MUST have EXACTLY the target count of modules specified in the user request description. Count them carefully. If it says "The final outline MUST contain exactly X modules", your JSON output 'modules' array MUST have exactly X items. Do not output X-1 or X+1 modules.
 4. RENAME STRUCTURAL PRESERVATION RULE: If the request is to rename modules or chapters, you MUST keep the exact same number of modules and chapters, and only change/rename their titles. Do NOT alter the course structure or count of modules/chapters.
 5. NO INDEXES RULE: Do NOT prepend numbers, chapter numbers, or index prefixes (like "Module 1", "Chapter 1 -", "1.1") to module or chapter titles.
-6. JSON ONLY RULE: Output ONLY valid JSON conforming to the schema. No markdown code blocks, no text explanations.{specific_edit_rule}
+6. JSON ONLY RULE: Output ONLY valid JSON conforming to the schema. No markdown code blocks, no text explanations.
+7. MODULE COUNT PRESERVATION RULE: You MUST preserve the exact number of modules in the current outline (do not add or remove modules) unless the user's request explicitly specifies adding, removing, or changing the number of modules.{specific_edit_rule}
 
 Expected JSON output format exactly:
 {{

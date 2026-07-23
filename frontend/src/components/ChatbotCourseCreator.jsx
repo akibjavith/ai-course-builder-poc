@@ -1863,7 +1863,7 @@ export default function ChatbotCourseCreator({ onClose }) {
   };
 
   // 2. Safe Syllabus tree renderer
-  const renderInlineStructure = (structure) => {
+  const renderInlineStructure = (structure, isLatest = true) => {
     if (!structure || !structure.modules || !Array.isArray(structure.modules) || structure.modules.length === 0) return null;
     const courseTitle = courseData?.details?.courseName || "Custom Course Outline";
     return (
@@ -1917,7 +1917,7 @@ export default function ChatbotCourseCreator({ onClose }) {
             );
           })}
         </div>
-        {(currentStep === 'OUTLINE_EDIT' || currentStep === 'CONFIRM_GENERATE') && (
+        {isLatest && (currentStep === 'OUTLINE_EDIT' || currentStep === 'CONFIRM_GENERATE') && (
           <div className="border-t border-slate-100 pt-3 space-y-2">
             <p className="text-[10px] text-slate-400 text-center leading-relaxed">
               Great! Here's the updated course structure outline. Please take a moment to review it. Would you like to make any further modifications, or are you happy with this outline?
@@ -2742,7 +2742,14 @@ export default function ChatbotCourseCreator({ onClose }) {
                   </div>
                 )}
 
-                {Array.isArray(messages) && messages.map((msg, idx) => {
+                {(() => {
+                  const lastStructureMsgIndex = (messages || []).reduce((lastIdx, m, i) => {
+                    if (m && m.role === 'assistant' && m.metadataType === 'structure') {
+                      return i;
+                    }
+                    return lastIdx;
+                  }, -1);
+                  return Array.isArray(messages) && messages.map((msg, idx) => {
                   if (!msg) return null;
                   const isUser = msg.role === 'user';
                   return (
@@ -2769,7 +2776,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                            )}
 
                            {/* Render custom metadata cards inline inside the bubble */}
-                           {!isUser && msg.metadataType === 'structure' && renderInlineStructure(msg.metadata)}
+                           {!isUser && msg.metadataType === 'structure' && renderInlineStructure(msg.metadata, idx === lastStructureMsgIndex)}
                            {!isUser && msg.metadataType === 'details_card' && renderInlineDetailsCard(msg.metadata, idx === messages.length - 1)}
                           
                           <div className="text-[9px] text-right mt-1.5 opacity-60">
@@ -2936,7 +2943,8 @@ export default function ChatbotCourseCreator({ onClose }) {
                       </div>
                     </div>
                   );
-                })}
+                });
+              })()}
 
                 {loading && (
                   <div className="flex justify-start">
