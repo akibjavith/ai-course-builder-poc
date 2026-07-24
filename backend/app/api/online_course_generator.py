@@ -87,75 +87,149 @@ async def generate_lesson_blocks(req: LessonRequest):
         duration_hours = max(1, min(duration_hours, 20))
         logger.info(f"[LessonBlocks] resolved duration_hours: {duration_hours}")
 
-        # ── Per-hour content-depth guidelines ───────────────────────────────────
+        # ── Per-tier token budget and system-level enforcement rules ─────────────
+        # max_tokens: explicitly signal the expected response size to the model.
+        # system_size_rules: injected into the system prompt (highest model weight).
+        # paragraph_min / quiz_exact: used for end-of-prompt reinforcement.
+        if duration_hours == 1:
+            max_tokens_for_tier = 1200
+            paragraph_min = 40
+            quiz_exact = 1
+            system_size_rules = (
+                "CONTENT SIZE LAW — 1-HOUR MICRO COURSE: "
+                "Every paragraph block MUST contain a minimum of 40 words. "
+                "Every quiz or knowledge_check block MUST contain exactly 1 question. "
+                "You are FORBIDDEN from writing paragraphs shorter than 40 words."
+            )
+        elif duration_hours == 2:
+            max_tokens_for_tier = 2000
+            paragraph_min = 60
+            quiz_exact = 1
+            system_size_rules = (
+                "CONTENT SIZE LAW — 2-HOUR SHORT COURSE: "
+                "Every paragraph block MUST contain a minimum of 60 words. "
+                "Every quiz or knowledge_check block MUST contain exactly 1 question. "
+                "You are FORBIDDEN from writing paragraphs shorter than 60 words."
+            )
+        elif 3 <= duration_hours <= 5:
+            max_tokens_for_tier = 3000
+            paragraph_min = 90
+            quiz_exact = 2
+            system_size_rules = (
+                f"CONTENT SIZE LAW — {duration_hours}-HOUR COMPACT COURSE: "
+                "Every paragraph block MUST contain a minimum of 90 words. "
+                "Every quiz or knowledge_check block MUST contain exactly 2 questions. "
+                "You are FORBIDDEN from writing paragraphs shorter than 90 words."
+            )
+        elif 6 <= duration_hours <= 9:
+            max_tokens_for_tier = 4500
+            paragraph_min = 130
+            quiz_exact = 2
+            system_size_rules = (
+                f"CONTENT SIZE LAW — {duration_hours}-HOUR STANDARD COURSE: "
+                "Every paragraph block MUST contain a minimum of 130 words. "
+                "Every quiz or knowledge_check block MUST contain exactly 2 questions. "
+                "You are FORBIDDEN from writing paragraphs shorter than 130 words."
+            )
+        elif 10 <= duration_hours <= 14:
+            max_tokens_for_tier = 5500  # reduced from 6500 — leaves headroom for clean JSON close
+            paragraph_min = 160
+            quiz_exact = 3
+            system_size_rules = (
+                f"CONTENT SIZE LAW — {duration_hours}-HOUR MEDIUM COURSE: "
+                "Every paragraph block MUST contain a minimum of 160 words. "
+                "Every quiz or knowledge_check block MUST contain exactly 3 questions. "
+                "You are FORBIDDEN from writing paragraphs shorter than 160 words."
+            )
+        elif 15 <= duration_hours <= 17:
+            max_tokens_for_tier = 7000  # reduced from 9000 — leaves headroom for clean JSON close
+            paragraph_min = 220
+            quiz_exact = 4
+            system_size_rules = (
+                f"CONTENT SIZE LAW — {duration_hours}-HOUR IN-DEPTH COURSE: "
+                "Every paragraph block MUST contain a minimum of 220 words. "
+                "You MUST generate at least 2 paragraph blocks per major sub-topic. "
+                "Every quiz or knowledge_check block MUST contain exactly 4 questions. "
+                "You are FORBIDDEN from writing paragraphs shorter than 220 words."
+            )
+        else:
+            # 18–20 hours
+            max_tokens_for_tier = 8500  # 8500 leaves ~3500 tokens headroom for clean JSON close
+            paragraph_min = 280
+            quiz_exact = 5
+            system_size_rules = (
+                f"CONTENT SIZE LAW — {duration_hours}-HOUR COMPREHENSIVE COURSE: "
+                "Every paragraph block MUST contain a minimum of 280 words. "
+                "You MUST generate at least 3 paragraph blocks per major sub-topic. "
+                "Every quiz or knowledge_check block MUST contain exactly 5 questions. "
+                "The total lesson word count MUST exceed 1500 words. "
+                "You are FORBIDDEN from writing paragraphs shorter than 280 words. "
+                "You will be penalized for short, brief, or summarized content."
+            )
+
+        logger.info(f"[LessonBlocks] tier: {duration_hours}h | max_tokens: {max_tokens_for_tier} | para_min: {paragraph_min} | quiz: {quiz_exact}")
+
+        # ── Per-hour content-depth guidelines (user prompt body) ─────────────────
         if duration_hours == 1:
             duration_guidelines = """
-        COURSE DURATION LEVEL: MICRO COURSE (1 Hour).
-        - Content must be extremely concise, focused on a single core concept only.
-        - Paragraph blocks: Write very brief explanations of 30 to 50 words maximum. One sentence per idea.
-        - Bullet lists and numbered lists: Maximum 2 items only.
-        - Tables: Maximum 1 row of data.
-        - Quizzes and Knowledge Checks: Write exactly 1 question.
-        - Do NOT include assignments or long examples.
+        COURSE DEPTH: MICRO COURSE (1 Hour).
+        - Paragraph blocks: Minimum 40 words each. One focused idea per paragraph.
+        - Bullet / numbered lists: Maximum 2 items.
+        - Tables: Maximum 1 data row.
+        - Quiz / knowledge_check: Exactly 1 question per block.
+        - Do NOT include assignments or multi-part examples.
         """
         elif duration_hours == 2:
             duration_guidelines = """
-        COURSE DURATION LEVEL: SHORT COURSE (2 Hours).
-        - Content must be concise and focused. Cover the essentials only.
-        - Paragraph blocks: Write brief explanations of 50 to 80 words. Stay focused.
-        - Bullet lists and numbered lists: Maximum 2 to 3 items.
-        - Tables: Maximum 2 rows of data.
-        - Quizzes and Knowledge Checks: Write exactly 1 question.
+        COURSE DEPTH: SHORT COURSE (2 Hours).
+        - Paragraph blocks: Minimum 60 words each. Cover the core idea fully.
+        - Bullet / numbered lists: 2 to 3 items.
+        - Tables: Maximum 2 data rows.
+        - Quiz / knowledge_check: Exactly 1 question per block.
         """
         elif 3 <= duration_hours <= 5:
             duration_guidelines = f"""
-        COURSE DURATION LEVEL: COMPACT COURSE ({duration_hours} Hours).
-        - Content should be clear and practical without excessive depth.
-        - Paragraph blocks: Write focused explanations of 80 to 120 words.
-        - Bullet lists and numbered lists: 3 to 4 items.
-        - Tables: 2 to 3 rows of data.
-        - Quizzes and Knowledge Checks: Write exactly 1 to 2 questions.
+        COURSE DEPTH: COMPACT COURSE ({duration_hours} Hours).
+        - Paragraph blocks: Minimum 90 words each. Be clear and practical.
+        - Bullet / numbered lists: 3 to 4 items.
+        - Tables: 2 to 3 data rows.
+        - Quiz / knowledge_check: Exactly 2 questions per block.
         """
         elif 6 <= duration_hours <= 9:
             duration_guidelines = f"""
-        COURSE DURATION LEVEL: STANDARD COURSE ({duration_hours} Hours).
-        - Content should be moderately detailed with practical context.
-        - Paragraph blocks: Write detailed explanations of 120 to 160 words.
-        - Bullet lists and numbered lists: 3 to 5 items.
-        - Tables: 3 to 4 rows of data.
-        - Quizzes and Knowledge Checks: Write exactly 2 questions.
+        COURSE DEPTH: STANDARD COURSE ({duration_hours} Hours).
+        - Paragraph blocks: Minimum 130 words each. Include practical context and explanation.
+        - Bullet / numbered lists: 3 to 5 items.
+        - Tables: 3 to 4 data rows.
+        - Quiz / knowledge_check: Exactly 2 questions per block.
         """
         elif 10 <= duration_hours <= 14:
             duration_guidelines = f"""
-        COURSE DURATION LEVEL: MEDIUM COURSE ({duration_hours} Hours).
-        - Content should be thorough, covering concepts in meaningful detail.
-        - Paragraph blocks: Write detailed explanations of 150 to 200 words.
-        - Bullet lists and numbered lists: 4 to 6 items with brief descriptions.
-        - Tables: 3 to 5 rows of data.
-        - Quizzes and Knowledge Checks: Write exactly 2 to 3 questions.
+        COURSE DEPTH: MEDIUM COURSE ({duration_hours} Hours).
+        - Paragraph blocks: Minimum 160 words each. Cover the concept thoroughly with examples embedded in the text.
+        - Bullet / numbered lists: 4 to 6 items, each with a brief description.
+        - Tables: 3 to 5 data rows.
+        - Quiz / knowledge_check: Exactly 3 questions per block.
         """
         elif 15 <= duration_hours <= 17:
             duration_guidelines = f"""
-        COURSE DURATION LEVEL: IN-DEPTH COURSE ({duration_hours} Hours).
-        - Content should be comprehensive and thorough with extensive context.
-        - Paragraph blocks: Write comprehensive, in-depth explanations of 200 to 280 words. Generate at least 2 to 3 distinct paragraphs per major sub-topic.
-        - Bullet lists and numbered lists: 5 to 8 items with detailed descriptions.
-        - Tables: 4 to 6 rows of data.
-        - Quizzes and Knowledge Checks: Write exactly 3 to 4 questions.
-        - Include practical assignment blocks where relevant.
+        COURSE DEPTH: IN-DEPTH COURSE ({duration_hours} Hours).
+        - Paragraph blocks: Minimum 220 words each. Write at least 2 paragraphs per major sub-topic. Explain concepts, context, and implications exhaustively.
+        - Bullet / numbered lists: 5 to 8 items, each with a detailed description.
+        - Tables: 4 to 6 data rows.
+        - Quiz / knowledge_check: Exactly 4 questions per block.
+        - Include at least one practical assignment block.
         """
         else:
             # 18–20 hours
             duration_guidelines = f"""
-        COURSE DURATION LEVEL: COMPREHENSIVE COURSE ({duration_hours} Hours).
-        - Content must be highly comprehensive, in-depth, exhaustive, and extensive — equivalent to a textbook chapter.
-        - Total word count: The entire lesson content must be extremely thorough, targeting a minimum of 1500 to 2000 words.
-        - Paragraph blocks: Write highly detailed, deep-dive, verbose textbook explanations of 250 to 380 words. Generate at least 3 to 4 distinct paragraphs under each major sub-heading. Do NOT write short summaries.
-        - Bullet lists and numbered lists: Write comprehensive, complete lists (6 to 10 items) with detailed descriptions for each item.
-        - Tables: Generate large comparison tables (5+ rows).
-        - Quizzes and Knowledge Checks: Write exactly 4 to 5 questions to test in-depth knowledge.
-        - Include practical assignment blocks with detailed grading criteria.
-        - CRITICAL: Avoid short summaries. You will be penalized if the content is short or brief.
+        COURSE DEPTH: COMPREHENSIVE COURSE ({duration_hours} Hours).
+        - Paragraph blocks: Minimum 280 words each. Write at least 3 paragraphs per major sub-topic. Every paragraph must be a deep-dive textbook-quality explanation — no summaries, no shortcuts.
+        - Bullet / numbered lists: 6 to 10 items, each with a detailed multi-sentence description.
+        - Tables: 5 or more data rows.
+        - Quiz / knowledge_check: Exactly 5 questions per block.
+        - Include at least one assignment block with full grading criteria.
+        - Total lesson word count MUST exceed 1500 words across all blocks.
         """
 
         # Extract style to adapt content block priorities
@@ -192,6 +266,17 @@ async def generate_lesson_blocks(req: LessonRequest):
         - Provide a rich, balanced mix of text paragraphs, structured comparison tables, quizzes, and code blocks (where relevant).
         """
 
+        # ── End-of-prompt reinforcement (recency bias — model weights last instructions highest) ──
+        end_reinforcement = f"""
+        ━━━ FINAL CONTENT SIZE ENFORCEMENT — READ THIS LAST ━━━
+        This lesson is for a {duration_hours}-hour course. These rules are NON-NEGOTIABLE:
+        1. Every "paragraph" block text field MUST contain a MINIMUM of {paragraph_min} words. Count them. Do NOT submit a paragraph shorter than {paragraph_min} words under any circumstance.
+        2. Every "quiz" and "knowledge_check" block MUST contain exactly {quiz_exact} question(s) in their options array.
+        3. You are FORBIDDEN from writing short, brief, or summarized paragraph blocks. If a paragraph feels done before {paragraph_min} words — continue writing. Add more explanation, a real-world example, or deeper context.
+        4. These size rules apply to EVERY block you choose to include, regardless of block type.
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        """
+
         prompt_str = f"""
         Generate structured block-based educational content for the lesson '{req.title}' in the module '{req.module_title}' for the course '{course_title}'.
         Course Description: {course_desc}
@@ -215,18 +300,18 @@ async def generate_lesson_blocks(req: LessonRequest):
         
         The allowed block types and their exact structure/rules are:
         1. "heading": level (1, 2, or 3), text. Use this for outline and sub-topics.
-        2. "paragraph": text. CRITICAL: Every paragraph block MUST follow the word count limits defined in the COURSE DURATION LEVEL guidelines above. Write directly to the student.
-        3. "bullet_list": items (list of strings). Follow the item count defined in the COURSE DURATION LEVEL guidelines above.
-        4. "numbered_list": items (list of strings). Follow the item count defined in the COURSE DURATION LEVEL guidelines above.
+        2. "paragraph": text. CRITICAL: Every paragraph block MUST meet the minimum word count defined in the COURSE DEPTH section above. Write directly to the student.
+        3. "bullet_list": items (list of strings). Follow the item count defined in the COURSE DEPTH section above.
+        4. "numbered_list": items (list of strings). Follow the item count defined in the COURSE DEPTH section above.
         5. "image": url (always output "" for now), caption (describe what the visual should represent).
         6. "video": url (always output "" for now), caption (describe what the video/narration should show).
-        7. "table": headers (list of strings), rows (list of lists of strings). Used for comparisons, classifications, and vocabulary guides. Follow the row count defined in the COURSE DURATION LEVEL guidelines above. Every cell must contain actual comparative or vocabulary data, not descriptions.
+        7. "table": headers (list of strings), rows (list of lists of strings). Used for comparisons, classifications, and vocabulary guides. Follow the row count defined in the COURSE DEPTH section above. Every cell must contain actual comparative or vocabulary data, not descriptions.
         8. "callout": text, callout_type (one of: "info", "warning", "tip", "danger").
         9. "code": language, code, explanation. Write actual functional code without markdown backticks inside the code field.
         10. "example": scenario, detail. Real-world scenario case study, math calculation, or code walk-through. Must contain the complete scenario and result.
-        11. "quiz": question, options (list of strings), correctAnswer (the exact string from options), explanation. Make sure the question is actual learner assessment, not placeholder text. Follow the question count defined in the COURSE DURATION LEVEL guidelines above.
+        11. "quiz": question, options (list of strings), correctAnswer (the exact string from options), explanation. Make sure the question is actual learner assessment, not placeholder text. Follow the question count defined in the COURSE DEPTH section above.
         12. "assignment": task, instructions, grading_criteria (list of strings). Write actual tasks the student can work on.
-        13. "knowledge_check": question, options (list of strings), answer (the exact string from options), explanation. Follow the question count defined in the COURSE DURATION LEVEL guidelines above.
+        13. "knowledge_check": question, options (list of strings), answer (the exact string from options), explanation. Follow the question count defined in the COURSE DEPTH section above.
         14. "summary": points (list of strings summarizing key takeaways).
         15. "reference": title, url (trusted educational platforms/documentation, no hallucinated URLs).
 
@@ -237,6 +322,8 @@ async def generate_lesson_blocks(req: LessonRequest):
         - Science Lessons: Detail observations, case studies, or step-by-step experiments.
         - Cybersecurity Lessons: Detail security configurations, threat analyses, and interactive scenarios.
         - Business Lessons: Detail case study text, strategic analyses, and practical scenarios.
+
+        {end_reinforcement}
 
         Ensure to output ONLY valid JSON matching this schema:
         {{
@@ -256,16 +343,26 @@ async def generate_lesson_blocks(req: LessonRequest):
         }}
         """
 
+        # Build dynamic system prompt: base identity + tier-specific size law
+        system_content = (
+            "You are a world-class educational textbook author. "
+            "Your goal is to write highly detailed, comprehensive, in-depth, and exhaustive textbook material. "
+            "You write extremely long, thorough, and complete lessons. Never summarize or omit details. "
+            "Output JSON only.\n\n"
+            f"{system_size_rules}"
+        )
+
         response = get_openai_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a world-class educational textbook author. Your goal is to write highly detailed, comprehensive, in-depth, and exhaustive textbook material. You write extremely long, thorough, and complete lessons. Never summarize or omit details. Output JSON only."
+                    "content": system_content
                 },
                 {"role": "user", "content": prompt_str}
             ],
             temperature=0.7,
+            max_tokens=max_tokens_for_tier,
             response_format={"type": "json_object"}
         )
 
@@ -276,7 +373,39 @@ async def generate_lesson_blocks(req: LessonRequest):
             except Exception as ex:
                 logger.error(f"Failed to track lesson blocks generation cost: {ex}")
         
-        lesson_data = json.loads(response.choices[0].message.content)
+        # ── Safe JSON parse with finish_reason check and repair fallback ─────────
+        raw_content = response.choices[0].message.content
+        finish_reason = response.choices[0].finish_reason
+
+        if finish_reason == "length":
+            logger.warning(
+                f"[LessonBlocks] Response was TRUNCATED (finish_reason=length) for lesson '{req.title}'. "
+                f"Attempting JSON repair. tier={duration_hours}h, max_tokens={max_tokens_for_tier}"
+            )
+
+        try:
+            lesson_data = json.loads(raw_content)
+        except json.JSONDecodeError as parse_err:
+            logger.warning(f"[LessonBlocks] Initial json.loads failed: {parse_err}. Attempting repair...")
+            try:
+                from chat_service import try_repair_truncated_json
+                repaired = try_repair_truncated_json(raw_content)
+                lesson_data = json.loads(repaired)
+                logger.info(f"[LessonBlocks] JSON repair succeeded for lesson '{req.title}'.")
+            except Exception as repair_err:
+                logger.error(
+                    f"[LessonBlocks] JSON repair also failed for lesson '{req.title}': {repair_err}. "
+                    "Returning empty lesson to avoid 500 crash."
+                )
+                # Return a safe fallback — partial lesson is better than a total 500 failure
+                lesson_data = {
+                    "title": req.title,
+                    "blocks": [{
+                        "type": "callout",
+                        "text": "Content generation was interrupted. Please regenerate this lesson.",
+                        "callout_type": "warning"
+                    }]
+                }
         
         # Coerce output to dictionary with blocks list
         if isinstance(lesson_data, list):
