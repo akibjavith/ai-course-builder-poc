@@ -8,6 +8,7 @@ class CourseDetails(BaseModel):
     description: str
     price: Optional[str] = ""
     duration: str
+    learningHours: Optional[str] = None  # Instructional content hours (1–20); distinct from duration (days)
     requirements: Optional[str] = ""
     level: Optional[str] = "beginner"
     language: Optional[str] = "English"

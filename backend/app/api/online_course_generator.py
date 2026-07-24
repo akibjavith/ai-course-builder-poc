@@ -66,43 +66,95 @@ async def generate_lesson_blocks(req: LessonRequest):
         difficulty = req.course_details.level if req.course_details else "beginner"
         objectives = req.course_details.requirements if req.course_details else ""
 
-        # Extract duration to scale lesson blocks content
+        # ── Duration / Learning Hours Resolution ────────────────────────────────
+        # Priority:
+        #   1. learningHours  (Normal flow — dedicated instructional-hours field)
+        #   2. duration       (Chatbot flow — stores hours in this field)
+        #   3. Default 10
+        # This shared logic ensures both flows use the same content-scaling endpoint
+        # without duplication.
         duration_hours = 10
         logger.info(f"[LessonBlocks] req.course_details: {req.course_details}")
-        if req.course_details and req.course_details.duration:
-            logger.info(f"[LessonBlocks] raw duration string: '{req.course_details.duration}'")
-            match = re.search(r'\d+', str(req.course_details.duration))
+
+        if req.course_details:
+            raw_hours = req.course_details.learningHours or req.course_details.duration or ""
+            logger.info(f"[LessonBlocks] raw learning-hours string: '{raw_hours}'")
+            match = re.search(r'\d+', str(raw_hours))
             if match:
                 duration_hours = int(match.group())
+
+        # Clamp to supported range 1–20
+        duration_hours = max(1, min(duration_hours, 20))
         logger.info(f"[LessonBlocks] resolved duration_hours: {duration_hours}")
 
-        if duration_hours <= 2:
+        # ── Per-hour content-depth guidelines ───────────────────────────────────
+        if duration_hours == 1:
             duration_guidelines = """
-        COURSE DURATION LEVEL: SHORT COURSE (1-2 Hours).
-        - The generated lesson content must be concise, short, and brief.
-        - Paragraph blocks: Write concise, brief explanations containing between 50 to 80 words. Do NOT write long paragraphs.
-        - Bullet lists and numbered lists: Keep them short (maximum 2 to 3 items).
-        - Tables: Generate small tables with a maximum of 2 rows.
-        - Quizzes and Knowledge Checks: Write exactly 1 single question.
+        COURSE DURATION LEVEL: MICRO COURSE (1 Hour).
+        - Content must be extremely concise, focused on a single core concept only.
+        - Paragraph blocks: Write very brief explanations of 30 to 50 words maximum. One sentence per idea.
+        - Bullet lists and numbered lists: Maximum 2 items only.
+        - Tables: Maximum 1 row of data.
+        - Quizzes and Knowledge Checks: Write exactly 1 question.
+        - Do NOT include assignments or long examples.
         """
-        elif duration_hours <= 14:
+        elif duration_hours == 2:
             duration_guidelines = """
-        COURSE DURATION LEVEL: MEDIUM COURSE (3-14 Hours).
-        - The generated lesson content should be moderate in length and detail.
-        - Paragraph blocks: Write detailed explanations containing between 120 to 180 words.
-        - Bullet lists and numbered lists: Keep them at a moderate size (3-5 items).
-        - Tables: Generate moderate tables with 3 to 5 rows.
+        COURSE DURATION LEVEL: SHORT COURSE (2 Hours).
+        - Content must be concise and focused. Cover the essentials only.
+        - Paragraph blocks: Write brief explanations of 50 to 80 words. Stay focused.
+        - Bullet lists and numbered lists: Maximum 2 to 3 items.
+        - Tables: Maximum 2 rows of data.
+        - Quizzes and Knowledge Checks: Write exactly 1 question.
+        """
+        elif 3 <= duration_hours <= 5:
+            duration_guidelines = f"""
+        COURSE DURATION LEVEL: COMPACT COURSE ({duration_hours} Hours).
+        - Content should be clear and practical without excessive depth.
+        - Paragraph blocks: Write focused explanations of 80 to 120 words.
+        - Bullet lists and numbered lists: 3 to 4 items.
+        - Tables: 2 to 3 rows of data.
+        - Quizzes and Knowledge Checks: Write exactly 1 to 2 questions.
+        """
+        elif 6 <= duration_hours <= 9:
+            duration_guidelines = f"""
+        COURSE DURATION LEVEL: STANDARD COURSE ({duration_hours} Hours).
+        - Content should be moderately detailed with practical context.
+        - Paragraph blocks: Write detailed explanations of 120 to 160 words.
+        - Bullet lists and numbered lists: 3 to 5 items.
+        - Tables: 3 to 4 rows of data.
+        - Quizzes and Knowledge Checks: Write exactly 2 questions.
+        """
+        elif 10 <= duration_hours <= 14:
+            duration_guidelines = f"""
+        COURSE DURATION LEVEL: MEDIUM COURSE ({duration_hours} Hours).
+        - Content should be thorough, covering concepts in meaningful detail.
+        - Paragraph blocks: Write detailed explanations of 150 to 200 words.
+        - Bullet lists and numbered lists: 4 to 6 items with brief descriptions.
+        - Tables: 3 to 5 rows of data.
         - Quizzes and Knowledge Checks: Write exactly 2 to 3 questions.
         """
-        else:
+        elif 15 <= duration_hours <= 17:
             duration_guidelines = f"""
-        COURSE DURATION LEVEL: LONG COURSE ({duration_hours} Hours).
-        - The generated lesson content must be highly comprehensive, in-depth, exhaustive, and extensive.
+        COURSE DURATION LEVEL: IN-DEPTH COURSE ({duration_hours} Hours).
+        - Content should be comprehensive and thorough with extensive context.
+        - Paragraph blocks: Write comprehensive, in-depth explanations of 200 to 280 words. Generate at least 2 to 3 distinct paragraphs per major sub-topic.
+        - Bullet lists and numbered lists: 5 to 8 items with detailed descriptions.
+        - Tables: 4 to 6 rows of data.
+        - Quizzes and Knowledge Checks: Write exactly 3 to 4 questions.
+        - Include practical assignment blocks where relevant.
+        """
+        else:
+            # 18–20 hours
+            duration_guidelines = f"""
+        COURSE DURATION LEVEL: COMPREHENSIVE COURSE ({duration_hours} Hours).
+        - Content must be highly comprehensive, in-depth, exhaustive, and extensive — equivalent to a textbook chapter.
         - Total word count: The entire lesson content must be extremely thorough, targeting a minimum of 1500 to 2000 words.
-        - Paragraph blocks: Write highly detailed, deep-dive, verbose textbook explanations containing between 220 to 350 words. You MUST generate at least 3 to 4 distinct paragraph blocks under each major sub-heading to explain the concepts in deep detail. Do NOT write short summaries.
-        - Bullet lists and numbered lists: Write comprehensive, complete lists (5 to 10 items) with detailed descriptions for each item.
+        - Paragraph blocks: Write highly detailed, deep-dive, verbose textbook explanations of 250 to 380 words. Generate at least 3 to 4 distinct paragraphs under each major sub-heading. Do NOT write short summaries.
+        - Bullet lists and numbered lists: Write comprehensive, complete lists (6 to 10 items) with detailed descriptions for each item.
         - Tables: Generate large comparison tables (5+ rows).
         - Quizzes and Knowledge Checks: Write exactly 4 to 5 questions to test in-depth knowledge.
+        - Include practical assignment blocks with detailed grading criteria.
         - CRITICAL: Avoid short summaries. You will be penalized if the content is short or brief.
         """
 

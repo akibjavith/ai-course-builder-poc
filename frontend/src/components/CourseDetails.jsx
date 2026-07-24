@@ -12,6 +12,7 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
     description: '',
     price: '',
     duration: '',
+    learningHours: '',
     requirements: '',
     level: 'beginner',
     language: 'English',
@@ -95,6 +96,12 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
     { value: 'Alex Rivera', label: 'Alex Rivera' }
   ];
 
+  // Learning hours dropdown — strings so they match the AI suggestion payload and stored details
+  const learningHoursOptions = Array.from({ length: 20 }, (_, i) => ({
+    value: String(i + 1),
+    label: i + 1 === 1 ? '1 Hour' : `${i + 1} Hours`
+  }));
+
   const handleChange = (field, value) => {
     const updated = { ...details, [field]: value };
     setDetails(updated);
@@ -137,6 +144,7 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
       description: suggestion.description || details.description,
       price: suggestion.price?.toString().replace(/[^0-9.]/g, '') || details.price,
       duration: suggestion.duration?.toString().replace(/[^0-9]/g, '') || details.duration,
+      learningHours: suggestion.learningHours?.toString().replace(/[^0-9]/g, '') || details.learningHours,
       requirements: suggestion.requirements || details.requirements,
       level: findMatch(suggestion.level || suggestion.difficulty, levelOptions) || details.level,
       language: suggestion.language || details.language,
@@ -147,7 +155,7 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
     updateCourseData('details', adapted);
   };
 
-  const isMandatoryFilled = details.courseType && details.subject && details.courseName && details.description && details.price && details.duration;
+  const isMandatoryFilled = details.courseType && details.subject && details.courseName && details.description && details.price && details.duration && details.learningHours;
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -243,10 +251,19 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
                   type="number" 
                   value={details.duration}
                   onChange={(e) => handleChange('duration', e.target.value)}
-                  placeholder="Enter duration in days"
+                  placeholder="Enter duration in days (e.g. 30)"
                   className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-50 rounded-2xl focus:bg-white focus:border-sky-500 outline-none transition font-medium text-slate-800 text-sm"
                 />
               </div>
+
+              <CustomSelect
+                label="Learning Hours *"
+                value={details.learningHours}
+                options={learningHoursOptions}
+                onChange={(val) => handleChange('learningHours', val)}
+                placeholder="Select hours..."
+              />
+              <p className="text-[9px] text-slate-400 font-medium ml-1 -mt-1">Determines the depth and size of AI-generated lesson content.</p>
 
               {/* Row 3 */}
               <div className="space-y-1.5">

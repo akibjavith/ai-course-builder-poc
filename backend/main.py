@@ -2059,6 +2059,7 @@ def run_background_generation(draft_id: str, course_data: dict, messages: list):
             description=details.get("description") or "",
             price=details.get("price") or "",
             duration=details.get("duration") or "",
+            learningHours=details.get("learningHours") or None,  # Normal-flow instructional hours; None for chatbot courses
             requirements=details.get("requirements") or "",
             level=details.get("level") or "beginner",
             language=details.get("language") or "English",

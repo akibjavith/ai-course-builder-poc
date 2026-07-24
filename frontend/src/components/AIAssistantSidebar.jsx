@@ -229,6 +229,10 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
                           <span className="font-bold text-slate-900">Course Duration (Days):</span>
                           <input className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 font-semibold text-slate-600 outline-none" value={msg.data?.duration} onChange={(e) => handleUpdateSuggestion(msg.id, 'duration', e.target.value)} />
                         </div>
+                        <div className="flex flex-col gap-1 text-[11px]">
+                          <span className="font-bold text-slate-900">Learning Hours (1–20):</span>
+                          <input type="number" min="1" max="20" className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 font-semibold text-slate-600 outline-none" value={msg.data?.learningHours} onChange={(e) => handleUpdateSuggestion(msg.id, 'learningHours', e.target.value)} />
+                        </div>
                         <div className="flex flex-col gap-1 text-[11px] col-span-2">
                           <span className="font-bold text-slate-900">Requirements:</span>
                           <input className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 font-semibold text-slate-600 outline-none" value={msg.data?.requirements} onChange={(e) => handleUpdateSuggestion(msg.id, 'requirements', e.target.value)} />
