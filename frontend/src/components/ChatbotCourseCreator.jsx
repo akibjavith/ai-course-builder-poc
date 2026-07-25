@@ -1370,11 +1370,16 @@ export default function ChatbotCourseCreator({ onClose }) {
       }
 
       // 2. Category Filter
-      const isPublished = d.currentStep === 'READY' && d.courseData?.mysql_id;
-      const isUnpublished = d.currentStep === 'READY' && !d.courseData?.mysql_id;
-      const isInProgress = d.currentStep === 'CONFIRM_GENERATE' && (d.id === activeDraftId ? isBatchGenerating || generationStatus === 'generating' : false);
-      const isOnHold = d.currentStep === 'CONFIRM_GENERATE' && !isInProgress;
-      const isOutline = !['READY', 'CONFIRM_GENERATE'].includes(d.currentStep);
+      const isCompletedStep = d.currentStep === 'READY' || d.bgStatus === 'completed';
+      const isPublished = isCompletedStep && d.courseData?.mysql_id;
+      const isUnpublished = isCompletedStep && !d.courseData?.mysql_id;
+      const isInProgress = !isCompletedStep && d.currentStep === 'CONFIRM_GENERATE' && (
+        d.id === activeDraftId
+          ? isBatchGenerating || generationStatus === 'generating'
+          : d.bgStatus === 'generating'
+      );
+      const isOnHold = !isCompletedStep && d.currentStep === 'CONFIRM_GENERATE' && !isInProgress;
+      const isOutline = !isCompletedStep && d.currentStep !== 'CONFIRM_GENERATE';
 
       if (activeFilter === 'published') return isPublished;
       if (activeFilter === 'unpublished') return isUnpublished;
@@ -2456,35 +2461,40 @@ export default function ChatbotCourseCreator({ onClose }) {
                                     {d.courseName || 'Untitled Course'}
                                   </span>
                                   {(() => {
-                                    const isPublished = d.currentStep === 'READY' && d.courseData?.mysql_id;
-                                    const isUnpublished = d.currentStep === 'READY' && !d.courseData?.mysql_id;
-                                    const isInProgress = d.currentStep === 'CONFIRM_GENERATE' && (
-                                      d.id === activeDraftId
-                                        ? isBatchGenerating || generationStatus === 'generating'
-                                        : d.bgStatus === 'generating'
-                                    );
-                                    const isOnHold = d.currentStep === 'CONFIRM_GENERATE' && !isInProgress;
-                                    
-                                    // Calculate progress percentage
-                                    const modules = d.courseData?.structure?.modules || [];
-                                    let totalChapters = 0;
-                                    let completedChapters = 0;
-                                    modules.forEach(mod => {
-                                      (mod?.chapters || []).forEach(chap => {
-                                        totalChapters++;
-                                        if (chap.contents && chap.contents.length > 0) {
-                                          completedChapters++;
-                                        }
-                                      });
-                                    });
+                                     const isCompletedStep = d.currentStep === 'READY' || d.bgStatus === 'completed';
+                                     const isPublished = isCompletedStep && d.courseData?.mysql_id;
+                                     const isUnpublished = isCompletedStep && !d.courseData?.mysql_id;
+                                     const isInProgress = !isCompletedStep && d.currentStep === 'CONFIRM_GENERATE' && (
+                                       d.id === activeDraftId
+                                         ? isBatchGenerating || generationStatus === 'generating'
+                                         : d.bgStatus === 'generating'
+                                     );
+                                     const isOnHold = !isCompletedStep && d.currentStep === 'CONFIRM_GENERATE' && !isInProgress;
+                                     
+                                     // Calculate progress percentage
+                                     const modules = d.courseData?.structure?.modules || [];
+                                     let totalChapters = 0;
+                                     let completedChapters = 0;
+                                     modules.forEach(mod => {
+                                       (mod?.chapters || []).forEach(chap => {
+                                         totalChapters++;
+                                         if (chap.contents && chap.contents.length > 0) {
+                                           completedChapters++;
+                                         }
+                                       });
+                                     });
 
-                                    if (d.id === activeDraftId && (isBatchGenerating || generationStatus === 'generating' || generationStatus === 'paused')) {
-                                      totalChapters = batchTotal;
-                                      completedChapters = batchCompleted;
-                                    }
+                                     if (d.id === activeDraftId) {
+                                       totalChapters = Math.max(totalChapters, batchTotal);
+                                       completedChapters = Math.max(completedChapters, batchCompleted);
+                                     }
 
-                                    const percent = totalChapters > 0 ? Math.round((completedChapters / totalChapters) * 100) : 0;
-                                    const showPercent = isInProgress || isOnHold;
+                                     if (isCompletedStep) {
+                                       completedChapters = totalChapters;
+                                     }
+
+                                     const percent = totalChapters > 0 ? Math.round((completedChapters / totalChapters) * 100) : 0;
+                                     const showPercent = isInProgress || isOnHold;
 
                                     return (
                                       <div className="flex items-center gap-1.5 mt-0.5">
