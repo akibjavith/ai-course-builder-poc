@@ -349,9 +349,15 @@ export default function ChatbotCourseCreator({ onClose }) {
   }, []);
 
 
+  const isDraftLoadingRef = useRef(false);
+
   // Auto-save active draft to MySQL DB when state updates
   useEffect(() => {
     if (activeDraftId && Array.isArray(messages) && messages.length > 0) {
+      if (isDraftLoadingRef.current) {
+        return; // Skip saving while loading draft from sidebar
+      }
+
       const currentState = JSON.stringify({
         messages,
         courseData,
@@ -543,13 +549,19 @@ export default function ChatbotCourseCreator({ onClose }) {
             setGenerationStatus('cancelled');
             setIsBatchGenerating(false);
             setMessages(prev => {
-              const filtered = prev.filter(m => !m.isProgressCard);
+              const updatedMessages = prev.map(m => m.isProgressCard ? { 
+                ...m, 
+                isProgressCard: false, 
+                isCancelledCard: true,
+                cancelledBatchCompleted: res.completed || batchCompleted,
+                cancelledBatchTotal: res.total || batchTotal
+              } : m);
               const stopMsg = {
                 role: 'assistant',
                 content: "Course creation has been stopped. Do you want to start again?",
                 timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
               };
-              return [...filtered, stopMsg];
+              return [...updatedMessages, stopMsg];
             });
             setQuickReplies(["Yes, start again", "Go back to outline"]);
           } else if (res.status === 'failed') {
@@ -679,21 +691,35 @@ export default function ChatbotCourseCreator({ onClose }) {
       handleSendMessage("I am happy with this outline. Please confirm and proceed.", 'CONFIRM_GENERATE', courseData);
       return;
     }
-    if (lowercaseText === "yes, start again" || lowercaseText === "yes start again") {
-      const userMsg = {
-        role: 'user',
-        content: displayedText || textToSend,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      setMessages(prev => [...prev, userMsg]);
-      setInputMessage('');
-      startBatchGeneration(courseData, userMsg);
-      return;
-    }
-    if ((lowercaseText === "go back to outline" || lowercaseText === "no, go back to outline" || lowercaseText === "no go back to outline") && overrideStep !== 'OUTLINE_EDIT') {
-      setCurrentStep('OUTLINE_EDIT');
-      handleSendMessage("Go back to outline", 'OUTLINE_EDIT', courseData);
-      return;
+    // Check if user is requesting to resume or cancel a paused/active generation
+    if (currentStep === 'CONFIRM_GENERATE' || generationStatus === 'paused') {
+      const cancelKeywords = ["cancel generation", "cancel course", "cancel", "stop generation", "stop course"];
+      const isCancelCall = cancelKeywords.some(kw => lowercaseText === kw || lowercaseText === `${kw}.`);
+      if (isCancelCall) {
+        const userMsg = {
+          role: 'user',
+          content: displayedText || getElaboratedSentence(textToSend),
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        setMessages(prev => [...prev, userMsg]);
+        setInputMessage('');
+        handleCancelGeneration();
+        return;
+      }
+
+      const resumeKeywords = ["resume generation", "resume", "continue generation"];
+      const isResumeCall = resumeKeywords.some(kw => lowercaseText === kw || lowercaseText === `${kw}.`);
+      if (isResumeCall) {
+        const userMsg = {
+          role: 'user',
+          content: displayedText || getElaboratedSentence(textToSend),
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        setMessages(prev => [...prev, userMsg]);
+        setInputMessage('');
+        handleResumeGeneration();
+        return;
+      }
     }
 
     // Lock step transitions locally
@@ -760,6 +786,19 @@ export default function ChatbotCourseCreator({ onClose }) {
       if (res && res.status === 'success') {
         if (res.metadata && res.metadata.next_step) {
           setCurrentStep(res.metadata.next_step);
+        }
+
+        if (res.metadata && res.metadata.cancel_generation) {
+          setGenerationStatus('cancelled');
+          setIsBatchGenerating(false);
+          // Tag progress cards as static cancelled snapshot with stored metrics
+          setMessages(prev => prev.map(m => m.isProgressCard ? { 
+            ...m, 
+            isProgressCard: false, 
+            isCancelledCard: true,
+            cancelledBatchCompleted: batchCompleted,
+            cancelledBatchTotal: batchTotal
+          } : m));
         }
 
         if (res.metadata) {
@@ -1088,41 +1127,26 @@ export default function ChatbotCourseCreator({ onClose }) {
       }
     }
 
-    // Clear progress card messages and set restart prompt
+    // Set static cancelled status and tag progress cards as isCancelledCard: true with snapshot metrics
+    setGenerationStatus('cancelled');
+    setIsBatchGenerating(false);
+
     setMessages(prev => {
-      const filtered = prev.filter(m => !m.isProgressCard);
+      const updatedMessages = prev.map(m => m.isProgressCard ? { 
+        ...m, 
+        isProgressCard: false, 
+        isCancelledCard: true,
+        cancelledBatchCompleted: batchCompleted,
+        cancelledBatchTotal: batchTotal
+      } : m);
       const stopMsg = {
         role: 'assistant',
         content: "Course creation has been stopped. Do you want to start again?",
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
-      return [...filtered, stopMsg];
+      return [...updatedMessages, stopMsg];
     });
 
-    // Reset local generation status
-    setGenerationStatus('idle');
-    setIsBatchGenerating(false);
-    setBatchCompleted(0);
-    setBatchTotal(0);
-
-    // Clear generated content from courseData safely
-    const structureModules = courseData?.structure?.modules || [];
-    const clearedModules = structureModules.map(m => {
-      const clearedChapters = (m.chapters || []).map(c => ({
-        ...c,
-        contents: [],
-        content: { content_type: 'html', html_content: '', completed: false }
-      }));
-      return { ...m, chapters: clearedChapters };
-    });
-
-    const clearedCourseData = {
-      ...(courseData || {}),
-      structure: { modules: clearedModules },
-      content: []
-    };
-
-    setCourseData(clearedCourseData);
     setQuickReplies(["Yes, start again", "No, go back to outline"]);
   };
 
@@ -1185,6 +1209,7 @@ export default function ChatbotCourseCreator({ onClose }) {
   // Load a draft from MySQL
   const loadSpecificDraft = async (id) => {
     try {
+      isDraftLoadingRef.current = true;
       setLoading(true);
       const res = await getChatbotDraft(id);
       if (res && res.status === 'success' && res.draft) {
@@ -1202,20 +1227,22 @@ export default function ChatbotCourseCreator({ onClose }) {
           }
         }
 
-        setActiveDraftId(d.id);
-        setMessages(d.messages || []);
-        setCourseData(d.courseData || {
+        const loadedCourseData = d.courseData || {
           sourceType: 'external',
           details: { level: 'beginner', language: 'English', scriptingLanguage: 'NA', price: '0' },
           structure: { modules: [] },
           content: [],
           quiz: []
-        });
+        };
+
+        setActiveDraftId(d.id);
+        setMessages(d.messages || []);
+        setCourseData(loadedCourseData);
         setCurrentStep(d.currentStep || 'ASK_TOPIC');
-        setQuickRepliesForStep(d.currentStep || 'ASK_TOPIC', d.courseData);
+        setQuickRepliesForStep(d.currentStep || 'ASK_TOPIC', loadedCourseData);
         setStarted(true);
-        if (d.courseData?.details) {
-          setActiveCardDetails({ ...d.courseData.details, price: "0" });
+        if (loadedCourseData?.details) {
+          setActiveCardDetails({ ...loadedCourseData.details, price: "0" });
         } else {
           setActiveCardDetails(null);
         }
@@ -1223,7 +1250,7 @@ export default function ChatbotCourseCreator({ onClose }) {
         // Initialize lastSavedDataRef to prevent duplicate save on load
         lastSavedDataRef.current = JSON.stringify({
           messages: d.messages || [],
-          courseData: d.courseData || {},
+          courseData: loadedCourseData,
           currentStep: d.currentStep || 'ASK_TOPIC'
         });
 
@@ -1231,7 +1258,7 @@ export default function ChatbotCourseCreator({ onClose }) {
         if (d.currentStep === 'READY') {
           let totalChaps = 0;
           let completedChaps = 0;
-          (d.courseData?.structure?.modules || []).forEach(mod => {
+          (loadedCourseData?.structure?.modules || []).forEach(mod => {
             (mod?.chapters || []).forEach(chap => {
               totalChaps++;
               if (chap.contents && chap.contents.length > 0) {
@@ -1250,7 +1277,7 @@ export default function ChatbotCourseCreator({ onClose }) {
             (m.content.toLowerCase().includes("congratulat") || m.content.toLowerCase().includes("successfully complete"))
           );
           if (!hasCongrats) {
-            triggerCongratulatoryMessage(d.messages || [], d.courseData || {});
+            triggerCongratulatoryMessage(d.messages || [], loadedCourseData);
           }
         } else {
           setGenerationStatus('idle');
@@ -1262,6 +1289,9 @@ export default function ChatbotCourseCreator({ onClose }) {
       alert("Failed to load draft.");
     } finally {
       setLoading(false);
+      setTimeout(() => {
+        isDraftLoadingRef.current = false;
+      }, 500);
     }
   };
 
@@ -2666,7 +2696,7 @@ export default function ChatbotCourseCreator({ onClose }) {
               </div>
             </div>
 
-            {quickReplies.length > 0 && (
+            {quickReplies.length > 0 && !isBatchGenerating && generationStatus !== 'generating' && (
               <div className="flex flex-wrap gap-2 justify-center max-w-2xl mt-4 animate-fade-in">
                 <span className="text-[10px] text-slate-400 uppercase tracking-widest font-black block w-full text-center mb-1">Suggested Topics:</span>
                 {quickReplies.map((reply, index) => (
@@ -2829,144 +2859,160 @@ export default function ChatbotCourseCreator({ onClose }) {
                           </div>
                         </div>
 
-                        {/* Render Inline Progress Card if flagged */}
-                        {!isUser && msg.isProgressCard && (
-                          <div className="bg-gradient-to-br from-white via-indigo-50/50 to-purple-50/30 border border-indigo-200/80 shadow-lg shadow-indigo-500/5 p-5 rounded-2xl rounded-bl-none w-full flex flex-col gap-4 text-slate-800 mt-3 animate-fade-in">
-                            <div className="flex items-center gap-4">
-                              <div className="relative w-12 h-12 flex-shrink-0">
-                                {/* Background circle */}
-                                <svg className="w-full h-full transform -rotate-90">
-                                  <circle
-                                    cx="24"
-                                    cy="24"
-                                    r="20"
-                                    strokeWidth="3.5"
-                                    stroke="#e2e8f0"
-                                    fill="transparent"
-                                  />
-                                  {/* Animated progress circle */}
-                                  <circle
-                                    cx="24"
-                                    cy="24"
-                                    r="20"
-                                    strokeWidth="3.5"
-                                    stroke={
-                                      generationStatus === 'completed' ? '#10b981' :
-                                      generationStatus === 'paused' ? '#f59e0b' :
-                                      (generationStatus === 'cancelled' || generationStatus === 'failed') ? '#ef4444' :
-                                      '#6366f1'
-                                    }
-                                    fill="transparent"
-                                    strokeDasharray={125.6}
-                                    strokeDashoffset={
-                                      generationStatus === 'completed' ? 0 :
-                                      (batchTotal > 0 ? (125.6 - (125.6 * Math.min(batchCompleted, batchTotal)) / batchTotal) : 125.6)
-                                    }
-                                    strokeLinecap="round"
-                                    className="transition-all duration-500 ease-out"
-                                  />
-                                </svg>
-                                {/* Percentage text */}
-                                <div className={`absolute inset-0 flex items-center justify-center text-[10px] font-black ${
-                                  generationStatus === 'completed' ? 'text-emerald-600' :
-                                  generationStatus === 'paused' ? 'text-amber-500' :
-                                  (generationStatus === 'cancelled' || generationStatus === 'failed') ? 'text-rose-500' :
-                                  'text-indigo-600'
-                                }`}>
-                                  {generationStatus === 'completed' ? '100%' : `${batchTotal > 0 ? Math.round((batchCompleted / batchTotal) * 100) : 0}%`}
+                        {/* Render Inline Progress Card or Cancelled Snapshot Card if flagged */}
+                        {/* Render Inline Progress Card or Cancelled Snapshot Card if flagged */}
+                        {!isUser && (msg.isProgressCard || msg.isCancelledCard) && (() => {
+                          const cardTotal = msg.isCancelledCard ? (msg.cancelledBatchTotal !== undefined ? msg.cancelledBatchTotal : batchTotal) : batchTotal;
+                          const cardCompleted = msg.isCancelledCard ? (msg.cancelledBatchCompleted !== undefined ? msg.cancelledBatchCompleted : batchCompleted) : batchCompleted;
+                          const cardPercent = cardTotal > 0 ? Math.round((Math.min(cardCompleted, cardTotal) / cardTotal) * 100) : 0;
+                          const isCurrentActiveCard = msg.isProgressCard && !msg.isCancelledCard;
+
+                          return (
+                            <div className="bg-gradient-to-br from-white via-indigo-50/50 to-purple-50/30 border border-indigo-200/80 shadow-lg shadow-indigo-500/5 p-5 rounded-2xl rounded-bl-none w-full flex flex-col gap-4 text-slate-800 mt-3 animate-fade-in">
+                              <div className="flex items-center gap-4">
+                                <div className="relative w-12 h-12 flex-shrink-0">
+                                  {/* Background circle */}
+                                  <svg className="w-full h-full transform -rotate-90">
+                                    <circle
+                                      cx="24"
+                                      cy="24"
+                                      r="20"
+                                      strokeWidth="3.5"
+                                      stroke="#e2e8f0"
+                                      fill="transparent"
+                                    />
+                                    {/* Animated progress circle */}
+                                    <circle
+                                      cx="24"
+                                      cy="24"
+                                      r="20"
+                                      strokeWidth="3.5"
+                                      stroke={
+                                        msg.isCancelledCard ? '#ef4444' :
+                                        generationStatus === 'completed' ? '#10b981' :
+                                        generationStatus === 'paused' ? '#f59e0b' :
+                                        (generationStatus === 'cancelled' || generationStatus === 'failed') ? '#ef4444' :
+                                        '#6366f1'
+                                      }
+                                      fill="transparent"
+                                      strokeDasharray={125.6}
+                                      strokeDashoffset={
+                                        msg.isCancelledCard ? (cardTotal > 0 ? (125.6 - (125.6 * Math.min(cardCompleted, cardTotal)) / cardTotal) : 125.6) :
+                                        generationStatus === 'completed' ? 0 :
+                                        (cardTotal > 0 ? (125.6 - (125.6 * Math.min(cardCompleted, cardTotal)) / cardTotal) : 125.6)
+                                      }
+                                      strokeLinecap="round"
+                                      className="transition-all duration-500 ease-out"
+                                    />
+                                  </svg>
+                                  {/* Percentage text */}
+                                  <div className={`absolute inset-0 flex items-center justify-center text-[10px] font-black ${
+                                    msg.isCancelledCard ? 'text-rose-500' :
+                                    generationStatus === 'completed' ? 'text-emerald-600' :
+                                    generationStatus === 'paused' ? 'text-amber-500' :
+                                    (generationStatus === 'cancelled' || generationStatus === 'failed') ? 'text-rose-500' :
+                                    'text-indigo-600'
+                                  }`}>
+                                    {msg.isCancelledCard ? `${cardPercent}%` : generationStatus === 'completed' ? '100%' : `${cardPercent}%`}
+                                  </div>
+                                </div>
+                                <div className="flex-1 space-y-1 text-left">
+                                  <span className={`text-[9px] uppercase tracking-widest font-black block ${
+                                    msg.isCancelledCard ? 'text-rose-500' :
+                                    generationStatus === 'completed' ? 'text-emerald-600' :
+                                    generationStatus === 'paused' ? 'text-amber-500' :
+                                    (generationStatus === 'cancelled' || generationStatus === 'failed') ? 'text-rose-500' :
+                                    'text-indigo-600'
+                                  }`}>
+                                    {msg.isCancelledCard ? 'Generation Suspended' :
+                                     generationStatus === 'completed' ? 'Content Generation Complete' :
+                                     generationStatus === 'paused' ? 'Generation Paused' :
+                                     (generationStatus === 'cancelled' || generationStatus === 'failed') ? 'Generation Suspended' :
+                                     (generationStatus === 'idle' ? 'Initializing Course Material...' : 'Generating Course Material')}
+                                  </span>
+                                  <h5 className="text-xs font-bold text-slate-800 line-clamp-1">
+                                    {msg.isCancelledCard ? 'Course creation has been stopped.' :
+                                     generationStatus === 'completed' ? 'All lessons generated successfully!' :
+                                     generationStatus === 'paused' ? 'Course generation is paused.' :
+                                     (generationStatus === 'cancelled' || generationStatus === 'failed' || (generationStatus === 'idle' && currentStep !== 'READY')) ? 'Course generation was suspended.' :
+                                     batchCurrentTitle}
+                                  </h5>
+                                  <p className="text-[10px] text-slate-500 font-medium">
+                                    Completed {cardCompleted} of {cardTotal} chapters...
+                                  </p>
                                 </div>
                               </div>
-                              <div className="flex-1 space-y-1 text-left">
-                                <span className={`text-[9px] uppercase tracking-widest font-black block ${
-                                  generationStatus === 'completed' ? 'text-emerald-600' :
-                                  generationStatus === 'paused' ? 'text-amber-500' :
-                                  (generationStatus === 'cancelled' || generationStatus === 'failed') ? 'text-rose-500' :
-                                  'text-indigo-600'
-                                }`}>
-                                  {generationStatus === 'completed' ? 'Content Generation Complete' :
-                                   generationStatus === 'paused' ? 'Generation Paused' :
-                                   (generationStatus === 'cancelled' || generationStatus === 'failed') ? 'Generation Suspended' :
-                                   (generationStatus === 'idle' ? 'Initializing Course Material...' : 'Generating Course Material')}
-                                </span>
-                                <h5 className="text-xs font-bold text-slate-800 line-clamp-1">
-                                  {generationStatus === 'completed' ? 'All lessons generated successfully!' :
-                                   generationStatus === 'paused' ? 'Course generation is paused.' :
-                                   (generationStatus === 'cancelled' || generationStatus === 'failed' || (generationStatus === 'idle' && currentStep !== 'READY')) ? 'Course generation was suspended.' :
-                                   batchCurrentTitle}
-                                </h5>
-                                <p className="text-[10px] text-slate-500 font-medium">
-                                  Completed {batchCompleted} of {batchTotal} chapters...
-                                </p>
-                              </div>
-                            </div>
 
-                            {/* View Detailed Progress Roadmap Button */}
-                            <button
-                              onClick={() => setIsProgressModalOpen(true)}
-                              className="w-full bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 hover:from-indigo-500 hover:to-violet-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all duration-200 active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-indigo-500/25 hover:shadow-indigo-500/40 border border-indigo-400/30 mt-1"
-                            >
-                              <ListChecks className="w-3.5 h-3.5 text-indigo-200" /> View Live Progress Roadmap 📋
-                            </button>
+                              {/* View Detailed Progress Roadmap Button — ONLY on active cards */}
+                              {isCurrentActiveCard && (
+                                <button
+                                  onClick={() => setIsProgressModalOpen(true)}
+                                  className="w-full bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 hover:from-indigo-500 hover:to-violet-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all duration-200 active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-indigo-500/25 hover:shadow-indigo-500/40 border border-indigo-400/30 mt-1"
+                                >
+                                  <ListChecks className="w-3.5 h-3.5 text-indigo-200" /> View Live Progress Roadmap 📋
+                                </button>
+                              )}
 
-                            {/* Action Buttons inside Card */}
-                            {isBatchGenerating && (
-                              <div className="border-t border-indigo-100/60 pt-3 flex gap-2.5">
-                                <button
-                                  onClick={() => handlePauseGeneration()}
-                                  className="flex-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20"
-                                >
-                                  <Pause className="w-3.5 h-3.5 text-white" /> Pause Generation
-                                </button>
-                                <button
-                                  onClick={() => handleCancelGeneration()}
-                                  className="flex-1 bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-rose-500/20"
-                                >
-                                  <X className="w-3.5 h-3.5 text-white" /> Cancel Generation
-                                </button>
-                              </div>
-                            )}
-
-                            {(generationStatus === 'paused' || generationStatus === 'cancelled' || generationStatus === 'failed' || (generationStatus === 'idle' && currentStep !== 'READY')) && (
-                              <div className="border-t border-indigo-100/60 pt-3 flex gap-2.5">
-                                <button
-                                  onClick={() => handleResumeGeneration()}
-                                  className="flex-1 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-indigo-500/20"
-                                >
-                                  <Play className="w-3.5 h-3.5 text-white" /> Resume Generation
-                                </button>
-                                <button
-                                  onClick={() => handleCancelGeneration()}
-                                  className="flex-1 bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-rose-500/20"
-                                >
-                                  <X className="w-3.5 h-3.5 text-white" /> Cancel Generation
-                                </button>
-                              </div>
-                            )}
-
-                            {generationStatus === 'completed' && (
-                              <div className="border-t border-indigo-100/60 pt-3 flex gap-2.5">
-                                <button
-                                  onClick={() => setIsPreviewOpen(true)}
-                                  className="flex-1 bg-white/90 hover:bg-white text-indigo-900 border border-indigo-200/80 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm"
-                                >
-                                  <Eye className="w-3.5 h-3.5 text-indigo-600" /> Preview Course
-                                </button>
-                                {courseData.mysql_id ? (
-                                  <div className="flex-1 bg-emerald-50 text-emerald-600 border border-emerald-250 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-inner">
-                                    <CheckCircle className="w-3.5 h-3.5" /> Course Published
-                                  </div>
-                                ) : (
+                              {/* Action Buttons inside Card — ONLY render for active progress card */}
+                              {isCurrentActiveCard && isBatchGenerating && (
+                                <div className="border-t border-indigo-100/60 pt-3 flex gap-2.5">
                                   <button
-                                    onClick={() => handlePublish()}
-                                    className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/20"
+                                    onClick={() => handlePauseGeneration()}
+                                    className="flex-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20"
                                   >
-                                    <CheckCircle className="w-3.5 h-3.5" /> Publish Course
+                                    <Pause className="w-3.5 h-3.5 text-white" /> Pause Generation
                                   </button>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        )}
+                                  <button
+                                    onClick={() => handleCancelGeneration()}
+                                    className="flex-1 bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-rose-500/20"
+                                  >
+                                    <X className="w-3.5 h-3.5 text-white" /> Cancel Generation
+                                  </button>
+                                </div>
+                              )}
+
+                              {isCurrentActiveCard && generationStatus === 'paused' && (
+                                <div className="border-t border-indigo-100/60 pt-3 flex gap-2.5">
+                                  <button
+                                    onClick={() => handleResumeGeneration()}
+                                    className="flex-1 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-indigo-500/20"
+                                  >
+                                    <Play className="w-3.5 h-3.5 text-white" /> Resume Generation
+                                  </button>
+                                  <button
+                                    onClick={() => handleCancelGeneration()}
+                                    className="flex-1 bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-rose-500/20"
+                                  >
+                                    <X className="w-3.5 h-3.5 text-white" /> Cancel Generation
+                                  </button>
+                                </div>
+                              )}
+
+                              {isCurrentActiveCard && generationStatus === 'completed' && (
+                                <div className="border-t border-indigo-100/60 pt-3 flex gap-2.5">
+                                  <button
+                                    onClick={() => setIsPreviewOpen(true)}
+                                    className="flex-1 bg-white/90 hover:bg-white text-indigo-900 border border-indigo-200/80 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm"
+                                  >
+                                    <Eye className="w-3.5 h-3.5 text-indigo-600" /> Preview Course
+                                  </button>
+                                  {courseData.mysql_id ? (
+                                    <div className="flex-1 bg-emerald-50 text-emerald-600 border border-emerald-250 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-inner">
+                                      <CheckCircle className="w-3.5 h-3.5" /> Course Published
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => handlePublish()}
+                                      className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/20"
+                                    >
+                                      <CheckCircle className="w-3.5 h-3.5" /> Publish Course
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         {/* Assistant Actions Bar */}
                         {!isUser && (
@@ -3007,7 +3053,7 @@ export default function ChatbotCourseCreator({ onClose }) {
             </div>
 
             {/* Inline suggested replies quick chips */}
-            {quickReplies.length > 0 && (
+            {quickReplies.length > 0 && !isBatchGenerating && generationStatus !== 'generating' && (
               <div className="bg-transparent py-2">
                 <div className="max-w-4xl mx-auto w-full px-6 flex flex-wrap gap-2 items-center">
                   <span className="text-[9px] text-slate-400 uppercase tracking-widest font-black mr-1">Suggestions:</span>

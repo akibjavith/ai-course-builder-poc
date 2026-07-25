@@ -677,34 +677,37 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
 
     # 0. Intercept "go back to outline" request from CONFIRM_GENERATE
     if req.currentStep == "CONFIRM_GENERATE":
-        user_message = ""
-        if req.messages:
-            for msg in reversed(req.messages):
-                if msg.get("role") == "user":
-                    user_message = msg.get("content", "")
-                    break
-        lowercase_msg = user_message.lower()
-        if any(w in lowercase_msg for w in ["back", "no", "outline"]):
-            # Check if this is indeed a go-back request (and not a confirmation or detail redirect)
-            is_confirm_check = any(w in lowercase_msg for w in ["yes", "continue", "looks good", "proceed", "generate", "correct", "confirm", "happy", "fine", "ok", "go ahead"]) and not any(neg in lowercase_msg for neg in ["not", "dont", "change", "add", "remove", "delete", "reduce", "back", "no"])
-            is_detail_redirect_check = (
-                (any(w in lowercase_msg for w in ["change", "edit", "modify", "update", "correct", "go", "back", "adjust"]) and 
-                 any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration", "objective", "requirements", "hours", "basic info", "info", "basic"])) or
-                any(w in lowercase_msg for w in ["basic info", "basic information", "detail summary", "details summary", "go back to basic", "go back to details", "go back to info", "change topic", "change duration", "change goal", "change style", "change level"])
-            )
-            if not is_confirm_check and not is_detail_redirect_check:
-                current_structure = req.courseData.get("structure", {})
-                meta = {
-                    "next_step": "OUTLINE_EDIT",
-                    "modules": current_structure.get("modules", [])
-                }
-                return {
-                    "status": "success",
-                    "reply": "Here is your course outline. You can rename, add, or remove modules, or click 'Confirm Outline' to proceed.",
-                    "quickReplies": ["Confirm Outline", "Reduce one module", "Add one module", "Rename modules/chapters"],
-                    "metadata": meta,
-                    "type": "structure"
-                }
+        bg_info = bg_generation_registry.get(req.draft_id, {})
+        is_paused_status = bg_info.get("status") == "paused" or req.courseData.get("is_paused", False)
+        if not is_paused_status:
+            user_message = ""
+            if req.messages:
+                for msg in reversed(req.messages):
+                    if msg.get("role") == "user":
+                        user_message = msg.get("content", "")
+                        break
+            lowercase_msg = user_message.lower()
+            if any(w in lowercase_msg for w in ["back", "no", "outline"]):
+                # Check if this is indeed a go-back request (and not a confirmation or detail redirect)
+                is_confirm_check = any(w in lowercase_msg for w in ["yes", "continue", "looks good", "proceed", "generate", "correct", "confirm", "happy", "fine", "ok", "go ahead"]) and not any(neg in lowercase_msg for neg in ["not", "dont", "change", "add", "remove", "delete", "reduce", "back", "no"])
+                is_detail_redirect_check = (
+                    (any(w in lowercase_msg for w in ["change", "edit", "modify", "update", "correct", "go", "back", "adjust"]) and 
+                     any(w in lowercase_msg for w in ["detail", "details", "topic", "goal", "style", "level", "duration", "objective", "requirements", "hours", "basic info", "info", "basic"])) or
+                    any(w in lowercase_msg for w in ["basic info", "basic information", "detail summary", "details summary", "go back to basic", "go back to details", "go back to info", "change topic", "change duration", "change goal", "change style", "change level"])
+                )
+                if not is_confirm_check and not is_detail_redirect_check:
+                    current_structure = req.courseData.get("structure", {})
+                    meta = {
+                        "next_step": "OUTLINE_EDIT",
+                        "modules": current_structure.get("modules", [])
+                    }
+                    return {
+                        "status": "success",
+                        "reply": "Here is your course outline. You can rename, add, or remove modules, or click 'Confirm Outline' to proceed.",
+                        "quickReplies": ["Confirm Outline", "Reduce one module", "Add one module", "Rename modules/chapters"],
+                        "metadata": meta,
+                        "type": "structure"
+                    }
 
     # -------------------------------------------------------------------------
     # OUTLINE_EDIT: Use a dedicated JSON-mode call to guarantee structure output
@@ -1359,6 +1362,47 @@ Expected JSON output format exactly:
         is_goal_cancel = False
         
         lowercase_msg = user_message.lower()
+
+        # Interceptor 1: COMPLETED course (READY step)
+        if req.currentStep == "READY":
+            if any(kw in lowercase_msg for kw in ["outline", "syllabus", "details", "summary", "topic", "module", "chapter", "change", "edit"]):
+                return JSONResponse({
+                    "status": "success",
+                    "reply": "This course has already been successfully created and published! There is no active draft outline to edit. You can review your completed course or click **Start New Course** anytime.",
+                    "quickReplies": [],
+                    "metadata": {"next_step": "READY"},
+                    "type": "details"
+                })
+
+        # Step Interceptor 2: PAUSED or IN-PROGRESS content generation (CONFIRM_GENERATE step)
+        if req.currentStep == "CONFIRM_GENERATE":
+            bg_info = bg_generation_registry.get(req.draft_id, {})
+            is_generating = bg_info.get("status") == "generating"
+            is_start_trigger = any(w in lowercase_msg for w in ["confirm outline", "generate course", "yes, generate content", "yes generate content", "i am happy with this outline"])
+
+            is_paused = not is_generating and not is_start_trigger
+
+            if is_paused:
+                is_cancel = any(kw in lowercase_msg for kw in ["cancel", "stop", "cancel generation", "cancel course"])
+                if is_cancel:
+                    bg_generation_registry[req.draft_id] = {"status": "cancelled", "completed": 0, "total": 0, "current_title": ""}
+                    req.courseData["is_paused"] = False
+                    return JSONResponse({
+                        "status": "success",
+                        "reply": "Course creation has been stopped. Do you want to start again?",
+                        "quickReplies": ["Yes, start again", "No, go back to outline"],
+                        "metadata": {"next_step": "CONFIRM_GENERATE", "cancel_generation": True},
+                        "type": "details"
+                    })
+                else:
+                    return JSONResponse({
+                        "status": "success",
+                        "reply": "Course generation is currently paused. You cannot navigate or edit details while generation is paused. Would you like to **Resume Generation** or **Cancel Generation**?",
+                        "quickReplies": ["Resume Generation", "Cancel Generation"],
+                        "metadata": {"next_step": "CONFIRM_GENERATE"},
+                        "type": "details"
+                    })
+
         confirm_words = ["yes", "continue", "looks good", "proceed", "generate", "correct", "confirm", "happy", "fine", "ok", "go ahead"]
 
         if req.messages:
@@ -2236,6 +2280,21 @@ async def api_start_content_generation(req: StartBgGenRequest):
             detail=f"You currently have {active_count} courses generating in the background. Maximum limit is {MAX_CONCURRENT_BG_GENERATIONS} simultaneous generations. Please wait for an active generation to complete."
         )
 
+    # Clear is_paused flag on start / resume
+    req.courseData["is_paused"] = False
+    try:
+        from database import save_chatbot_draft
+        save_chatbot_draft(
+            draft_id=draft_id,
+            course_name=req.courseData.get("details", {}).get("courseName") or "Custom Course",
+            current_step="CONFIRM_GENERATE",
+            course_data=req.courseData,
+            messages=req.messages,
+            touch_user_interaction=True
+        )
+    except Exception as e:
+        logger.error(f"Error resetting is_paused on start: {e}")
+
     t = threading.Thread(
         target=run_background_generation,
         args=(draft_id, req.courseData, req.messages),
@@ -2272,9 +2331,26 @@ async def api_get_generation_status(draft_id: str):
 async def api_cancel_generation(draft_id: str):
     if draft_id in bg_generation_registry:
         bg_generation_registry[draft_id]["cancel_requested"] = True
-        bg_generation_registry[draft_id]["status"] = "cancelled"
-        return {"status": "success", "message": "Cancellation requested"}
-    return {"status": "error", "message": "No active generation task found for this draft"}
+        bg_generation_registry[draft_id]["status"] = "paused"
+    
+    try:
+        from database import get_chatbot_draft, save_chatbot_draft
+        draft = get_chatbot_draft(draft_id)
+        if draft:
+            cdata = draft.get("courseData") or {}
+            cdata["is_paused"] = True
+            save_chatbot_draft(
+                draft_id=draft_id,
+                course_name=draft.get("courseName") or "Custom Course",
+                current_step=draft.get("currentStep") or "CONFIRM_GENERATE",
+                course_data=cdata,
+                messages=draft.get("messages") or [],
+                touch_user_interaction=True
+            )
+    except Exception as e:
+        logger.error(f"Error setting is_paused on cancel: {e}")
+
+    return {"status": "success", "message": "Pause requested"}
 
 # Get all drafts
 @app.get("/course/chatbot-builder/courses")

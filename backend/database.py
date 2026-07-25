@@ -526,7 +526,7 @@ def get_chatbot_drafts():
     conn = get_local_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT id, course_name, current_step, course_data, messages, created_at, updated_at FROM corp_chatbot_course_draft ORDER BY id DESC")
+        cursor.execute("SELECT id, course_name, current_step, course_data, messages, created_at, updated_at FROM corp_chatbot_course_draft ORDER BY updated_at DESC, id DESC")
         rows = cursor.fetchall()
         drafts = []
         for r in rows:
