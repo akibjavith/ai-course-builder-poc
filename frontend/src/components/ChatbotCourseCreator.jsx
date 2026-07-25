@@ -2749,23 +2749,36 @@ export default function ChatbotCourseCreator({ onClose }) {
                     }
                     return lastIdx;
                   }, -1);
+                  const lastDetailsCardMsgIndex = (messages || []).reduce((lastIdx, m, i) => {
+                    if (m && m.role === 'assistant' && (
+                      m.metadataType === 'details_card' ||
+                      (m.metadataType === 'details' && m.metadata?.next_step === 'CONFIRM_DETAILS')
+                    )) {
+                      return i;
+                    }
+                    return lastIdx;
+                  }, -1);
                   return Array.isArray(messages) && messages.map((msg, idx) => {
                   if (!msg) return null;
                   const isUser = msg.role === 'user';
+                  const isDetailsCard = !isUser && (
+                    msg.metadataType === 'details_card' ||
+                    (msg.metadataType === 'details' && msg.metadata?.next_step === 'CONFIRM_DETAILS')
+                  );
                   return (
                     <div 
                       key={idx} 
                       className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-fade-in`}
                     >
-                      <div className={`space-y-1 ${(!isUser && (msg.metadataType === 'structure' || msg.metadataType === 'details_card')) ? 'w-[520px] max-w-full' : 'max-w-[80%]'}`}>
+                      <div className={`space-y-1 ${(!isUser && (msg.metadataType === 'structure' || isDetailsCard)) ? 'w-[520px] max-w-full' : 'max-w-[80%]'}`}>
                         
                         {/* Bubble content */}
                         <div className={`p-4 shadow-sm leading-relaxed ${
                           isUser 
                             ? 'bg-indigo-600 text-white rounded-2xl rounded-br-none' 
                             : 'bg-white border border-slate-200/80 text-slate-800 rounded-2xl rounded-bl-none'
-                        } ${(!isUser && (msg.metadataType === 'structure' || msg.metadataType === 'details_card')) ? 'w-full' : ''}`}>
-                           {!isUser && (msg.metadataType === 'structure' || msg.metadataType === 'details_card') ? (
+                        } ${(!isUser && (msg.metadataType === 'structure' || isDetailsCard)) ? 'w-full' : ''}`}>
+                           {!isUser && (msg.metadataType === 'structure' || isDetailsCard) ? (
                              renderCardIntroBanner(msg.content, msg.metadataType)
                            ) : (
                              msg.content && msg.content.trim() && (
@@ -2777,7 +2790,7 @@ export default function ChatbotCourseCreator({ onClose }) {
 
                            {/* Render custom metadata cards inline inside the bubble */}
                            {!isUser && msg.metadataType === 'structure' && renderInlineStructure(msg.metadata, idx === lastStructureMsgIndex)}
-                           {!isUser && msg.metadataType === 'details_card' && renderInlineDetailsCard(msg.metadata, idx === messages.length - 1)}
+                           {isDetailsCard && renderInlineDetailsCard(msg.metadata, idx === lastDetailsCardMsgIndex)}
                           
                           <div className="text-[9px] text-right mt-1.5 opacity-60">
                             {msg.timestamp}

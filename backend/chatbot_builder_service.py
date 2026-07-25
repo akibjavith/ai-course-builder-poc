@@ -34,10 +34,12 @@ def extract_slots_from_message(user_message: str, current_slots: Dict[str, Any],
     and merge them with existing slot values. Returns a tuple of (merged_slots, raw_extracted_slots).
     """
     lowercase_msg = user_message.lower()
-    has_skip_keywords = any(w in lowercase_msg for w in [
+    import re as _re
+    _skip_words = [
         "module", "modules", "chapter", "chapters", "outline", "syllabus", "roadmap", "content", "lesson", "lessons", "structure",
         "detail summary", "details summary", "summary card", "summary", "info", "card", "details card", "view details", "show details"
-    ])
+    ]
+    has_skip_keywords = any(_re.search(r'\b' + _re.escape(w) + r'\b', lowercase_msg) for w in _skip_words)
     if has_skip_keywords:
         return current_slots, {}
 

@@ -1542,11 +1542,17 @@ Expected JSON output format exactly:
 
         # Deterministic Refusal Interceptor for premature skips / unhandled inputs during questionnaire phase
         is_questionnaire_step = req.currentStep in ["ASK_TOPIC", "ASK_GOAL", "ASK_LEVEL", "ASK_STYLE", "ASK_DURATION"]
-        has_skip_request = any(w in lowercase_msg for w in [
+        import re as _re
+        _skip_words = [
             "module", "modules", "chapter", "chapters", "outline", "syllabus", "roadmap", "content", "lesson", "lessons", "structure",
             "detail summary", "details summary", "summary card", "summary", "info", "card", "details card", "view details", "show details", "basic info", "basic information",
             "go to", "please go", "show me", "view", "see"
-        ]) or (isinstance(raw_extracted, dict) and len([v for v in raw_extracted.values() if v is not None]) == 0 and not any(ans in lowercase_msg for ans in ["beginner", "intermediate", "advanced", "coding", "quizzes", "hour", "hours"]))
+        ]
+        # Use word-boundary matching so "structure" does NOT match "structured tables" (a valid style answer)
+        # The second OR condition exempts known valid answer words so raw_extracted being empty doesn't block them.
+        # Exemptions cover all questionnaire answer categories: level answers, duration answers, AND style answers.
+        _style_answer_words = ["table", "tables", "structured", "quiz", "quizzes", "explain", "explained", "detailed", "explanation", "balanced", "combination", "hands", "practical", "visual", "video", "coding", "code"]
+        has_skip_request = any(_re.search(r'\b' + _re.escape(w) + r'\b', lowercase_msg) for w in _skip_words) or (isinstance(raw_extracted, dict) and len([v for v in raw_extracted.values() if v is not None]) == 0 and not any(ans in lowercase_msg for ans in ["beginner", "intermediate", "advanced", "coding", "quizzes", "hour", "hours"] + _style_answer_words))
         details_incomplete = not (updated_slots.get("topic") and updated_slots.get("learningGoal") and updated_slots.get("currentLevel") and updated_slots.get("learningStyle") and updated_slots.get("duration"))
         
         if is_questionnaire_step and has_skip_request and details_incomplete:
@@ -1952,7 +1958,7 @@ Expected JSON output format exactly:
 
             # Enforce details type and strip pre-generated modules when in details/edit questionnaire steps
             if next_step in ["CONFIRM_DETAILS", "EDIT_DETAILS_CHOICE", "EDIT_OUTLINE_CHOICE", "ASK_TOPIC", "ASK_GOAL", "ASK_LEVEL", "ASK_STYLE", "ASK_DURATION"]:
-                type_val = "details_card" if next_step == "CONFIRM_DETAILS" else "details"
+                type_val = "details_card" if (next_step == "CONFIRM_DETAILS" or (isinstance(metadata, dict) and metadata.get("next_step") == "CONFIRM_DETAILS")) else "details"
                 if isinstance(metadata, dict):
                     metadata.pop("modules", None)
 
