@@ -256,14 +256,16 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
                 />
               </div>
 
-              <CustomSelect
-                label="Learning Hours *"
-                value={details.learningHours}
-                options={learningHoursOptions}
-                onChange={(val) => handleChange('learningHours', val)}
-                placeholder="Select hours..."
-              />
-              <p className="text-[9px] text-slate-400 font-medium ml-1 -mt-1">Determines the depth and size of AI-generated lesson content.</p>
+              <div className="space-y-1">
+                <CustomSelect
+                  label="Learning Hours *"
+                  value={details.learningHours}
+                  options={learningHoursOptions}
+                  onChange={(val) => handleChange('learningHours', val)}
+                  placeholder="Select hours..."
+                />
+                <p className="text-[9px] text-slate-400 font-medium ml-1">Determines the depth and size of AI-generated lesson content.</p>
+              </div>
 
               {/* Row 3 */}
               <div className="space-y-1.5">

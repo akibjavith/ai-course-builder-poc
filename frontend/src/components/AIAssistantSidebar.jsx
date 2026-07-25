@@ -188,7 +188,11 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-white scroll-smooth no-scrollbar">
-            {messages.map((msg) => (
+            {messages.map((msg) => {
+              // Only the most recent card of each suggestion type shows action buttons.
+              // Older cards remain visible as read-only history.
+              const isLatestOfType = messages.filter(m => m.type === msg.type).at(-1)?.id === msg.id;
+              return (
               <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in duration-300`}>
                 <div className={`flex max-w-[95%] gap-3 ${msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm border ${msg.sender === 'user' ? 'bg-sky-600 border-sky-600' : 'bg-sky-50 border-sky-100'}`}>
@@ -229,7 +233,7 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
                           <span className="font-bold text-slate-900">Course Duration (Days):</span>
                           <input className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 font-semibold text-slate-600 outline-none" value={msg.data?.duration} onChange={(e) => handleUpdateSuggestion(msg.id, 'duration', e.target.value)} />
                         </div>
-                        <div className="flex flex-col gap-1 text-[11px]">
+                        <div className="flex flex-col gap-1 text-[11px] col-span-2">
                           <span className="font-bold text-slate-900">Learning Hours (1–20):</span>
                           <input type="number" min="1" max="20" className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 font-semibold text-slate-600 outline-none" value={msg.data?.learningHours} onChange={(e) => handleUpdateSuggestion(msg.id, 'learningHours', e.target.value)} />
                         </div>
@@ -254,10 +258,12 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
                           <input className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 font-semibold text-slate-600 outline-none" value={msg.data?.evaluator} onChange={(e) => handleUpdateSuggestion(msg.id, 'evaluator', e.target.value)} />
                         </div>
                       </div>
-                      <div className="pt-2 flex gap-2 border-t border-slate-50 mt-4">
-                         <button onClick={() => handleApplyAISuggestion(msg.data)} className="flex-1 bg-sky-600 text-white px-4 py-2.5 rounded-xl text-[11px] font-bold hover:bg-sky-700 transition flex items-center justify-center gap-2"><CheckCircle2 className="w-3.5 h-3.5" /> Apply Details</button>
-                         <button onClick={() => handleSend("Refine these course details to be more professional. YOU MUST RETURN THE [METADATA] BLOCK WITH THE UPDATED DETAILS OBJECT.", "Refine Details")} className="flex-1 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-[11px] font-bold hover:bg-slate-50 transition">Refine Details</button>
-                      </div>
+                      {isLatestOfType && (
+                        <div className="pt-2 flex gap-2 border-t border-slate-50 mt-4">
+                           <button onClick={() => handleApplyAISuggestion(msg.data)} className="flex-1 bg-sky-600 text-white px-4 py-2.5 rounded-xl text-[11px] font-bold hover:bg-sky-700 transition flex items-center justify-center gap-2"><CheckCircle2 className="w-3.5 h-3.5" /> Apply Details</button>
+                           <button onClick={() => handleSend("Refine these course details to be more professional. YOU MUST RETURN THE [METADATA] BLOCK WITH THE UPDATED DETAILS OBJECT.", "Refine Details")} className="flex-1 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-[11px] font-bold hover:bg-slate-50 transition">Refine Details</button>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -282,10 +288,12 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
                           </div>
                         ))}
                       </div>
-                      <div className="pt-2 flex gap-2 border-t border-slate-50 mt-4">
-                         <button onClick={() => onApply(msg.data)} className="flex-1 bg-sky-600 text-white px-4 py-2.5 rounded-xl text-[11px] font-bold hover:bg-sky-700 transition flex items-center justify-center gap-2"><CheckCircle2 className="w-3.5 h-3.5" /> Apply Structure</button>
-                         <button onClick={() => handleSend("Optimize the logical flow of the course structure. YOU MUST RETURN THE ENTIRE UPDATED COURSE STRUCTURE WITHIN A [METADATA]...[/METADATA] BLOCK MATCHING THE STRUCTURE SCHEMA.", "Refine Structure")} className="flex-1 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-[11px] font-bold hover:bg-slate-50 transition">Refine Structure</button>
-                      </div>
+                      {isLatestOfType && (
+                        <div className="pt-2 flex gap-2 border-t border-slate-50 mt-4">
+                           <button onClick={() => onApply(msg.data)} className="flex-1 bg-sky-600 text-white px-4 py-2.5 rounded-xl text-[11px] font-bold hover:bg-sky-700 transition flex items-center justify-center gap-2"><CheckCircle2 className="w-3.5 h-3.5" /> Apply Structure</button>
+                           <button onClick={() => handleSend("Optimize the logical flow of the course structure. YOU MUST RETURN THE ENTIRE UPDATED COURSE STRUCTURE WITHIN A [METADATA]...[/METADATA] BLOCK MATCHING THE STRUCTURE SCHEMA.", "Refine Structure")} className="flex-1 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-[11px] font-bold hover:bg-slate-50 transition">Refine Structure</button>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -317,22 +325,25 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
                          )}
                        </div>
 
-                       <div className="pt-2 grid grid-cols-2 gap-2">
-                          <button 
-                            onClick={() => onApply(msg.data?.prompt ? msg.data : { prompts: msg.data.prompts })} 
-                            className="bg-sky-600 text-white px-4 py-3 rounded-xl text-[10px] font-bold hover:bg-sky-700 transition flex items-center justify-center gap-2 shadow-lg shadow-sky-100 active:scale-95"
-                          >
-                            <Zap className="w-3 h-3" /> {msg.data?.prompt ? 'Apply Prompt' : 'Apply All'}
-                          </button>
-                          <button onClick={() => handleSend("Regenerate.", "Regenerate")} className="bg-white border-2 border-slate-100 text-slate-600 px-4 py-3 rounded-xl text-[10px] font-bold hover:bg-slate-50 transition flex items-center justify-center gap-2 active:scale-95">
-                            <RefreshCw className="w-3 h-3" /> Regenerate
-                          </button>
-                       </div>
+                       {isLatestOfType && (
+                         <div className="pt-2 grid grid-cols-2 gap-2">
+                            <button 
+                              onClick={() => onApply(msg.data?.prompt ? msg.data : { prompts: msg.data.prompts })} 
+                              className="bg-sky-600 text-white px-4 py-3 rounded-xl text-[10px] font-bold hover:bg-sky-700 transition flex items-center justify-center gap-2 shadow-lg shadow-sky-100 active:scale-95"
+                            >
+                              <Zap className="w-3 h-3" /> {msg.data?.prompt ? 'Apply Prompt' : 'Apply All'}
+                            </button>
+                            <button onClick={() => handleSend("Regenerate.", "Regenerate")} className="bg-white border-2 border-slate-100 text-slate-600 px-4 py-3 rounded-xl text-[10px] font-bold hover:bg-slate-50 transition flex items-center justify-center gap-2 active:scale-95">
+                              <RefreshCw className="w-3 h-3" /> Regenerate
+                            </button>
+                         </div>
+                       )}
                     </div>
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
             {loading && (
               <div className="flex justify-start animate-in fade-in duration-300">
                 <div className="flex max-w-[95%] gap-3 flex-row">
