@@ -1546,7 +1546,7 @@ Expected JSON output format exactly:
         _skip_words = [
             "module", "modules", "chapter", "chapters", "outline", "syllabus", "roadmap", "content", "lesson", "lessons", "structure",
             "detail summary", "details summary", "summary card", "summary", "info", "card", "details card", "view details", "show details", "basic info", "basic information",
-            "go to", "please go", "show me", "view", "see"
+            "go to", "please go", "go", "skip", "next", "see", "view", "show me", "show", "proceed", "continue"
         ]
         # Use word-boundary matching so "structure" does NOT match "structured tables" (a valid style answer)
         # The second OR condition exempts known valid answer words so raw_extracted being empty doesn't block them.
@@ -2311,14 +2311,18 @@ def api_suggest_topics():
         except Exception as e:
             logger.error(f"Error fetching existing courses for dynamic suggestions: {e}")
             
-        # 2. Fetch draft names
+        # 2. Fetch draft names & topic history from chatbot drafts
         draft_names = []
         try:
             from database import get_chatbot_drafts
             drafts = get_chatbot_drafts()
             for d in drafts:
-                if d.get("courseName"):
-                    draft_names.append(d["courseName"])
+                c_name = d.get("courseName")
+                c_topic = d.get("courseData", {}).get("details", {}).get("topic")
+                if c_name and c_name not in draft_names:
+                    draft_names.append(c_name)
+                if c_topic and c_topic not in draft_names:
+                    draft_names.append(c_topic)
         except Exception as e:
             logger.error(f"Error fetching drafts for dynamic suggestions: {e}")
             

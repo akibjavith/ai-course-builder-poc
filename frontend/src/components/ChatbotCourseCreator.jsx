@@ -344,7 +344,6 @@ export default function ChatbotCourseCreator({ onClose }) {
       fetchDynamicSuggestions();
     }
     fetchDraftsList();
-    loadDbSubjects();
   }, []);
 
 

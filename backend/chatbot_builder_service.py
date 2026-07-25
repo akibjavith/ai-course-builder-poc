@@ -37,7 +37,8 @@ def extract_slots_from_message(user_message: str, current_slots: Dict[str, Any],
     import re as _re
     _skip_words = [
         "module", "modules", "chapter", "chapters", "outline", "syllabus", "roadmap", "content", "lesson", "lessons", "structure",
-        "detail summary", "details summary", "summary card", "summary", "info", "card", "details card", "view details", "show details"
+        "detail summary", "details summary", "summary card", "summary", "info", "card", "details card", "view details", "show details",
+        "go to", "please go", "go", "skip", "next", "see", "view", "show me", "show", "proceed", "continue"
     ]
     has_skip_keywords = any(_re.search(r'\b' + _re.escape(w) + r'\b', lowercase_msg) for w in _skip_words)
     if has_skip_keywords:
@@ -63,6 +64,7 @@ Rules for Topic:
 Rules for Goal:
 - For learningGoal, if the user doesn't specify a project or career objective, but says they want to learn the topic (e.g. "learn Python from basic to advanced" or "just learn the basics"), extract their goal (e.g. "Learn Python from basic to advanced"). Do NOT leave it null if they expressed their learning intent.
 - If the user is answering the goal question (currentStep is ASK_GOAL) and mentions subject names or topics (e.g. "Data Analysis & AI"), extract them as learningGoal (e.g. "Learn Data Analysis & AI"). Do NOT classify or extract them as the topic slot.
+- NEVER extract or invent a learningGoal if the user's message is generic navigation or skip text (e.g. "go", "please go", "next", "skip", "show me", "view", "proceed", "continue"). In these cases, learningGoal MUST be returned as null.
 
 Rules for Duration:
 - Convert any duration description to numeric hours (e.g., "quick" -> "3", "standard" -> "8", "comprehensive" -> "15"). If they specify a number of hours, extract just the digit (e.g. "2"). If they mention weeks, ignore it or convert to hours.
@@ -725,29 +727,41 @@ def reinject_quick_replies_into_history(messages: list, slots: dict) -> list:
             rebuilt.append(msg)
     return rebuilt
 
+_topic_cache = {}  # key -> (timestamp, list)
+_goal_cache = {}   # key -> (timestamp, list)
+SUGGESTION_CACHE_TTL = 600  # 10 minutes cache
+
 def generate_dynamic_topic_suggestions(published_courses: list, draft_courses: list) -> list:
     """
     Invokes OpenAI to generate exactly 4 dynamic next-level or related topic suggestions
-    based on the user's published courses and drafts.
+    based on the user's published courses and drafts, with in-memory caching.
     """
+    import time
     if not published_courses and not draft_courses:
         return ["Python Programming", "English Grammar", "Digital Marketing", "Machine Learning"]
-        
+
+    cache_key = f"{','.join(sorted(published_courses))}|{','.join(sorted(draft_courses))}"
+    now = time.time()
+    if cache_key in _topic_cache:
+        timestamp, cached_res = _topic_cache[cache_key]
+        if now - timestamp < SUGGESTION_CACHE_TTL:
+            return cached_res
+
     client = get_openai_client()
     
     published_str = ", ".join(f"'{name}'" for name in published_courses) if published_courses else "None"
     draft_str = ", ".join(f"'{name}'" for name in draft_courses) if draft_courses else "None"
     
     prompt = f"""You are a professional educational advisor.
-The user has previously created or draft courses on the following topics:
+The user has previously created courses or worked on drafts in their chatbot chat history on the following topics:
 - Published/Completed Courses: [{published_str}]
-- Draft/In-Progress Courses: [{draft_str}]
+- Draft/Chat History Courses: [{draft_str}]
 
-Generate exactly 4 logical, progressive "next-step" or advanced learning topic suggestions that the user might want to create next.
+Generate exactly 4 logical, progressive "next-step", advanced, or closely related sequel topic suggestions based directly on their created course history above.
 Rules:
-1. Ensure the suggestions represent a logical progression, a more advanced level, or a closely related sequel topic (e.g. if they built "Python Programming", suggest "Intermediate Python", "Data Analysis with Python", or "Introduction to Django").
-2. The suggestions must NOT duplicate any existing completed or draft courses.
-3. Keep each suggestion short and clean (2 to 5 words).
+1. Every suggestion MUST be a logical sequel, next difficulty level, or closely related topic to what the user actually created (e.g. if they built "Python Programming", suggest "Intermediate Python & OOP", "Data Analysis with Python", "Web Development with Django", or "Automation with Python").
+2. The suggestions MUST NOT duplicate any of their existing courses listed above.
+3. Keep each suggestion short, professional, and clean (2 to 5 words).
 4. Output your response as a valid JSON object with a single key "suggestions" containing a list of exactly 4 strings.
 """
     try:
@@ -766,28 +780,39 @@ Rules:
         content = response.choices[0].message.content.strip()
         data = json.loads(content)
         if isinstance(data, dict) and "suggestions" in data:
-            return [str(item) for item in data["suggestions"][:4]]
+            res = [str(item) for item in data["suggestions"][:4]]
+            _topic_cache[cache_key] = (now, res)
+            return res
     except Exception as e:
         logger.error(f"Error generating dynamic topic suggestions: {e}")
         
-    # Final fallback if something goes wrong
+    # Final fallback if OpenAI is down/busy
     return ["Python Programming", "English Grammar", "Digital Marketing", "Machine Learning"]
 
 
 def generate_dynamic_goal_suggestions(topic: str) -> list:
     """
     Invokes OpenAI to generate exactly 4 dynamic, topic-relevant learning goal suggestions
-    for the specified course topic.
+    for the specified course topic, with in-memory caching and smart fallback templates.
     """
+    import time
     if not topic or str(topic).strip() == "":
         return ["Master Core Concepts", "Build Practical Projects", "Career Advancement", "Exam Preparation"]
+
+    clean_topic = str(topic).strip()
+    cache_key = clean_topic.lower()
+    now = time.time()
+    if cache_key in _goal_cache:
+        timestamp, cached_res = _goal_cache[cache_key]
+        if now - timestamp < SUGGESTION_CACHE_TTL:
+            return cached_res
         
     client = get_openai_client()
     
     prompt = f"""You are an expert curriculum designer and educational advisor.
-The user wants to build a course on the topic: "{topic}".
+The user wants to build a course on the topic: "{clean_topic}".
 
-Generate exactly 4 realistic, motivating, and highly topic-specific learning goals or practical objectives that a learner studying "{topic}" would want to achieve.
+Generate exactly 4 realistic, motivating, and highly topic-specific learning goals or practical objectives that a learner studying "{clean_topic}" would want to achieve.
 
 Examples:
 - If topic is "Python Programming": ["Build Web Apps with Django", "Automate Daily Excel Tasks", "Data Analysis & AI Basics", "Get a Python Developer Job"]
@@ -795,7 +820,7 @@ Examples:
 - If topic is "Digital Marketing": ["Run Paid Ad Campaigns", "Master SEO & Organic Reach", "Build a Content Strategy", "Grow Brand Social Media"]
 
 Rules:
-1. All 4 suggestions MUST be directly relevant to the topic "{topic}".
+1. All 4 suggestions MUST be directly relevant to the topic "{clean_topic}".
 2. Keep each suggestion concise, professional, and clear (2 to 5 words).
 3. Output your response as a valid JSON object with a single key "suggestions" containing a list of exactly 4 strings.
 """
@@ -815,11 +840,13 @@ Rules:
         content = response.choices[0].message.content.strip()
         data = json.loads(content)
         if isinstance(data, dict) and "suggestions" in data:
-            return [str(item) for item in data["suggestions"][:4]]
+            res = [str(item) for item in data["suggestions"][:4]]
+            _goal_cache[cache_key] = (now, res)
+            return res
     except Exception as e:
-        logger.error(f"Error generating dynamic goal suggestions for topic '{topic}': {e}")
+        logger.error(f"Error generating dynamic goal suggestions for topic '{clean_topic}': {e}")
         
-    topic_lower = topic.lower()
+    topic_lower = clean_topic.lower()
     if "python" in topic_lower:
         return ["Build Web Apps", "Automate Excel Tasks", "Data Analysis & AI", "Get a Developer Job"]
     elif "java" in topic_lower:
@@ -828,8 +855,16 @@ Rules:
         return ["Master Business Communication", "Improve Writing Skills", "Prepare for IELTS/TOEFL", "Learn Grammar Fundamentals"]
     elif "marketing" in topic_lower:
         return ["Run Paid Ad Campaigns", "Master SEO Strategy", "Social Media Growth", "Learn Marketing Fundamentals"]
+    elif "cyber" in topic_lower or "security" in topic_lower:
+        return ["Master Network Defense", "Ethical Hacking Fundamentals", "Pass Security+ Exam", "Incident Response & Forensics"]
     
-    return [f"Master {topic} Basics", f"Build Practical {topic} Projects", f"Apply {topic} in Work", f"Advanced {topic} Concepts"]
+    cap = clean_topic.title()
+    return [
+        f"Master Core {cap} Concepts",
+        f"Build Practical {cap} Projects",
+        f"Apply {cap} in Real-World Scenarios",
+        f"Advance Career with {cap}"
+    ]
 
 
 def strip_suggestions_from_reply(reply_text: str, quick_replies: list) -> str:
