@@ -293,6 +293,7 @@ class ChatbotDraftSaveRequest(BaseModel):
     currentStep: str
     courseData: dict
     messages: list
+    touch_user_interaction: Optional[bool] = False
 
 
 class RenameDraftRequest(BaseModel):

@@ -484,7 +484,7 @@ def init_draft_table():
         cursor.close()
         conn.close()
 
-def save_chatbot_draft(draft_id: str, course_name: str, current_step: str, course_data: dict, messages: list):
+def save_chatbot_draft(draft_id: str, course_name: str, current_step: str, course_data: dict, messages: list, touch_user_interaction: bool = False):
     conn = get_local_db_connection()
     cursor = conn.cursor()
     import datetime
@@ -499,16 +499,27 @@ def save_chatbot_draft(draft_id: str, course_name: str, current_step: str, cours
         exists = cursor.fetchone()
         
         if exists:
-            sql = """
-                UPDATE corp_chatbot_course_draft SET
-                    course_name = %s,
-                    current_step = %s,
-                    course_data = %s,
-                    messages = %s,
-                    updated_at = %s
-                WHERE id = %s
-            """
-            cursor.execute(sql, (course_name, current_step, course_data_json, messages_json, now_str, draft_id))
+            if touch_user_interaction:
+                sql = """
+                    UPDATE corp_chatbot_course_draft SET
+                        course_name = %s,
+                        current_step = %s,
+                        course_data = %s,
+                        messages = %s,
+                        updated_at = %s
+                    WHERE id = %s
+                """
+                cursor.execute(sql, (course_name, current_step, course_data_json, messages_json, now_str, draft_id))
+            else:
+                sql = """
+                    UPDATE corp_chatbot_course_draft SET
+                        course_name = %s,
+                        current_step = %s,
+                        course_data = %s,
+                        messages = %s
+                    WHERE id = %s
+                """
+                cursor.execute(sql, (course_name, current_step, course_data_json, messages_json, draft_id))
         else:
             sql = """
                 INSERT INTO corp_chatbot_course_draft 

@@ -7,7 +7,7 @@ import {
   RotateCcw, X, Search, Bell, Info, Plus, PanelLeft, Edit,
   Pause, Play, ListChecks, CheckCircle2, Circle
 } from 'lucide-react';
-import { chatWithChatbotBuilder, createCourse, uploadDoc, generateLessonContent, saveChatbotDraft, getChatbotDrafts, getChatbotDraft, deleteChatbotDraft, renameChatbotDraft, getSubjects, getCourseById, generateStructure, startBgGeneration, getBgGenerationStatus, cancelBgGeneration, getSuggestedTopics, getSuggestedGoals } from '../api';
+import { chatWithChatbotBuilder, createCourse, uploadDoc, generateLessonContent, saveChatbotDraft, getChatbotDrafts, getChatbotDraft, deleteChatbotDraft, renameChatbotDraft, getSubjects, getCourseById, generateStructure, startBgGeneration, getBgGenerationStatus, pauseBgGeneration, cancelBgGeneration, getSuggestedTopics, getSuggestedGoals } from '../api';
 import logo from '../assets/logo.png';
 import LessonPreviewEditorModal from './LessonPreviewEditorModal';
 
@@ -350,6 +350,7 @@ export default function ChatbotCourseCreator({ onClose }) {
 
 
   const isDraftLoadingRef = useRef(false);
+  const isUserActionRef = useRef(false);
 
   // Auto-save active draft to MySQL DB when state updates
   useEffect(() => {
@@ -388,12 +389,16 @@ export default function ChatbotCourseCreator({ onClose }) {
         price: courseData?.details?.price || "0"
       };
 
+      const touchInteraction = isUserActionRef.current;
+      isUserActionRef.current = false;
+
       const payload = {
         id: activeDraftId,
         courseName: derivedName,
         currentStep,
         courseData: { ...courseData, details: normalizedDetails },
-        messages
+        messages,
+        touch_user_interaction: touchInteraction
       };
       
       saveChatbotDraft(payload)
@@ -670,6 +675,7 @@ export default function ChatbotCourseCreator({ onClose }) {
     if (!textToSend || !textToSend.trim()) return;
     if (loading || isBatchGenerating) return;
 
+    isUserActionRef.current = true;
     const lowercaseText = textToSend.trim().toLowerCase();
 
 
@@ -1069,13 +1075,15 @@ export default function ChatbotCourseCreator({ onClose }) {
   const handlePauseGeneration = async () => {
     setGenerationStatus('paused');
     setIsBatchGenerating(false);
+    setCourseData(prev => ({ ...prev, is_paused: true }));
+    isUserActionRef.current = true;
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
       pollingIntervalRef.current = null;
     }
     if (activeDraftId) {
       try {
-        await cancelBgGeneration(activeDraftId);
+        await pauseBgGeneration(activeDraftId);
       } catch (err) {
         console.error("Failed to pause bg generation", err);
       }
@@ -1085,13 +1093,15 @@ export default function ChatbotCourseCreator({ onClose }) {
   const handleResumeGeneration = async () => {
     setGenerationStatus('generating');
     setIsBatchGenerating(true);
+    setCourseData(prev => ({ ...prev, is_paused: false }));
+    isUserActionRef.current = true;
     setLoading(true);
     try {
       if (activeDraftId) {
         // Trigger status start backend call
         await startBgGeneration({
           draft_id: activeDraftId,
-          courseData: latestCourseDataRef.current || courseData,
+          courseData: { ...(latestCourseDataRef.current || courseData), is_paused: false },
           messages: latestMessagesRef.current || messages
         });
         
@@ -1118,6 +1128,12 @@ export default function ChatbotCourseCreator({ onClose }) {
       pollingIntervalRef.current = null;
     }
     
+    // Set static cancelled status FIRST locally
+    setGenerationStatus('cancelled');
+    setIsBatchGenerating(false);
+    setCourseData(prev => ({ ...prev, is_paused: false }));
+    isUserActionRef.current = true;
+
     // Call backend cancel
     if (activeDraftId) {
       try {
@@ -1126,10 +1142,6 @@ export default function ChatbotCourseCreator({ onClose }) {
         console.error("Failed to cancel bg generation", err);
       }
     }
-
-    // Set static cancelled status and tag progress cards as isCancelledCard: true with snapshot metrics
-    setGenerationStatus('cancelled');
-    setIsBatchGenerating(false);
 
     setMessages(prev => {
       const updatedMessages = prev.map(m => m.isProgressCard ? { 
@@ -1395,17 +1407,6 @@ export default function ChatbotCourseCreator({ onClose }) {
         groups.previous.push(d);
       }
     });
-
-    // Pin the currently active draft to the top of the list so it stays fixed at position 1 while open
-    if (activeDraftId) {
-      ['today', 'yesterday', 'previous'].forEach(groupKey => {
-        const activeIdx = groups[groupKey].findIndex(d => d.id === activeDraftId);
-        if (activeIdx > 0) {
-          const [activeItem] = groups[groupKey].splice(activeIdx, 1);
-          groups[groupKey].unshift(activeItem);
-        }
-      });
-    }
 
     return groups;
   };

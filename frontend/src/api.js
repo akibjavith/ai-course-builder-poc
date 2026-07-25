@@ -226,6 +226,11 @@ export const getBgGenerationStatus = async (draftId) => {
   return response.data;
 };
 
+export const pauseBgGeneration = async (draftId) => {
+  const response = await axios.post(`${API_URL}/course/chatbot-builder/generate-content/pause/${draftId}`);
+  return response.data;
+};
+
 export const cancelBgGeneration = async (draftId) => {
   const response = await axios.post(`${API_URL}/course/chatbot-builder/generate-content/cancel/${draftId}`);
   return response.data;

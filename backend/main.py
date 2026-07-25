@@ -678,7 +678,8 @@ async def api_chatbot_builder_chat(req: ChatbotBuilderRequest):
     # 0. Intercept "go back to outline" request from CONFIRM_GENERATE
     if req.currentStep == "CONFIRM_GENERATE":
         bg_info = bg_generation_registry.get(req.draft_id, {})
-        is_paused_status = bg_info.get("status") == "paused" or req.courseData.get("is_paused", False)
+        status_val = bg_info.get("status")
+        is_paused_status = (status_val == "paused" or req.courseData.get("is_paused", False)) and status_val != "cancelled"
         if not is_paused_status:
             user_message = ""
             if req.messages:
@@ -1377,10 +1378,30 @@ Expected JSON output format exactly:
         # Step Interceptor 2: PAUSED or IN-PROGRESS content generation (CONFIRM_GENERATE step)
         if req.currentStep == "CONFIRM_GENERATE":
             bg_info = bg_generation_registry.get(req.draft_id, {})
-            is_generating = bg_info.get("status") == "generating"
-            is_start_trigger = any(w in lowercase_msg for w in ["confirm outline", "generate course", "yes, generate content", "yes generate content", "i am happy with this outline"])
+            bg_status = bg_info.get("status")
+            is_generating = bg_status == "generating"
+            is_paused = (bg_status == "paused" or req.courseData.get("is_paused", False)) and bg_status != "cancelled"
 
-            is_paused = not is_generating and not is_start_trigger
+            # If user explicitly asks to return to outline when NOT paused and NOT actively generating
+            is_confirm = any(cw in lowercase_msg for cw in ["confirm", "happy", "proceed", "looks good", "fine", "correct"])
+            is_explicit_go_back = (
+                any(w in lowercase_msg for w in ["back", "no", "go to outline", "show outline", "view outline"]) or 
+                lowercase_msg.strip() in ["no, go back to outline", "no go back to outline", "go back to outline"]
+            ) and not is_confirm
+
+            if is_explicit_go_back and not is_paused and not is_generating:
+                current_structure = req.courseData.get("structure", {})
+                meta = {
+                    "next_step": "OUTLINE_EDIT",
+                    "modules": current_structure.get("modules", [])
+                }
+                return JSONResponse({
+                    "status": "success",
+                    "reply": "Here is your course outline. You can rename, add, or remove modules, or click 'Confirm Outline' to proceed.",
+                    "quickReplies": ["Confirm Outline", "Reduce one module", "Add one module", "Rename modules/chapters"],
+                    "metadata": meta,
+                    "type": "structure"
+                })
 
             if is_paused:
                 is_cancel = any(kw in lowercase_msg for kw in ["cancel", "stop", "cancel generation", "cancel course"])
@@ -2119,6 +2140,18 @@ def run_background_generation(draft_id: str, course_data: dict, messages: list):
             }
             return
 
+        existing_cancel = bg_generation_registry.get(draft_id, {}).get("cancel_requested", False)
+        if existing_cancel:
+            bg_generation_registry[draft_id] = {
+                "status": "cancelled",
+                "completed": already_completed,
+                "total": absolute_total,
+                "current_title": "",
+                "cancel_requested": True
+            }
+            logger.info(f"[BG Generation] Task {draft_id} already cancelled at initialization.")
+            return
+
         bg_generation_registry[draft_id] = {
             "status": "generating",
             "completed": already_completed,
@@ -2190,6 +2223,11 @@ def run_background_generation(draft_id: str, course_data: dict, messages: list):
                         break
                 finally:
                     loop.close()
+
+            if bg_generation_registry.get(draft_id, {}).get("cancel_requested"):
+                bg_generation_registry[draft_id]["status"] = "cancelled"
+                logger.info(f"[BG Generation] Task {draft_id} cancelled during/after generation.")
+                return
 
             if res_block and res_block.blocks:
                 res_block_dict = res_block.dict() if hasattr(res_block, "dict") else res_block
@@ -2280,6 +2318,15 @@ async def api_start_content_generation(req: StartBgGenRequest):
             detail=f"You currently have {active_count} courses generating in the background. Maximum limit is {MAX_CONCURRENT_BG_GENERATIONS} simultaneous generations. Please wait for an active generation to complete."
         )
 
+    # Reset registry state for new start / resume call
+    bg_generation_registry[draft_id] = {
+        "status": "generating",
+        "completed": 0,
+        "total": 0,
+        "current_title": "",
+        "cancel_requested": False
+    }
+
     # Clear is_paused flag on start / resume
     req.courseData["is_paused"] = False
     try:
@@ -2327,10 +2374,9 @@ async def api_get_generation_status(draft_id: str):
         "current_title": status_info["current_title"]
     }
 
-@app.post("/course/chatbot-builder/generate-content/cancel/{draft_id}")
-async def api_cancel_generation(draft_id: str):
+@app.post("/course/chatbot-builder/generate-content/pause/{draft_id}")
+async def api_pause_generation(draft_id: str):
     if draft_id in bg_generation_registry:
-        bg_generation_registry[draft_id]["cancel_requested"] = True
         bg_generation_registry[draft_id]["status"] = "paused"
     
     try:
@@ -2345,12 +2391,38 @@ async def api_cancel_generation(draft_id: str):
                 current_step=draft.get("currentStep") or "CONFIRM_GENERATE",
                 course_data=cdata,
                 messages=draft.get("messages") or [],
-                touch_user_interaction=True
+                touch_user_interaction=False
             )
     except Exception as e:
-        logger.error(f"Error setting is_paused on cancel: {e}")
+        logger.error(f"Error setting is_paused on pause: {e}")
 
     return {"status": "success", "message": "Pause requested"}
+
+@app.post("/course/chatbot-builder/generate-content/cancel/{draft_id}")
+async def api_cancel_generation(draft_id: str):
+    if draft_id not in bg_generation_registry:
+        bg_generation_registry[draft_id] = {}
+    bg_generation_registry[draft_id]["cancel_requested"] = True
+    bg_generation_registry[draft_id]["status"] = "cancelled"
+    
+    try:
+        from database import get_chatbot_draft, save_chatbot_draft
+        draft = get_chatbot_draft(draft_id)
+        if draft:
+            cdata = draft.get("courseData") or {}
+            cdata["is_paused"] = False
+            save_chatbot_draft(
+                draft_id=draft_id,
+                course_name=draft.get("courseName") or "Custom Course",
+                current_step=draft.get("currentStep") or "CONFIRM_GENERATE",
+                course_data=cdata,
+                messages=draft.get("messages") or [],
+                touch_user_interaction=False
+            )
+    except Exception as e:
+        logger.error(f"Error updating draft on cancel: {e}")
+
+    return {"status": "success", "message": "Cancellation requested"}
 
 # Get all drafts
 @app.get("/course/chatbot-builder/courses")
@@ -2394,7 +2466,8 @@ def api_save_chatbot_draft(req: ChatbotDraftSaveRequest):
             course_name=req.courseName,
             current_step=req.currentStep,
             course_data=req.courseData,
-            messages=req.messages
+            messages=req.messages,
+            touch_user_interaction=bool(req.touch_user_interaction)
         )
         return {"status": "success", "message": "Draft saved successfully"}
     except Exception as e:
