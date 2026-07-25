@@ -197,6 +197,8 @@ export default function ChatbotCourseCreator({ onClose }) {
     quiz: []
   });
 
+  const [limitModalInfo, setLimitModalInfo] = useState(null);
+
   const latestMessagesRef = useRef(messages);
   const latestCourseDataRef = useRef(courseData);
   useEffect(() => {
@@ -568,6 +570,11 @@ export default function ChatbotCourseCreator({ onClose }) {
   const startBatchGeneration = async (currentCourseData, userMessageObj = null) => {
     setLoading(true);
     setQuickReplies([]);
+    setBatchCompleted(0);
+    setBatchTotal(0);
+    setBatchCurrentTitle("");
+    setGenerationStatus('generating');
+    setIsBatchGenerating(true);
     const prepareMsg = {
       role: 'assistant',
       content: "Outline confirmed! Proposing prompt blueprints and generating all lesson contents sequentially. Please wait...",
@@ -636,8 +643,13 @@ export default function ChatbotCourseCreator({ onClose }) {
 
     } catch (err) {
       console.error("Batch content generation failed", err);
-      alert("An error occurred during content generation.");
+      const detailMsg = err.response?.data?.detail || err.message || "An error occurred during content generation.";
+      setLimitModalInfo({
+        title: err.response?.status === 429 ? "Generation Limit Reached" : "Generation Error",
+        message: detailMsg
+      });
       setIsBatchGenerating(false);
+      setGenerationStatus('idle');
       setLoading(false);
     }
   };
@@ -1049,7 +1061,11 @@ export default function ChatbotCourseCreator({ onClose }) {
       }
     } catch (err) {
       console.error("Failed to resume generation", err);
-      alert("Failed to resume generation.");
+      const detailMsg = err.response?.data?.detail || err.message || "Failed to resume generation.";
+      setLimitModalInfo({
+        title: err.response?.status === 429 ? "Generation Limit Reached" : "Resume Error",
+        message: detailMsg
+      });
       setGenerationStatus('paused');
       setIsBatchGenerating(false);
     } finally {
@@ -1349,6 +1365,17 @@ export default function ChatbotCourseCreator({ onClose }) {
         groups.previous.push(d);
       }
     });
+
+    // Pin the currently active draft to the top of the list so it stays fixed at position 1 while open
+    if (activeDraftId) {
+      ['today', 'yesterday', 'previous'].forEach(groupKey => {
+        const activeIdx = groups[groupKey].findIndex(d => d.id === activeDraftId);
+        if (activeIdx > 0) {
+          const [activeItem] = groups[groupKey].splice(activeIdx, 1);
+          groups[groupKey].unshift(activeItem);
+        }
+      });
+    }
 
     return groups;
   };
@@ -2826,7 +2853,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                                     stroke={
                                       generationStatus === 'completed' ? '#10b981' :
                                       generationStatus === 'paused' ? '#f59e0b' :
-                                      (generationStatus === 'cancelled' || generationStatus === 'failed' || (generationStatus === 'idle' && currentStep !== 'READY')) ? '#ef4444' :
+                                      (generationStatus === 'cancelled' || generationStatus === 'failed') ? '#ef4444' :
                                       '#6366f1'
                                     }
                                     fill="transparent"
@@ -2843,7 +2870,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                                 <div className={`absolute inset-0 flex items-center justify-center text-[10px] font-black ${
                                   generationStatus === 'completed' ? 'text-emerald-600' :
                                   generationStatus === 'paused' ? 'text-amber-500' :
-                                  (generationStatus === 'cancelled' || generationStatus === 'failed' || (generationStatus === 'idle' && currentStep !== 'READY')) ? 'text-rose-500' :
+                                  (generationStatus === 'cancelled' || generationStatus === 'failed') ? 'text-rose-500' :
                                   'text-indigo-600'
                                 }`}>
                                   {generationStatus === 'completed' ? '100%' : `${batchTotal > 0 ? Math.round((batchCompleted / batchTotal) * 100) : 0}%`}
@@ -2853,13 +2880,13 @@ export default function ChatbotCourseCreator({ onClose }) {
                                 <span className={`text-[9px] uppercase tracking-widest font-black block ${
                                   generationStatus === 'completed' ? 'text-emerald-600' :
                                   generationStatus === 'paused' ? 'text-amber-500' :
-                                  (generationStatus === 'cancelled' || generationStatus === 'failed' || (generationStatus === 'idle' && currentStep !== 'READY')) ? 'text-rose-500' :
+                                  (generationStatus === 'cancelled' || generationStatus === 'failed') ? 'text-rose-500' :
                                   'text-indigo-600'
                                 }`}>
                                   {generationStatus === 'completed' ? 'Content Generation Complete' :
                                    generationStatus === 'paused' ? 'Generation Paused' :
-                                   (generationStatus === 'cancelled' || generationStatus === 'failed' || (generationStatus === 'idle' && currentStep !== 'READY')) ? 'Generation Suspended' :
-                                   'Generating Course Material'}
+                                   (generationStatus === 'cancelled' || generationStatus === 'failed') ? 'Generation Suspended' :
+                                   (generationStatus === 'idle' ? 'Initializing Course Material...' : 'Generating Course Material')}
                                 </span>
                                 <h5 className="text-xs font-bold text-slate-800 line-clamp-1">
                                   {generationStatus === 'completed' ? 'All lessons generated successfully!' :
@@ -3095,6 +3122,43 @@ export default function ChatbotCourseCreator({ onClose }) {
 
       {/* 5. Live Module Progress Roadmap Modal Overlay */}
       {renderDetailedProgressModal()}
+
+      {/* 6. Custom Modern Limit Exceeded / Warning Modal */}
+      {limitModalInfo && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-slate-900 border border-slate-700/80 shadow-2xl rounded-2xl max-w-md w-full p-6 text-white text-left relative overflow-hidden animate-scale-up space-y-4">
+            {/* Glowing accent spot */}
+            <div className="absolute -top-10 -right-10 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
+
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Info className="w-5 h-5 text-amber-400" />
+              </div>
+              <div className="flex-1 space-y-1">
+                <h4 className="text-sm font-bold text-slate-100">{limitModalInfo.title}</h4>
+                <p className="text-xs text-slate-300 leading-relaxed pt-1">
+                  {limitModalInfo.message}
+                </p>
+              </div>
+              <button
+                onClick={() => setLimitModalInfo(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-800/80">
+              <button
+                onClick={() => setLimitModalInfo(null)}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-5 rounded-xl text-xs transition active:scale-95 shadow-md"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

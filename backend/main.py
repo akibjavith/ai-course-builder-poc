@@ -19,6 +19,7 @@ from database import save_course_to_mysql
 import os
 import shutil
 import json
+import time
 from dotenv import load_dotenv
 import logging
 from openai import OpenAI
@@ -2124,13 +2125,27 @@ def run_background_generation(draft_id: str, course_data: dict, messages: list):
                 draft_id=draft_id
             )
 
-            # Run async function in a new loop
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                res_block = loop.run_until_complete(generate_lesson_blocks(req_obj))
-            finally:
-                loop.close()
+            # Micro-pause to stagger parallel background tasks and prevent millisecond API collision
+            time.sleep(0.5)
+            res_block = None
+            max_retries = 4
+            for attempt in range(max_retries):
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    res_block = loop.run_until_complete(generate_lesson_blocks(req_obj))
+                    break
+                except Exception as gen_err:
+                    err_str = str(gen_err).lower()
+                    if ("503" in err_str or "429" in err_str or "rate limit" in err_str or "concurrent" in err_str) and attempt < max_retries - 1:
+                        backoff = (attempt + 1) * 1.5
+                        logger.warning(f"[BG Generation Retry] OpenAI rate limit hit for draft {draft_id}. Retrying in {backoff}s... (Attempt {attempt + 1}/{max_retries})")
+                        time.sleep(backoff)
+                    else:
+                        logger.error(f"[BG Generation Error] Failed generating chapter '{chapter_title}': {gen_err}")
+                        break
+                finally:
+                    loop.close()
 
             if res_block and res_block.blocks:
                 res_block_dict = res_block.dict() if hasattr(res_block, "dict") else res_block
@@ -2201,11 +2216,26 @@ def run_background_generation(draft_id: str, course_data: dict, messages: list):
         if draft_id in bg_generation_registry:
             bg_generation_registry[draft_id]["status"] = "failed"
 
+MAX_CONCURRENT_BG_GENERATIONS = 3
+
 @app.post("/course/chatbot-builder/generate-content/start")
 async def api_start_content_generation(req: StartBgGenRequest):
     draft_id = req.draft_id
-    if draft_id in bg_generation_registry and bg_generation_registry[draft_id]["status"] == "generating":
+    if draft_id in bg_generation_registry and bg_generation_registry[draft_id].get("status") == "generating":
         return {"status": "success", "message": "Generation already running"}
+
+    # Count active background generations
+    active_count = sum(
+        1 for d_id, info in bg_generation_registry.items()
+        if info.get("status") == "generating" and d_id != draft_id
+    )
+
+    if active_count >= MAX_CONCURRENT_BG_GENERATIONS:
+        raise HTTPException(
+            status_code=429,
+            detail=f"You currently have {active_count} courses generating in the background. Maximum limit is {MAX_CONCURRENT_BG_GENERATIONS} simultaneous generations. Please wait for an active generation to complete."
+        )
+
     t = threading.Thread(
         target=run_background_generation,
         args=(draft_id, req.courseData, req.messages),
