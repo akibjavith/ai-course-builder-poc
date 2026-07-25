@@ -1059,12 +1059,25 @@ Output JSON format:
                     })
 
                 if is_reduce_one and not is_specific_edit:
-                    new_modules = current_modules[:-1]
+                    from chatbot_builder_service import modify_course_structure_with_llm
+                    dt = req.courseData.get("details", {})
+                    topic_val = dt.get("topic") or dt.get("subject") or dt.get("courseName") or "General"
+                    level_val = dt.get("currentLevel") or dt.get("level") or "beginner"
+                    
+                    target_cnt = max(1, current_count - 1)
+                    reduce_msg = f"Consolidate and re-structure all topics into exactly {target_cnt} comprehensive modules."
+                    new_modules, mod_summary = modify_course_structure_with_llm(
+                        existing_modules=current_modules,
+                        user_message=reduce_msg,
+                        course_topic=topic_val,
+                        course_level=level_val,
+                        draft_id=req.draft_id
+                    )
                     req.courseData["structure"]["modules"] = new_modules
                     req.courseData["confirmed_outline"] = True
                     return JSONResponse({
                         "status": "success",
-                        "reply": f"I've reduced the outline by 1 module. The syllabus now contains {len(new_modules)} modules. Would you like to make any further modifications, or are you happy with this outline?",
+                        "reply": f"I've re-structured and consolidated the outline into {len(new_modules)} comprehensive modules. The syllabus now contains {len(new_modules)} modules. Would you like to make any further modifications, or are you happy with this outline?",
                         "quickReplies": ["Confirm Outline", "Reduce one module", "Add one module", "Rename modules/chapters"],
                         "metadata": {
                             "next_step": "OUTLINE_EDIT",
@@ -1098,12 +1111,24 @@ Output JSON format:
                                 "type": "details"
                             })
                     elif target_count < current_count:
-                        new_modules = current_modules[:target_count]
+                        from chatbot_builder_service import modify_course_structure_with_llm
+                        dt = req.courseData.get("details", {})
+                        topic_val = dt.get("topic") or dt.get("subject") or dt.get("courseName") or "General"
+                        level_val = dt.get("currentLevel") or dt.get("level") or "beginner"
+                        
+                        reduce_msg = f"Consolidate and re-structure all topics into exactly {target_count} comprehensive modules."
+                        new_modules, mod_summary = modify_course_structure_with_llm(
+                            existing_modules=current_modules,
+                            user_message=reduce_msg,
+                            course_topic=topic_val,
+                            course_level=level_val,
+                            draft_id=req.draft_id
+                        )
                         req.courseData["structure"]["modules"] = new_modules
                         req.courseData["confirmed_outline"] = True
                         return JSONResponse({
                             "status": "success",
-                            "reply": f"I've reduced the outline down to {len(new_modules)} modules. The syllabus now contains {len(new_modules)} modules. Would you like to make any further modifications, or are you happy with this outline?",
+                            "reply": f"I've re-structured and consolidated the outline down to {len(new_modules)} comprehensive modules. The syllabus now contains {len(new_modules)} modules. Would you like to make any further modifications, or are you happy with this outline?",
                             "quickReplies": ["Confirm Outline", "Reduce one module", "Add one module", "Rename modules/chapters"],
                             "metadata": {
                                 "next_step": "OUTLINE_EDIT",

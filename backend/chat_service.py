@@ -297,6 +297,7 @@ def parse_metadata(ai_reply: str, scope: str, details: dict) -> tuple:
     
     tags_to_try = [
         ("[metadata]", "[/metadata]"),
+        ("[meta]", "[/meta]"),
         ("[meta data]", "[/meta data]"),
         ("[meta_data]", "[/meta_data]"),
         ("[metadata_block]", "[/metadata_block]")

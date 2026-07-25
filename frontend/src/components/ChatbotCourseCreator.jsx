@@ -2073,8 +2073,14 @@ export default function ChatbotCourseCreator({ onClose }) {
   // High-impact highlighted banner for assistant instructions above suggestion cards
   const renderCardIntroBanner = (content, metadataType) => {
     if (!content || !content.trim()) return null;
-    const cleanedText = metadataType === 'structure' ? cleanStructureText(content) : content;
-    if (!cleanedText.trim()) return null;
+    let cleanedText = metadataType === 'structure' ? cleanStructureText(content) : content;
+    cleanedText = (cleanedText || '')
+      .replace(/\[\/?META\]/gi, '')
+      .replace(/\[\/?METADATA\]/gi, '')
+      .replace(/\[\/?META_DATA\]/gi, '')
+      .replace(/\[\/?META DATA\]/gi, '')
+      .trim();
+    if (!cleanedText) return null;
 
     const isStructure = metadataType === 'structure';
 

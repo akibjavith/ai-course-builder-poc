@@ -1033,12 +1033,11 @@ MODIFICATION INSTRUCTIONS & RULES:
    - "add new module at module 4", "add module at position 4" -> insert 1 new module at 1-based position 4 (so it becomes Module 4, shifting previous Module 4 and lower modules down).
    - "add module on [Topic]" -> create a module focused on [Topic] with 3-4 chapters and insert or append it.
 
-2. REMOVE / DELETE MODULE(S):
-   - "reduce one module", "remove one module", "reduce 1 module" -> remove 1 module (the last module unless specified). Total length MUST decrease by exactly 1!
-   - "remove 2 modules", "reduce by 2" -> remove 2 modules. Total length MUST decrease by exactly 2!
-   - "remove module 4", "delete module 4" -> delete the module currently at 1-based position 4.
-   - "delete module 2 and module 4" -> delete the 2nd and 4th modules.
-   - "remove module [Title]" / "remove 'understanding the concepts of java'" -> match module titles by substring (case-insensitive) and delete all matching modules.
+2. REDUCE / CONSOLIDATE MODULE(S):
+   - "reduce to X modules", "reduce it to X modules", "make it X modules", "consolidate to X modules" -> Re-structure and merge all topics from the entire existing course curriculum into EXACTLY X well-balanced, comprehensive modules. Do NOT simply delete or slice off modules; merge and consolidate chapters and topics from all original modules so no core learning concepts are lost.
+   - "reduce one module", "remove one module", "reduce 1 module" -> consolidate/merge or remove 1 module (total length MUST decrease by exactly 1).
+   - "remove module 4", "delete module 4" -> delete the module currently at 1-based position 4 and distribute any essential chapters into adjacent modules.
+   - "remove module [Title]" / "remove 'understanding the concepts of java'" -> match module titles by substring (case-insensitive) and delete/merge those modules.
 
 3. RENAME MODULE(S) & SUBMODULES (CHAPTERS):
    - "rename module 3 to [New Name]" -> rename module title at index 3.
