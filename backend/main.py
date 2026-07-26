@@ -1814,12 +1814,16 @@ Expected JSON output format exactly:
 
         cleaned_history = reinject_quick_replies_into_history(req.messages, updated_slots)
 
-        # Filter history to only include messages after the last topic reset/change request
+        # Filter history to only include messages after the last topic reset/change request.
+        # Uses the same broad "edit verb + topic/subject" detection as the Topic Edit Override
+        # in determine_next_step (chatbot_builder_service.py) so this cutoff can never drift out
+        # of sync with what actually triggers the topic reset there.
+        _topic_edit_verbs = ["change", "edit", "modify", "adjust", "update", "revise", "correct", "different", "another", "choose"]
         cutoff_index = 0
         for idx, msg in enumerate(cleaned_history):
             if msg.get("role") == "user":
                 content_lower = msg.get("content", "").lower()
-                if any(w in content_lower for w in ["change topic", "change the topic", "different topic", "another topic", "edit topic", "choose topic", "edit subject", "change subject"]):
+                if any(v in content_lower for v in _topic_edit_verbs) and ("topic" in content_lower or "subject" in content_lower):
                     cutoff_index = idx
 
         if cutoff_index > 0:
