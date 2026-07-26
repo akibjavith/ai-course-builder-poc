@@ -92,7 +92,7 @@ async def generate_lesson_blocks(req: LessonRequest):
         # system_size_rules: injected into the system prompt (highest model weight).
         # paragraph_min / quiz_exact: used for end-of-prompt reinforcement.
         if duration_hours == 1:
-            max_tokens_for_tier = 1200
+            max_tokens_for_tier = 2000
             paragraph_min = 40
             quiz_exact = 1
             system_size_rules = (
@@ -102,7 +102,7 @@ async def generate_lesson_blocks(req: LessonRequest):
                 "You are FORBIDDEN from writing paragraphs shorter than 40 words."
             )
         elif duration_hours == 2:
-            max_tokens_for_tier = 2000
+            max_tokens_for_tier = 3500
             paragraph_min = 60
             quiz_exact = 1
             system_size_rules = (
@@ -112,7 +112,7 @@ async def generate_lesson_blocks(req: LessonRequest):
                 "You are FORBIDDEN from writing paragraphs shorter than 60 words."
             )
         elif 3 <= duration_hours <= 5:
-            max_tokens_for_tier = 3000
+            max_tokens_for_tier = 5000
             paragraph_min = 90
             quiz_exact = 2
             system_size_rules = (
@@ -122,7 +122,7 @@ async def generate_lesson_blocks(req: LessonRequest):
                 "You are FORBIDDEN from writing paragraphs shorter than 90 words."
             )
         elif 6 <= duration_hours <= 9:
-            max_tokens_for_tier = 4500
+            max_tokens_for_tier = 7000
             paragraph_min = 130
             quiz_exact = 2
             system_size_rules = (
@@ -132,7 +132,7 @@ async def generate_lesson_blocks(req: LessonRequest):
                 "You are FORBIDDEN from writing paragraphs shorter than 130 words."
             )
         elif 10 <= duration_hours <= 14:
-            max_tokens_for_tier = 5500  # reduced from 6500 — leaves headroom for clean JSON close
+            max_tokens_for_tier = 9000  # reduced from 6500 — leaves headroom for clean JSON close
             paragraph_min = 160
             quiz_exact = 3
             system_size_rules = (
@@ -142,7 +142,7 @@ async def generate_lesson_blocks(req: LessonRequest):
                 "You are FORBIDDEN from writing paragraphs shorter than 160 words."
             )
         elif 15 <= duration_hours <= 17:
-            max_tokens_for_tier = 7000  # reduced from 9000 — leaves headroom for clean JSON close
+            max_tokens_for_tier = 10500  # reduced from 9000 — leaves headroom for clean JSON close
             paragraph_min = 220
             quiz_exact = 4
             system_size_rules = (
@@ -154,16 +154,16 @@ async def generate_lesson_blocks(req: LessonRequest):
             )
         else:
             # 18–20 hours
-            max_tokens_for_tier = 8500  # 8500 leaves ~3500 tokens headroom for clean JSON close
-            paragraph_min = 280
+            max_tokens_for_tier = 12000  # 8500 leaves ~3500 tokens headroom for clean JSON close
+            paragraph_min = 250
             quiz_exact = 5
             system_size_rules = (
                 f"CONTENT SIZE LAW — {duration_hours}-HOUR COMPREHENSIVE COURSE: "
-                "Every paragraph block MUST contain a minimum of 280 words. "
+                "Every paragraph block MUST contain a minimum of 250 words. "
                 "You MUST generate at least 3 paragraph blocks per major sub-topic. "
                 "Every quiz or knowledge_check block MUST contain exactly 5 questions. "
                 "The total lesson word count MUST exceed 1500 words. "
-                "You are FORBIDDEN from writing paragraphs shorter than 280 words. "
+                "You are FORBIDDEN from writing paragraphs shorter than 250 words. "
                 "You will be penalized for short, brief, or summarized content."
             )
 
@@ -224,7 +224,7 @@ async def generate_lesson_blocks(req: LessonRequest):
             # 18–20 hours
             duration_guidelines = f"""
         COURSE DEPTH: COMPREHENSIVE COURSE ({duration_hours} Hours).
-        - Paragraph blocks: Minimum 280 words each. Write at least 3 paragraphs per major sub-topic. Every paragraph must be a deep-dive textbook-quality explanation — no summaries, no shortcuts.
+        - Paragraph blocks: Minimum 250 words each. Write at least 3 paragraphs per major sub-topic. Every paragraph must be a deep-dive textbook-quality explanation — no summaries, no shortcuts.
         - Bullet / numbered lists: 6 to 10 items, each with a detailed multi-sentence description.
         - Tables: 5 or more data rows.
         - Quiz / knowledge_check: Exactly 5 questions per block.

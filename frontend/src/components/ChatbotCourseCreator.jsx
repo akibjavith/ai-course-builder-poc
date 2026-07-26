@@ -2826,7 +2826,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                     if (m && m.role === 'assistant' && (
                       m.metadataType === 'details_card' ||
                       (m.metadataType === 'details' && m.metadata?.next_step === 'CONFIRM_DETAILS')
-                    )) {
+                    ) && !m.metadata?.is_warning && !m.metadata?.pending_topic && !m.metadata?.pending_goal && m.metadataType !== 'warning') {
                       return i;
                     }
                     return lastIdx;
@@ -2837,7 +2837,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                   const isDetailsCard = !isUser && (
                     msg.metadataType === 'details_card' ||
                     (msg.metadataType === 'details' && msg.metadata?.next_step === 'CONFIRM_DETAILS')
-                  );
+                  ) && !msg.metadata?.is_warning && !msg.metadata?.pending_topic && !msg.metadata?.pending_goal && msg.metadataType !== 'warning';
                   return (
                     <div 
                       key={idx} 

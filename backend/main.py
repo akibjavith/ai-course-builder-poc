@@ -1329,9 +1329,24 @@ Expected JSON output format exactly:
 
         # Map legacy details key/values to clean slot values
         details = req.courseData.get("details", {}) or {}
+        raw_topic = details.get("topic")
+        if raw_topic is None or str(raw_topic).strip() == "":
+            # Only fallback to subject/courseName if topic key was never set at all
+            if "topic" not in details:
+                raw_topic = details.get("subject") or details.get("courseName") or ""
+            else:
+                raw_topic = ""
+        
+        raw_goal = details.get("learningGoal")
+        if raw_goal is None or str(raw_goal).strip() == "":
+            if "learningGoal" not in details:
+                raw_goal = details.get("description") or details.get("goal") or details.get("objective") or ""
+            else:
+                raw_goal = ""
+
         current_slots = {
-            "topic": details.get("topic") or details.get("subject") or details.get("courseName") or "",
-            "learningGoal": details.get("learningGoal") or details.get("description") or "",
+            "topic": raw_topic,
+            "learningGoal": raw_goal,
             "currentLevel": details.get("currentLevel") or details.get("level") or "",
             "learningStyle": details.get("learningStyle") or details.get("requirements") or "",
             "duration": details.get("duration") or "",
@@ -1341,7 +1356,7 @@ Expected JSON output format exactly:
         # If the step is ASK_TOPIC (starting a new session OR changing topic), discard old downstream slots and structure
         is_new_session = len(req.messages) <= 2 or all(m.get("content", "").lower().strip() in ["hi", "hello", "hey", "restart", "start", "create a new course"] for m in req.messages if m.get("role") == "user")
         if req.currentStep == "ASK_TOPIC":
-            if is_new_session:
+            if is_new_session or not current_slots["topic"]:
                 current_slots["topic"] = ""
             current_slots["learningGoal"] = ""
             current_slots["currentLevel"] = ""
@@ -1351,9 +1366,18 @@ Expected JSON output format exactly:
             req.courseData["content"] = []
             req.courseData["confirmed_outline"] = False
             if "details" in req.courseData and isinstance(req.courseData["details"], dict):
+                req.courseData["details"]["topic"] = current_slots["topic"]
+                req.courseData["details"]["subject"] = ""
+                req.courseData["details"]["courseName"] = ""
+                req.courseData["details"]["pending_topic"] = ""
                 req.courseData["details"]["learningGoal"] = ""
+                req.courseData["details"]["description"] = ""
+                req.courseData["details"]["goal"] = ""
+                req.courseData["details"]["objective"] = ""
                 req.courseData["details"]["currentLevel"] = ""
+                req.courseData["details"]["level"] = ""
                 req.courseData["details"]["learningStyle"] = ""
+                req.courseData["details"]["requirements"] = ""
                 req.courseData["details"]["duration"] = ""
 
         # Check if the user is confirming/cancelling a topic or goal change warning
@@ -1484,17 +1508,31 @@ Expected JSON output format exactly:
 
         pending_topic = details.get("pending_topic")
         if is_topic_confirm:
-            if pending_topic:
-                if pending_topic == "CLEAR":
-                    current_slots["topic"] = None
-                else:
-                    current_slots["topic"] = pending_topic
+            if pending_topic and pending_topic != "CLEAR":
+                current_slots["topic"] = pending_topic
+            else:
+                current_slots["topic"] = ""
             
             # Clear all other details slots to force re-answering them
             current_slots["learningGoal"] = ""
             current_slots["currentLevel"] = ""
             current_slots["learningStyle"] = ""
             current_slots["duration"] = ""
+
+            if "details" in req.courseData and isinstance(req.courseData["details"], dict):
+                req.courseData["details"]["topic"] = current_slots["topic"]
+                req.courseData["details"]["subject"] = ""
+                req.courseData["details"]["courseName"] = ""
+                req.courseData["details"]["pending_topic"] = ""
+                req.courseData["details"]["learningGoal"] = ""
+                req.courseData["details"]["description"] = ""
+                req.courseData["details"]["goal"] = ""
+                req.courseData["details"]["objective"] = ""
+                req.courseData["details"]["currentLevel"] = ""
+                req.courseData["details"]["level"] = ""
+                req.courseData["details"]["learningStyle"] = ""
+                req.courseData["details"]["requirements"] = ""
+                req.courseData["details"]["duration"] = ""
             
             # Also clear the existing structure and content to force regeneration!
             req.courseData["structure"] = {"modules": []}
@@ -1506,7 +1544,13 @@ Expected JSON output format exactly:
                 req.messages = [m for m in req.messages if m.get("role") == "user"][-1:]
 
         if is_goal_confirm:
-            current_slots["learningGoal"] = None
+            current_slots["learningGoal"] = ""
+            if "details" in req.courseData and isinstance(req.courseData["details"], dict):
+                req.courseData["details"]["learningGoal"] = ""
+                req.courseData["details"]["description"] = ""
+                req.courseData["details"]["goal"] = ""
+                req.courseData["details"]["objective"] = ""
+
             req.courseData["structure"] = {"modules": []}
             req.courseData["content"] = []
             req.courseData["confirmed_outline"] = False
@@ -1554,8 +1598,9 @@ Expected JSON output format exactly:
         if is_requesting_topic_change:
             pending = new_topic_temp if (new_topic_temp and str(old_topic_temp).lower().strip() != str(new_topic_temp).lower().strip()) else "CLEAR"
             meta = {
-                "next_step": "CONFIRM_DETAILS",
+                "next_step": "WARN_TOPIC_CHANGE",
                 "pending_topic": pending,
+                "is_warning": True,
                 **current_slots
             }
             if pending != "CLEAR":
@@ -1567,13 +1612,14 @@ Expected JSON output format exactly:
                 "reply": reply,
                 "quickReplies": ["Yes, change topic", "Cancel"],
                 "metadata": meta,
-                "type": "details"
+                "type": "warning"
             })
 
         if is_requesting_goal_change:
             meta = {
-                "next_step": "CONFIRM_DETAILS",
+                "next_step": "WARN_GOAL_CHANGE",
                 "pending_goal": "CLEAR",
+                "is_warning": True,
                 **current_slots
             }
             reply = "Changing your learning goal will require regenerating your syllabus outline. Are you sure you want to proceed with this change?"
@@ -1582,7 +1628,7 @@ Expected JSON output format exactly:
                 "reply": reply,
                 "quickReplies": ["Yes, change goal", "Cancel"],
                 "metadata": meta,
-                "type": "details"
+                "type": "warning"
             })
 
         # Stage 1: Run NLU Slot Extraction
