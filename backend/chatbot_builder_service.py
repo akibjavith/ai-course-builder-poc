@@ -523,9 +523,9 @@ Conversational Guidance: Ask a friendly question to gauge their current familiar
         topic_lower = str(slots.get("topic", "")).lower()
         is_programming = any(x in topic_lower for x in ["python", "java", "c++", "coding", "program", "developer", "react", "javascript", "typescript", "sql", "backend", "frontend", "software", "git", "c#", "html", "css", "database", "node", "express"])
         if is_programming:
-            style_suggestions = '["Hands-on Coding", "Interactive Quizzes", "Detailed Explanations", "Balanced Combination"]'
+            style_suggestions = '["Hands-on Coding", "Visual Diagrams & Infographics", "Interactive Quizzes", "Detailed Explanations", "Balanced Combination"]'
         else:
-            style_suggestions = '["Detailed Explanations", "Interactive Quizzes", "Structured Tables", "Balanced Combination"]'
+            style_suggestions = '["Detailed Explanations", "Visual Diagrams & Infographics", "Video & Multimedia Lectures", "Interactive Quizzes", "Structured Tables", "Balanced Combination"]'
 
         state_instructions = f"""
 Current State: ASK_STYLE
@@ -704,9 +704,9 @@ def reinject_quick_replies_into_history(messages: list, slots: dict) -> list:
                     content += '\n\n[quick_replies]["Complete Beginner / Start Fresh", "Intermediate / Some experience", "Advanced / Deep Dive"][/quick_replies]'
                 elif "style" in content_lower or "prefer" in content_lower or "enjoy learning" in content_lower:
                     if is_programming:
-                        content += '\n\n[quick_replies]["Hands-on Coding", "Interactive Quizzes", "Detailed Explanations", "Balanced Combination"][/quick_replies]'
+                        content += '\n\n[quick_replies]["Hands-on Coding", "Visual Diagrams & Infographics", "Interactive Quizzes", "Detailed Explanations", "Balanced Combination"][/quick_replies]'
                     else:
-                        content += '\n\n[quick_replies]["Detailed Explanations", "Interactive Quizzes", "Structured Tables", "Balanced Combination"][/quick_replies]'
+                        content += '\n\n[quick_replies]["Detailed Explanations", "Visual Diagrams & Infographics", "Video & Multimedia Lectures", "Interactive Quizzes", "Structured Tables", "Balanced Combination"][/quick_replies]'
                 elif "duration" in content_lower or "hours" in content_lower or "hour" in content_lower or "time" in content_lower:
                     content += '\n\n[quick_replies]["1 Hour", "2 Hours", "5 Hours", "10 Hours", "15 Hours", "20 Hours"][/quick_replies]'
                 elif "summary" in content_lower or "requirements" in content_lower or "modify any of these" in content_lower:

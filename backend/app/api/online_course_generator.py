@@ -232,38 +232,49 @@ async def generate_lesson_blocks(req: LessonRequest):
         - Total lesson word count MUST exceed 1500 words across all blocks.
         """
 
-        # Extract style to adapt content block priorities
+        # Extract style to adapt content block priorities while maintaining rich block diversity
         style_lower = str(objectives).lower()
         style_guidelines = ""
         if "coding" in style_lower or "programming" in style_lower or "code" in style_lower:
             style_guidelines = """
-        LEARNING STYLE PREFERENCE: The user has selected 'Hands-on Coding'.
-        - You MUST prioritize generating high-quality, functional, and detailed "code" blocks.
-        - Every code block must contain fully-featured, functional programs or deep-dive modules (avoid short, trivial, or basic snippets).
-        - Accompany the code with thorough line-by-line explanation paragraphs explaining how the code runs.
+        PRIMARY LEARNING STYLE PREFERENCE: 'Hands-on Coding'.
+        - PRIMARY MANDATE: EVERY SINGLE SUB-MODULE / LESSON MUST CONTAIN AT LEAST ONE FUNCTIONAL "code" BLOCK with thorough line-by-line explanations (never skip code, even for overview, architecture, or deployment topics).
+        - DIVERSITY MANDATE: In addition to code, EVERY lesson MUST include supporting blocks such as introductory "paragraph" theory, "callout" boxes (pro-tips/warnings), "example" real-world scenarios, a "summary" key takeaways block, and "reference" documentation links.
         """
         elif "explain" in style_lower or "text" in style_lower or "detailed" in style_lower:
             style_guidelines = """
-        LEARNING STYLE PREFERENCE: The user has selected 'Detailed Explanations'.
-        - You MUST prioritize detailed, in-depth theoretical textbook explanations using "paragraph" blocks.
-        - Elaborate on the core concepts, historical background, and design rationales exhaustively.
+        PRIMARY LEARNING STYLE PREFERENCE: 'Detailed Explanations'.
+        - PRIMARY MANDATE: EVERY SINGLE SUB-MODULE / LESSON MUST CONTAIN EXHAUSTIVE "paragraph" TEXTBOOK BLOCKS elaborating on core theories, design rationales, and background context.
+        - DIVERSITY MANDATE: In addition to detailed paragraphs, EVERY lesson MUST include supporting blocks such as "callout" boxes (important concepts), "example" case studies, "table" feature breakdowns, "knowledge_check" self-assessments, and a "summary" block.
         """
         elif "quiz" in style_lower or "question" in style_lower or "check" in style_lower:
             style_guidelines = """
-        LEARNING STYLE PREFERENCE: The user has selected 'Interactive Quizzes'.
-        - You MUST increase the frequency of self-assessment blocks.
-        - Generate multiple interactive "quiz" and "knowledge_check" blocks to test comprehension at each stage.
+        PRIMARY LEARNING STYLE PREFERENCE: 'Interactive Quizzes'.
+        - PRIMARY MANDATE: EVERY SINGLE SUB-MODULE / LESSON MUST FEATURE MULTIPLE "knowledge_check" AND "quiz" SELF-ASSESSMENT BLOCKS throughout the learning flow.
+        - DIVERSITY MANDATE: In addition to quizzes, EVERY lesson MUST include supporting blocks such as explanatory "paragraph" context, "callout" key points, "table" or "code" reference blocks, and a "summary" block.
         """
         elif "table" in style_lower or "structure" in style_lower or "chart" in style_lower:
             style_guidelines = """
-        LEARNING STYLE PREFERENCE: The user has selected 'Structured Tables'.
-        - You MUST prioritize structured visual summaries.
-        - Compile comparison tables, vocabulary lists, feature matrices, and key statistics using "table" blocks.
+        PRIMARY LEARNING STYLE PREFERENCE: 'Structured Tables'.
+        - PRIMARY MANDATE: EVERY SINGLE SUB-MODULE / LESSON MUST CONTAIN AT LEAST ONE DATA-RICH "table" BLOCK (comparison matrices, feature breakdowns, or reference tables).
+        - DIVERSITY MANDATE: In addition to tables, EVERY lesson MUST include supporting blocks such as explanatory "paragraph" text, "callout" takeaways, "example" scenarios, and a "summary" block.
+        """
+        elif "image" in style_lower or "visual" in style_lower or "diagram" in style_lower or "infographic" in style_lower:
+            style_guidelines = """
+        PRIMARY LEARNING STYLE PREFERENCE: 'Visual Diagrams & Infographics'.
+        - PRIMARY MANDATE: EVERY SINGLE SUB-MODULE / LESSON MUST CONTAIN AT LEAST ONE "image" BLOCK with a detailed, descriptive caption explaining what the visual diagram, architectural flowchart, or infographic represents.
+        - DIVERSITY MANDATE: In addition to image blocks, EVERY lesson MUST include supporting blocks such as explanatory "paragraph" text, "callout" boxes, "table" breakdowns, "knowledge_check" self-assessments, and a "summary" block.
+        """
+        elif "video" in style_lower or "lecture" in style_lower or "multimedia" in style_lower or "narration" in style_lower:
+            style_guidelines = """
+        PRIMARY LEARNING STYLE PREFERENCE: 'Video & Multimedia Lectures'.
+        - PRIMARY MANDATE: EVERY SINGLE SUB-MODULE / LESSON MUST CONTAIN AT LEAST ONE "video" BLOCK with a full video narration script and scene breakdown in the caption field.
+        - DIVERSITY MANDATE: In addition to video blocks, EVERY lesson MUST include supporting blocks such as explanatory "paragraph" text, "callout" notes, "table" summaries, "knowledge_check" questions, and a "summary" block.
         """
         else:
             style_guidelines = """
-        LEARNING STYLE PREFERENCE: The user has selected 'Balanced Combination'.
-        - Provide a rich, balanced mix of text paragraphs, structured comparison tables, quizzes, and code blocks (where relevant).
+        PRIMARY LEARNING STYLE PREFERENCE: 'Balanced Combination'.
+        - PRIMARY MANDATE: EVERY SINGLE SUB-MODULE / LESSON MUST CONTAIN A RICH, DIVERSE FLOW OF BLOCKS combining explanatory "paragraph" text, "callout" tips, "table" breakdowns, "code" snippets (if applicable), "knowledge_check" questions, and a "summary" block.
         """
 
         # ── End-of-prompt reinforcement (recency bias — model weights last instructions highest) ──
