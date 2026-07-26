@@ -60,6 +60,7 @@ function useCopyCode(containerRef, dependency) {
   useEffect(() => {
     if (!containerRef.current) return;
     const addCopyButtons = () => {
+      if (!containerRef.current) return;
       const preBlocks = containerRef.current.querySelectorAll('pre');
       preBlocks.forEach((pre) => {
         if (pre.querySelector('.copy-code-btn') || pre.dataset.hasCopyBtn) return;

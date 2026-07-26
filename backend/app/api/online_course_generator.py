@@ -154,7 +154,7 @@ async def generate_lesson_blocks(req: LessonRequest):
             )
         else:
             # 18–20 hours
-            max_tokens_for_tier = 12000  # 8500 leaves ~3500 tokens headroom for clean JSON close
+            max_tokens_for_tier = 14000  # raised from 12000 — dense topics (e.g. Neural Networks, SVMs) were hitting the old ceiling and getting truncated
             paragraph_min = 250
             quiz_exact = 5
             system_size_rules = (
@@ -363,60 +363,89 @@ async def generate_lesson_blocks(req: LessonRequest):
             f"{system_size_rules}"
         )
 
-        response = get_openai_client().chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": system_content
-                },
-                {"role": "user", "content": prompt_str}
-            ],
-            temperature=0.7,
-            max_tokens=max_tokens_for_tier,
-            response_format={"type": "json_object"}
-        )
+        # OpenAI's hard output-token ceiling for this model — never request above this
+        MODEL_MAX_COMPLETION_TOKENS = 16384
 
-        if req.draft_id:
-            try:
-                from metering_helper import track_chatbot_cost
-                track_chatbot_cost(req.draft_id, response, "gpt-4o-mini", f"generate_lesson_{req.title}")
-            except Exception as ex:
-                logger.error(f"Failed to track lesson blocks generation cost: {ex}")
-        
-        # ── Safe JSON parse with finish_reason check and repair fallback ─────────
-        raw_content = response.choices[0].message.content
-        finish_reason = response.choices[0].finish_reason
+        # ── Attempt generation, retrying once with a larger token budget if the
+        # first response gets truncated and cannot be repaired into valid JSON ──
+        attempt_token_budgets = [max_tokens_for_tier]
+        retry_budget = min(MODEL_MAX_COMPLETION_TOKENS, max_tokens_for_tier + 4000)
+        if retry_budget > max_tokens_for_tier:
+            attempt_token_budgets.append(retry_budget)
 
-        if finish_reason == "length":
-            logger.warning(
-                f"[LessonBlocks] Response was TRUNCATED (finish_reason=length) for lesson '{req.title}'. "
-                f"Attempting JSON repair. tier={duration_hours}h, max_tokens={max_tokens_for_tier}"
+        lesson_data = None
+        for attempt_idx, tokens_for_attempt in enumerate(attempt_token_budgets):
+            is_retry = attempt_idx > 0
+            if is_retry:
+                logger.warning(
+                    f"[LessonBlocks] Retrying generation for lesson '{req.title}' with a larger token "
+                    f"budget ({tokens_for_attempt}) after truncated/unrepairable response."
+                )
+
+            response = get_openai_client().chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": system_content
+                    },
+                    {"role": "user", "content": prompt_str}
+                ],
+                temperature=0.7,
+                max_tokens=tokens_for_attempt,
+                response_format={"type": "json_object"}
             )
 
-        try:
-            lesson_data = json.loads(raw_content)
-        except json.JSONDecodeError as parse_err:
-            logger.warning(f"[LessonBlocks] Initial json.loads failed: {parse_err}. Attempting repair...")
-            try:
-                from chat_service import try_repair_truncated_json
-                repaired = try_repair_truncated_json(raw_content)
-                lesson_data = json.loads(repaired)
-                logger.info(f"[LessonBlocks] JSON repair succeeded for lesson '{req.title}'.")
-            except Exception as repair_err:
-                logger.error(
-                    f"[LessonBlocks] JSON repair also failed for lesson '{req.title}': {repair_err}. "
-                    "Returning empty lesson to avoid 500 crash."
+            if req.draft_id:
+                try:
+                    from metering_helper import track_chatbot_cost
+                    step_name = f"generate_lesson_{req.title}" + ("_retry" if is_retry else "")
+                    track_chatbot_cost(req.draft_id, response, "gpt-4o-mini", step_name)
+                except Exception as ex:
+                    logger.error(f"Failed to track lesson blocks generation cost: {ex}")
+
+            # ── Safe JSON parse with finish_reason check and repair fallback ─────
+            raw_content = response.choices[0].message.content
+            finish_reason = response.choices[0].finish_reason
+
+            if finish_reason == "length":
+                logger.warning(
+                    f"[LessonBlocks] Response was TRUNCATED (finish_reason=length) for lesson '{req.title}'. "
+                    f"Attempting JSON repair. tier={duration_hours}h, max_tokens={tokens_for_attempt}"
                 )
-                # Return a safe fallback — partial lesson is better than a total 500 failure
-                lesson_data = {
-                    "title": req.title,
-                    "blocks": [{
-                        "type": "callout",
-                        "text": "Content generation was interrupted. Please regenerate this lesson.",
-                        "callout_type": "warning"
-                    }]
-                }
+
+            try:
+                lesson_data = json.loads(raw_content)
+                break
+            except json.JSONDecodeError as parse_err:
+                logger.warning(f"[LessonBlocks] Initial json.loads failed: {parse_err}. Attempting repair...")
+                try:
+                    from chat_service import try_repair_truncated_json
+                    repaired = try_repair_truncated_json(raw_content)
+                    lesson_data = json.loads(repaired)
+                    logger.info(f"[LessonBlocks] JSON repair succeeded for lesson '{req.title}'.")
+                    break
+                except Exception as repair_err:
+                    logger.error(
+                        f"[LessonBlocks] JSON repair also failed for lesson '{req.title}' "
+                        f"(attempt {attempt_idx + 1}/{len(attempt_token_budgets)}): {repair_err}."
+                    )
+                    lesson_data = None
+
+        if lesson_data is None:
+            logger.error(
+                f"[LessonBlocks] All generation attempts failed for lesson '{req.title}'. "
+                "Returning placeholder lesson to avoid 500 crash."
+            )
+            # Return a safe fallback — partial lesson is better than a total 500 failure
+            lesson_data = {
+                "title": req.title,
+                "blocks": [{
+                    "type": "callout",
+                    "text": "Content generation was interrupted. Please regenerate this lesson.",
+                    "callout_type": "warning"
+                }]
+            }
         
         # Coerce output to dictionary with blocks list
         if isinstance(lesson_data, list):
