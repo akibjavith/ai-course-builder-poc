@@ -452,6 +452,14 @@ export default function ChatbotCourseCreator({ onClose }) {
             } else {
               setGenerationStatus(res.status);
               setIsBatchGenerating(false);
+              // Sync the actual completed/total/current-title for THIS draft from the
+              // backend's authoritative response — these are global state, so without this
+              // they'd keep showing whichever draft was previously viewed.
+              if (res.total > 0) {
+                setBatchTotal(res.total);
+                setBatchCompleted(res.completed || 0);
+                setBatchCurrentTitle(res.current_title || '');
+              }
             }
           }
         } catch (err) {
@@ -1266,33 +1274,43 @@ export default function ChatbotCourseCreator({ onClose }) {
           currentStep: d.currentStep || 'ASK_TOPIC'
         });
 
-        // Restore generation status and counts if step is READY
-        if (d.currentStep === 'READY') {
-          let totalChaps = 0;
-          let completedChaps = 0;
-          (loadedCourseData?.structure?.modules || []).forEach(mod => {
-            (mod?.chapters || []).forEach(chap => {
-              totalChaps++;
-              if (chap.contents && chap.contents.length > 0) {
-                completedChaps++;
-              }
-            });
+        // Recompute batch progress counts from THIS draft's actual chapter data every time —
+        // these are global (not per-draft) state, so they must be refreshed on every draft
+        // switch or they'll keep showing whichever draft was previously viewed.
+        let totalChaps = 0;
+        let completedChaps = 0;
+        let firstIncompleteTitle = '';
+        (loadedCourseData?.structure?.modules || []).forEach(mod => {
+          (mod?.chapters || []).forEach(chap => {
+            totalChaps++;
+            if (chap.contents && chap.contents.length > 0) {
+              completedChaps++;
+            } else if (!firstIncompleteTitle) {
+              firstIncompleteTitle = chap.title || '';
+            }
           });
-          setBatchTotal(totalChaps);
-          setBatchCompleted(completedChaps);
+        });
+        setBatchTotal(totalChaps);
+        setBatchCompleted(completedChaps);
+        setBatchCurrentTitle(firstIncompleteTitle);
+
+        // Restore generation status if step is READY; otherwise the upcoming
+        // checkInitialStatus call (keyed on activeDraftId) will set the real
+        // live/paused/idle status for this draft shortly after.
+        if (d.currentStep === 'READY') {
           setGenerationStatus('completed');
-          
+
           // Auto-trigger congrats message if it's missing from the loaded chat history
-          const hasCongrats = (d.messages || []).some(m => 
-            m.role === 'assistant' && 
-            m.content && 
+          const hasCongrats = (d.messages || []).some(m =>
+            m.role === 'assistant' &&
+            m.content &&
             (m.content.toLowerCase().includes("congratulat") || m.content.toLowerCase().includes("successfully complete"))
           );
           if (!hasCongrats) {
             triggerCongratulatoryMessage(d.messages || [], loadedCourseData);
           }
         } else {
-          setGenerationStatus('idle');
+          setGenerationStatus(loadedCourseData?.is_paused ? 'paused' : 'idle');
           setIsBatchGenerating(false);
         }
       }

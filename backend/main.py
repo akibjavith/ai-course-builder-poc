@@ -2256,6 +2256,22 @@ def run_background_generation(draft_id: str, course_data: dict, messages: list):
                 # "status" stays "paused" here (set by the pause endpoint) so Resume can pick up
                 # from already_completed + i via a fresh call to this same function.
                 logger.info(f"[BG Generation] Task {draft_id} paused before chapter '{ch['chapter_title']}'.")
+                # Re-save with is_paused=True as the definitive last write for this draft — the
+                # pause endpoint's own save can otherwise be clobbered by the in-flight chapter's
+                # save above (which carries is_paused=False from when generation started), since
+                # that save happens after the endpoint's write but before the thread notices and
+                # stops here.
+                try:
+                    updated_course["is_paused"] = True
+                    save_chatbot_draft(
+                        draft_id=draft_id,
+                        course_name=updated_course.get("details", {}).get("courseName") or "Custom Course",
+                        current_step="CONFIRM_GENERATE",
+                        course_data=updated_course,
+                        messages=messages
+                    )
+                except Exception as pause_save_err:
+                    logger.error(f"[BG Generation] Failed to persist paused state for {draft_id}: {pause_save_err}")
                 return
 
             m_idx = ch["m_idx"]
@@ -2427,16 +2443,32 @@ async def api_start_content_generation(req: StartBgGenRequest):
 @app.get("/course/chatbot-builder/generate-content/status/{draft_id}")
 async def api_get_generation_status(draft_id: str):
     if draft_id not in bg_generation_registry:
+        # Not tracked in the in-memory registry — either generation never started for this
+        # draft, or the backend process restarted and lost its in-memory bookkeeping.
+        # Reconstruct real progress from the persisted course structure instead of guessing,
+        # so a paused-but-untracked draft still reports "paused" with accurate counts rather
+        # than a blanket "idle" that would hide its Resume/Cancel controls on the frontend.
         from database import get_chatbot_draft
         try:
             draft = get_chatbot_draft(draft_id)
-            if draft and (draft.get("current_step") == "READY" or draft.get("currentStep") == "READY"):
-                return {
-                    "status": "completed",
-                    "completed": 100,
-                    "total": 100,
-                    "current_title": ""
-                }
+            if draft:
+                course_data = draft.get("courseData") or {}
+                total = 0
+                completed = 0
+                current_title = ""
+                for mod in (course_data.get("structure", {}).get("modules") or []):
+                    for chap in (mod.get("chapters") or []):
+                        total += 1
+                        if chap.get("contents"):
+                            completed += 1
+                        elif not current_title:
+                            current_title = chap.get("title") or ""
+
+                if draft.get("currentStep") == "READY":
+                    return {"status": "completed", "completed": total, "total": total, "current_title": ""}
+                if course_data.get("is_paused"):
+                    return {"status": "paused", "completed": completed, "total": total, "current_title": current_title}
+                return {"status": "idle", "completed": completed, "total": total, "current_title": current_title}
         except Exception:
             pass
         return {"status": "idle", "completed": 0, "total": 0, "current_title": ""}
