@@ -267,44 +267,54 @@ def save_course_to_mysql(course_data: Dict[str, Any]):
 
 def get_courses_from_mysql():
     """Fetches all courses for the dashboard list with module counts."""
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    
-    try:
-        # Join with m_subject and subquery for module count
-        sql = """
-            SELECT c.*, s.subject_name,
-            (SELECT COUNT(*) FROM corp_course_conf_section WHERE corp_course_id = c.id) as module_count
-            FROM corp_course c
-            LEFT JOIN m_subject s ON c.subject_id = s.subject_id
-            ORDER BY c.id DESC
-        """
-        cursor.execute(sql)
-        rows = cursor.fetchall()
-        
-        courses = []
-        for row in rows:
-            courses.append({
-                "id": str(row["id"]),
-                "mysql_id": row["id"],
-                "details": {
-                    "courseName": row["course_name"],
-                    "description": row["course_desc"],
-                    "subject": row["subject_name"],
-                    "level": row["course_level"],
-                    "price": str(row["course_price"]),
-                    "duration": str(row["no_of_days"]),
-                    "language": row["course_language"],
-                    "requirements": row["requirements"],
-                    "scriptingLanguage": row["script_lang"]
-                },
-                # Provide a fake module list with the correct length so the UI shows the count
-                "structure": {"modules": [None] * row["module_count"]} 
-            })
-        return courses
-    finally:
-        cursor.close()
-        conn.close()
+    # Transient disconnects (errno 2013 CR_SERVER_LOST, 2006 CR_SERVER_GONE_ERROR) can happen
+    # mid-query even on a freshly opened connection; retry once with a brand-new connection
+    # instead of surfacing the error and stalling the caller.
+    last_err = None
+    for attempt in range(2):
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            # Join with m_subject and subquery for module count
+            sql = """
+                SELECT c.*, s.subject_name,
+                (SELECT COUNT(*) FROM corp_course_conf_section WHERE corp_course_id = c.id) as module_count
+                FROM corp_course c
+                LEFT JOIN m_subject s ON c.subject_id = s.subject_id
+                ORDER BY c.id DESC
+            """
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+
+            courses = []
+            for row in rows:
+                courses.append({
+                    "id": str(row["id"]),
+                    "mysql_id": row["id"],
+                    "details": {
+                        "courseName": row["course_name"],
+                        "description": row["course_desc"],
+                        "subject": row["subject_name"],
+                        "level": row["course_level"],
+                        "price": str(row["course_price"]),
+                        "duration": str(row["no_of_days"]),
+                        "language": row["course_language"],
+                        "requirements": row["requirements"],
+                        "scriptingLanguage": row["script_lang"]
+                    },
+                    # Provide a fake module list with the correct length so the UI shows the count
+                    "structure": {"modules": [None] * row["module_count"]}
+                })
+            return courses
+        except mysql.connector.Error as e:
+            last_err = e
+            if e.errno in (2013, 2006) and attempt == 0:
+                continue
+            raise
+        finally:
+            cursor.close()
+            conn.close()
+    raise last_err
 
 def get_course_details_from_mysql(course_id: int):
     """Fetches the full course structure (modules + lessons) for the viewer."""

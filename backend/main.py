@@ -1577,9 +1577,11 @@ Expected JSON output format exactly:
         is_requesting_topic_change = False
         is_requesting_goal_change = False
         
-        # Temp NLU run to see if they specified a new topic in message
+        # Temp NLU run to see if they specified a new topic in message.
+        # Reused below as Stage 1's extraction result (same user_message/current_step/draft_id
+        # as input, so re-running it would just be an identical, wasted LLM call).
         temp_slots = {**current_slots}
-        temp_updated, _ = extract_slots_from_message(user_message, temp_slots, req.currentStep, req.draft_id)
+        temp_updated, temp_raw_extracted = extract_slots_from_message(user_message, temp_slots, req.currentStep, req.draft_id)
         old_topic_temp = current_slots.get("topic")
         new_topic_temp = temp_updated.get("topic")
         
@@ -1631,9 +1633,10 @@ Expected JSON output format exactly:
                 "type": "warning"
             })
 
-        # Stage 1: Run NLU Slot Extraction
-        updated_slots, raw_extracted = extract_slots_from_message(user_message, current_slots, req.currentStep, req.draft_id)
-        
+        # Stage 1: Reuse the NLU extraction already run above (same inputs, so calling again
+        # would just repeat the identical OpenAI request).
+        updated_slots, raw_extracted = temp_updated, temp_raw_extracted
+
         if is_topic_confirm:
             updated_slots["pending_topic"] = None
         if is_topic_cancel:
@@ -1677,6 +1680,28 @@ Expected JSON output format exactly:
                 req.courseData["details"]["learningStyle"] = ""
                 req.courseData["details"]["duration"] = ""
 
+        # Fetch existing course/draft history early so it's available both to the refusal
+        # interceptor below (for dynamic topic suggestions) and to the NLG prompt builder later.
+        published_names = []
+        try:
+            from database import get_courses_from_mysql
+            courses = get_courses_from_mysql()
+            for c in courses:
+                if c.get("details", {}).get("courseName"):
+                    published_names.append(c["details"]["courseName"])
+        except Exception as e:
+            logger.error(f"Error fetching existing courses for dynamic suggestions: {e}")
+
+        draft_names = []
+        try:
+            from database import get_chatbot_drafts
+            drafts = get_chatbot_drafts()
+            for d in drafts:
+                if d.get("courseName"):
+                    draft_names.append(d["courseName"])
+        except Exception as e:
+            logger.error(f"Error fetching drafts for dynamic suggestions: {e}")
+
         # Deterministic Refusal Interceptor for premature skips / unhandled inputs during questionnaire phase
         is_questionnaire_step = req.currentStep in ["ASK_TOPIC", "ASK_GOAL", "ASK_LEVEL", "ASK_STYLE", "ASK_DURATION"]
         import re as _re
@@ -1689,18 +1714,22 @@ Expected JSON output format exactly:
         # The second OR condition exempts known valid answer words so raw_extracted being empty doesn't block them.
         # Exemptions cover all questionnaire answer categories: level answers, duration answers, AND style answers.
         _style_answer_words = ["table", "tables", "structured", "quiz", "quizzes", "explain", "explained", "detailed", "explanation", "balanced", "combination", "hands", "practical", "visual", "video", "coding", "code"]
-        has_skip_request = any(_re.search(r'\b' + _re.escape(w) + r'\b', lowercase_msg) for w in _skip_words) or (isinstance(raw_extracted, dict) and len([v for v in raw_extracted.values() if v is not None]) == 0 and not any(ans in lowercase_msg for ans in ["beginner", "intermediate", "advanced", "coding", "quizzes", "hour", "hours"] + _style_answer_words))
+        # Greetings/small-talk are valid first-turn messages (esp. on ASK_TOPIC) and must NOT be
+        # treated as a "skip ahead" attempt just because nothing was extractable from them.
+        _greeting_words = ["hi", "hello", "hey", "hii", "hiya", "yo", "sup", "greetings", "howdy", "good morning", "good afternoon", "good evening", "what's up", "wassup"]
+        is_greeting = any(_re.search(r'\b' + _re.escape(w) + r'\b', lowercase_msg) for w in _greeting_words)
+        has_skip_request = any(_re.search(r'\b' + _re.escape(w) + r'\b', lowercase_msg) for w in _skip_words) or (isinstance(raw_extracted, dict) and len([v for v in raw_extracted.values() if v is not None]) == 0 and not is_greeting and not any(ans in lowercase_msg for ans in ["beginner", "intermediate", "advanced", "coding", "quizzes", "hour", "hours"] + _style_answer_words))
         details_incomplete = not (updated_slots.get("topic") and updated_slots.get("learningGoal") and updated_slots.get("currentLevel") and updated_slots.get("learningStyle") and updated_slots.get("duration"))
-        
+
         if is_questionnaire_step and has_skip_request and details_incomplete:
             topic_str = updated_slots.get("topic") or "your course topic"
             prompt_text = ""
             quick_replies = []
-            
+
             if next_step == "ASK_TOPIC":
                 prompt_text = "Before we can view your outline or details summary, let's complete your course details step-by-step first. What course topic or subject would you like to build?"
                 from chatbot_builder_service import generate_dynamic_topic_suggestions
-                quick_replies = generate_dynamic_topic_suggestions(published_names if 'published_names' in locals() else [], draft_names if 'draft_names' in locals() else [])
+                quick_replies = generate_dynamic_topic_suggestions(published_names, draft_names)
             elif next_step == "ASK_GOAL":
                 prompt_text = f"We haven't finished setting up your course details yet. Please answer all questions first. What is your primary learning goal for {topic_str}?"
                 from chatbot_builder_service import generate_dynamic_goal_suggestions
@@ -1784,26 +1813,7 @@ Expected JSON output format exactly:
                 next_step = "CONFIRM_GENERATE"
 
         # Stage 3: Dynamic NLG Prompt Generation
-        published_names = []
-        try:
-            from database import get_courses_from_mysql
-            courses = get_courses_from_mysql()
-            for c in courses:
-                if c.get("details", {}).get("courseName"):
-                    published_names.append(c["details"]["courseName"])
-        except Exception as e:
-            logger.error(f"Error fetching existing courses for dynamic suggestions: {e}")
-
-        draft_names = []
-        try:
-            from database import get_chatbot_drafts
-            drafts = get_chatbot_drafts()
-            for d in drafts:
-                if d.get("courseName"):
-                    draft_names.append(d["courseName"])
-        except Exception as e:
-            logger.error(f"Error fetching drafts for dynamic suggestions: {e}")
-
+        # (published_names / draft_names already fetched earlier, before the refusal interceptor)
         system_prompt = build_builder_system_prompt(
             next_step, 
             updated_slots, 
@@ -2103,7 +2113,13 @@ Expected JSON output format exactly:
                 if isinstance(metadata, dict):
                     metadata.pop("modules", None)
 
-        # Quick replies are already parsed and extracted above
+        # Quick replies are already parsed and extracted above.
+        # READY (course generation complete) and PROMPT_GEN (content generation card) are
+        # terminal/informational states with dedicated Preview/Publish buttons already in the UI —
+        # force no suggestion chips regardless of what the LLM produced for these steps.
+        if next_step in ("READY", "PROMPT_GEN"):
+            quick_replies = []
+
         reply_text = reply_text.strip()
 
         logger.info(f"[Chatbot Solver] Step transition: {req.currentStep} -> {next_step} | Metadata: {metadata}")
@@ -2229,9 +2245,17 @@ def run_background_generation(draft_id: str, course_data: dict, messages: list):
         updated_course = json.loads(json.dumps(course_data))
 
         for i, ch in enumerate(chapters_to_generate):
-            if bg_generation_registry.get(draft_id, {}).get("cancel_requested"):
+            reg_state = bg_generation_registry.get(draft_id, {})
+            if reg_state.get("cancel_requested"):
                 bg_generation_registry[draft_id]["status"] = "cancelled"
                 logger.info(f"[BG Generation] Task {draft_id} cancelled.")
+                return
+            if reg_state.get("status") == "paused":
+                # Let the current chapter (if any was already in-flight) have already saved above;
+                # stop before starting the next one so no partially-billed generation is wasted.
+                # "status" stays "paused" here (set by the pause endpoint) so Resume can pick up
+                # from already_completed + i via a fresh call to this same function.
+                logger.info(f"[BG Generation] Task {draft_id} paused before chapter '{ch['chapter_title']}'.")
                 return
 
             m_idx = ch["m_idx"]

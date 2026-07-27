@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const API_URL =
   (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL)?.replace(/\/+$/, '') ||
-  'http://localhost:8000';
+  'http://192.168.3.191:8000';
 
 export const uploadDoc = async (file) => {
   const formData = new FormData();

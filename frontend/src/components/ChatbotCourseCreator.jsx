@@ -330,7 +330,7 @@ export default function ChatbotCourseCreator({ onClose }) {
     } else if (step === 'CONFIRM_GENERATE') {
       setQuickReplies(["Generate Course Content", "Go back to outline"]);
     } else if (step === 'READY') {
-      setQuickReplies(["Yes, start again", "No, go back to outline"]);
+      setQuickReplies([]);
     } else {
       setQuickReplies([]);
     }
