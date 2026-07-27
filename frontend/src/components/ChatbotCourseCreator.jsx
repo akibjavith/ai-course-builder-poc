@@ -100,6 +100,9 @@ export default function ChatbotCourseCreator({ onClose }) {
   const [batchTotal, setBatchTotal] = useState(0);
   const [batchCompleted, setBatchCompleted] = useState(0);
   const [batchCurrentTitle, setBatchCurrentTitle] = useState('');
+  // Tracks which draft the batch* values above actually belong to, so other drafts in the
+  // sidebar never blend in stale progress numbers left over from a different course.
+  const [batchDraftId, setBatchDraftId] = useState(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   
   const [reactError, setReactError] = useState(null);
@@ -459,6 +462,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                 setBatchTotal(res.total);
                 setBatchCompleted(res.completed || 0);
                 setBatchCurrentTitle(res.current_title || '');
+                setBatchDraftId(activeDraftId);
               }
             }
           }
@@ -519,6 +523,7 @@ export default function ChatbotCourseCreator({ onClose }) {
             setBatchTotal(res.total || 0);
             setBatchCompleted(res.completed || 0);
             setBatchCurrentTitle(res.current_title || '');
+            setBatchDraftId(draftId);
 
             // Fetch the updated draft data to show current generated chapters in the syllabus preview
             const draftRes = await getChatbotDraft(draftId);
@@ -539,6 +544,7 @@ export default function ChatbotCourseCreator({ onClose }) {
             setCurrentStep('READY');
             setBatchCompleted(res.completed || res.total || 0);
             setBatchTotal(res.total || 0);
+            setBatchDraftId(draftId);
 
             // Fetch final draft
             const draftRes = await getChatbotDraft(draftId);
@@ -571,7 +577,7 @@ export default function ChatbotCourseCreator({ onClose }) {
               } : m);
               const stopMsg = {
                 role: 'assistant',
-                content: "Course creation has been stopped. Do you want to start again?",
+                content: "Course content creation has been stopped. Do you want to start the content creation again?",
                 timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
               };
               return [...updatedMessages, stopMsg];
@@ -598,6 +604,7 @@ export default function ChatbotCourseCreator({ onClose }) {
     setBatchCompleted(0);
     setBatchTotal(0);
     setBatchCurrentTitle("");
+    setBatchDraftId(activeDraftId);
     setGenerationStatus('generating');
     setIsBatchGenerating(true);
     const prepareMsg = {
@@ -1161,7 +1168,7 @@ export default function ChatbotCourseCreator({ onClose }) {
       } : m);
       const stopMsg = {
         role: 'assistant',
-        content: "Course creation has been stopped. Do you want to start again?",
+        content: "Course content creation has been stopped. Do you want to start the content creation again?",
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       return [...updatedMessages, stopMsg];
@@ -1293,6 +1300,7 @@ export default function ChatbotCourseCreator({ onClose }) {
         setBatchTotal(totalChaps);
         setBatchCompleted(completedChaps);
         setBatchCurrentTitle(firstIncompleteTitle);
+        setBatchDraftId(d.id);
 
         // Restore generation status if step is READY; otherwise the upcoming
         // checkInitialStatus call (keyed on activeDraftId) will set the real
@@ -1372,6 +1380,10 @@ export default function ChatbotCourseCreator({ onClose }) {
     setActiveCardDetails(null);
     setAttachedFile(null);
     setGenerationStatus('idle');
+    setBatchTotal(0);
+    setBatchCompleted(0);
+    setBatchCurrentTitle('');
+    setBatchDraftId(null);
     cancelGenerationRef.current = false;
     lastSavedDataRef.current = null;
   };
@@ -2502,7 +2514,10 @@ export default function ChatbotCourseCreator({ onClose }) {
                                        });
                                      });
 
-                                     if (d.id === activeDraftId) {
+                                     // Only blend in the live batch* numbers when they've actually
+                                     // been tagged as belonging to THIS draft — otherwise they may
+                                     // be stale leftovers from whichever draft was previously active.
+                                     if (d.id === activeDraftId && batchDraftId === d.id) {
                                        totalChapters = Math.max(totalChapters, batchTotal);
                                        completedChapters = Math.max(completedChapters, batchCompleted);
                                      }
@@ -2960,7 +2975,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                                      (generationStatus === 'idle' ? 'Initializing Course Material...' : 'Generating Course Material')}
                                   </span>
                                   <h5 className="text-xs font-bold text-slate-800 line-clamp-1">
-                                    {msg.isCancelledCard ? 'Course creation has been stopped.' :
+                                    {msg.isCancelledCard ? 'Course content creation has been stopped.' :
                                      generationStatus === 'completed' ? 'All lessons generated successfully!' :
                                      generationStatus === 'paused' ? 'Course generation is paused.' :
                                      (generationStatus === 'cancelled' || generationStatus === 'failed' || (generationStatus === 'idle' && currentStep !== 'READY')) ? 'Course generation was suspended.' :

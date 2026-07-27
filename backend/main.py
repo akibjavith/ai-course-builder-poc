@@ -1434,7 +1434,7 @@ Expected JSON output format exactly:
                     req.courseData["is_paused"] = False
                     return JSONResponse({
                         "status": "success",
-                        "reply": "Course creation has been stopped. Do you want to start again?",
+                        "reply": "Course content creation has been stopped. Do you want to start the content creation again?",
                         "quickReplies": ["Yes, start again", "No, go back to outline"],
                         "metadata": {"next_step": "CONFIRM_GENERATE", "cancel_generation": True},
                         "type": "details"
