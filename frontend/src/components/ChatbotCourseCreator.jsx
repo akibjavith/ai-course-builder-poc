@@ -754,7 +754,11 @@ export default function ChatbotCourseCreator({ onClose }) {
       } else if (currentStep === 'CONFIRM_GENERATE') {
         const generateKeywords = ["generate course", "generate content", "generate", "yes", "continue", "start", "proceed", "let's go", "go ahead", "sure", "ok", "yep", "yeah", "create", "build"];
         const wantsGenerate = generateKeywords.some(kw => lowercaseText.includes(kw));
-        if (wantsGenerate) {
+        // Never start a second batch while one is already paused/running for this draft —
+        // fall through to the normal backend chat flow instead, which shows the
+        // Resume/Cancel warning (backend main.py's CONFIRM_GENERATE pause interceptor).
+        const alreadyPausedOrGenerating = isBatchGenerating || generationStatus === 'paused' || generationStatus === 'generating';
+        if (wantsGenerate && !alreadyPausedOrGenerating) {
           const userMsg = {
             role: 'user',
             content: displayedText || textToSend,
@@ -1052,6 +1056,14 @@ export default function ChatbotCourseCreator({ onClose }) {
       alert("Cannot publish a course without a name. Please define course details first.");
       return;
     }
+    // Echo the action into the chat history as a user message, same as clicking any
+    // other quick-reply/action button, before the assistant's result message arrives.
+    const publishUserMsg = {
+      role: 'user',
+      content: 'Publish Course',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setMessages(prev => [...prev, publishUserMsg]);
     setLoading(true);
     try {
       const payload = {
@@ -1091,6 +1103,9 @@ export default function ChatbotCourseCreator({ onClose }) {
     setGenerationStatus('paused');
     setIsBatchGenerating(false);
     setCourseData(prev => ({ ...prev, is_paused: true }));
+    // Clear leftover suggestion chips (e.g. "Generate Course Content") from before pausing —
+    // the card's own Resume/Cancel buttons are the only valid actions while paused.
+    setQuickReplies([]);
     isUserActionRef.current = true;
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
@@ -3121,13 +3136,13 @@ export default function ChatbotCourseCreator({ onClose }) {
                   ref={chatInputRef}
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
-                   placeholder={isBatchGenerating ? "Generating course content..." : "Tell the AI architect what to add or modify..."}
+                   placeholder={currentStep === 'READY' ? "Course completed — use Preview or Publish above to continue" : isBatchGenerating ? "Generating course content..." : "Tell the AI architect what to add or modify..."}
                   className="w-full bg-transparent resize-none focus:outline-none text-sm text-slate-800 placeholder-slate-400 px-2 py-1 h-14"
-                  disabled={loading}
+                  disabled={loading || currentStep === 'READY'}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
-                      if (!isBatchGenerating && !loading && inputMessage.trim()) {
+                      if (!isBatchGenerating && !loading && currentStep !== 'READY' && inputMessage.trim()) {
                         handleSendMessage(inputMessage);
                       }
                     }
@@ -3136,9 +3151,9 @@ export default function ChatbotCourseCreator({ onClose }) {
                 <div className="flex justify-end items-center border-t border-slate-100/60 pt-2 px-2">
                   <button
                     onClick={() => handleSendMessage(inputMessage)}
-                    disabled={!inputMessage.trim() || loading || isBatchGenerating}
+                    disabled={!inputMessage.trim() || loading || isBatchGenerating || currentStep === 'READY'}
                     className={`font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1 transition shadow active:scale-95 ${
-                      isBatchGenerating || loading || !inputMessage.trim()
+                      isBatchGenerating || loading || !inputMessage.trim() || currentStep === 'READY'
                         ? 'bg-slate-300 text-slate-500 opacity-40 cursor-not-allowed pointer-events-none shadow-none'
                         : 'bg-indigo-600 hover:bg-indigo-700 text-white'
                     }`}
