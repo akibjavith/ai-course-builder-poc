@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Bot, FileText, UploadCloud, Globe, Video, Link, CheckCircle2, ChevronRight, Loader2 } from 'lucide-react';
 import { uploadDoc, fetchWebDocument, fetchYouTubeDocument } from '../api';
+import Button from './ui/Button.jsx';
+import Badge from './ui/Badge.jsx';
 
 export default function SourceSelection({ courseData, updateCourseData, onNext }) {
   const [sourceType, setSourceType] = useState(courseData.sourceType || 'external');
@@ -100,44 +102,45 @@ export default function SourceSelection({ courseData, updateCourseData, onNext }
       </div>
 
       {sourceType === 'internal' && (
-        <div className="mt-12 bg-white border border-gray-200 rounded-3xl overflow-hidden shadow-sm animate-slide-up">
-          <div className="flex border-b border-gray-100 bg-gray-50/50 p-2">
+        <div className="mt-12 bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm animate-slide-up">
+          <div className="flex border-b border-slate-100 bg-slate-50/50 p-2">
             {[
               { id: 'file', icon: UploadCloud, label: 'Upload File' },
-              { id: 'web', icon: Globe, label: 'Web URL' },
-              { id: 'youtube', icon: Video, label: 'YouTube Video' }
+              { id: 'web', icon: Globe, label: 'Web URL', comingSoon: true },
+              { id: 'youtube', icon: Video, label: 'YouTube Video', comingSoon: true }
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 py-3 px-4 rounded-xl flex items-center justify-center gap-2 text-sm font-semibold transition-all ${
-                  activeTab === tab.id 
-                  ? 'bg-white text-sky-600 shadow-sm' 
+                className={`flex-1 py-3 px-4 rounded-xl flex items-center justify-center gap-2 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40 ${
+                  activeTab === tab.id
+                  ? 'bg-white text-sky-600 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100/50'
                 }`}
               >
                 <tab.icon className="w-4 h-4" />
                 {tab.label}
+                {tab.comingSoon && <Badge variant="amber">Soon</Badge>}
               </button>
             ))}
           </div>
 
           <div className="p-8">
             {activeTab === 'file' && (
-              <div className="flex flex-col items-center justify-center p-10 border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50/30 hover:border-indigo-300 hover:bg-indigo-50/30 transition-all group">
-                <UploadCloud className="w-12 h-12 text-gray-300 group-hover:text-indigo-400 mb-4 transition-colors" />
-                <p className="text-sm font-bold text-gray-700 mb-1">Click to upload or drag and drop</p>
-                <p className="text-xs text-gray-400 mb-6">PDF, DOCX, TXT, or CSV (max. 10MB)</p>
-                <input 
-                  type="file" 
-                  className="hidden" 
+              <div className="flex flex-col items-center justify-center p-10 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/30 hover:border-sky-300 hover:bg-sky-50/30 transition-all group">
+                <UploadCloud className="w-12 h-12 text-slate-300 group-hover:text-sky-400 mb-4 transition-colors" />
+                <p className="text-sm font-bold text-slate-700 mb-1">Click to upload or drag and drop</p>
+                <p className="text-xs text-slate-400 mb-6">PDF, DOCX, TXT, or CSV (max. 10MB)</p>
+                <input
+                  type="file"
+                  className="hidden"
                   id="file-upload"
                   onChange={(e) => setFile(e.target.files[0])}
                   accept=".pdf,.docx,.txt,.csv"
                 />
-                <label 
+                <label
                   htmlFor="file-upload"
-                  className="cursor-pointer bg-white border border-gray-200 text-gray-700 px-6 py-2.5 rounded-xl text-sm font-bold shadow-sm hover:border-indigo-200 hover:text-indigo-600 transition"
+                  className="cursor-pointer bg-white border border-slate-200 text-slate-700 px-6 py-2.5 rounded-xl text-sm font-bold shadow-sm hover:border-sky-200 hover:text-sky-600 transition"
                 >
                   {file ? file.name : 'Choose File'}
                 </label>
@@ -146,40 +149,40 @@ export default function SourceSelection({ courseData, updateCourseData, onNext }
 
             {activeTab === 'web' && (
               <div className="space-y-4">
-                <label className="block text-sm font-bold text-gray-700">Paste Website URL</label>
+                <label className="block text-sm font-bold text-slate-700">Paste Website URL</label>
                 <div className="relative">
-                  <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input 
-                    type="url" 
+                  <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input
+                    type="url"
                     value={webUrl}
                     onChange={(e) => setWebUrl(e.target.value)}
                     placeholder="https://example.com/article"
-                    className="w-full pl-14 pr-4 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full pl-14 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled
                   />
                 </div>
-                <p className="text-xs text-gray-400 flex items-center gap-1">
-                  <Link className="w-3 h-3" /> We'll extract text content from the provided webpage.
+                <p className="text-xs text-slate-400 flex items-center gap-1">
+                  <Link className="w-3 h-3" /> We'll extract text content from the provided webpage. This source is coming soon.
                 </p>
               </div>
             )}
 
             {activeTab === 'youtube' && (
               <div className="space-y-4">
-                <label className="block text-sm font-bold text-gray-700">YouTube Video URL</label>
+                <label className="block text-sm font-bold text-slate-700">YouTube Video URL</label>
                 <div className="relative">
-                  <Video className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input 
-                    type="url" 
+                  <Video className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input
+                    type="url"
                     value={youtubeUrl}
                     onChange={(e) => setYoutubeUrl(e.target.value)}
                     placeholder="https://youtube.com/watch?v=..."
-                    className="w-full pl-14 pr-4 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full pl-14 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled
                   />
                 </div>
-                <p className="text-xs text-gray-400 flex items-center gap-1">
-                  <Link className="w-3 h-3" /> We'll use the video's transcript to build your course.
+                <p className="text-xs text-slate-400 flex items-center gap-1">
+                  <Link className="w-3 h-3" /> We'll use the video's transcript to build your course. This source is coming soon.
                 </p>
               </div>
             )}
@@ -194,23 +197,23 @@ export default function SourceSelection({ courseData, updateCourseData, onNext }
       )}
 
       <div className="flex justify-center pt-12 pb-10">
-        <button 
+        <Button
+          variant="primary"
+          size="xl"
+          loading={loading}
           onClick={handleProcessSource}
           disabled={loading || (sourceType === 'internal' && activeTab === 'file' && !file) || (sourceType === 'internal' && activeTab === 'web') || (sourceType === 'internal' && activeTab === 'youtube')}
-          className="group relative bg-sky-600 text-white px-12 py-4 rounded-2xl font-bold text-lg hover:bg-sky-700 transition shadow-xl hover:shadow-sky-200 active:scale-95 disabled:opacity-50 disabled:active:scale-100"
+          className="group"
         >
           {loading ? (
-            <div className="flex items-center gap-3">
-              <Loader2 className="w-6 h-6 animate-spin" />
-              <span>Analyzing Source...</span>
-            </div>
+            <span>Analyzing Source...</span>
           ) : (
-            <div className="flex items-center gap-2">
+            <>
               Continue to Details
               <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-            </div>
+            </>
           )}
-        </button>
+        </Button>
       </div>
     </div>
   );

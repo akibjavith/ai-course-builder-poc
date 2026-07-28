@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getCourses, deleteCourse } from '../api';
 import { Loader2, BookOpen, Clock, Users, PlayCircle, ExternalLink, Trash2, Edit3 } from 'lucide-react';
+import Button from '../components/ui/Button.jsx';
 
 export default function CoursesDashboard({ onViewCourse, onEditCourse, onStartChatbot }) {
   const [courses, setCourses] = useState([]);
@@ -34,13 +35,13 @@ export default function CoursesDashboard({ onViewCourse, onEditCourse, onStartCh
   if (loading) return (
     <div className="flex flex-col items-center justify-center p-20">
       <Loader2 className="h-12 w-12 animate-spin text-sky-500 mb-4"/>
-      <p className="text-gray-400 font-medium">Loading your academy...</p>
+      <p className="text-slate-400 font-medium">Loading your academy...</p>
     </div>
   );
 
   return (
     <div className="space-y-8 pb-20 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
            <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Your Academy</h2>
            <p className="text-slate-500 mt-1">Manage and continue your learning journey.</p>
@@ -51,14 +52,14 @@ export default function CoursesDashboard({ onViewCourse, onEditCourse, onStartCh
            </span>
         </div>
       </div>
-      
+
       {courses.length === 0 ? (
-        <div className="bg-white border-2 border-dashed border-gray-300 rounded-2xl p-20 text-center">
-           <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
-              <BookOpen className="w-10 h-10 text-gray-400" />
+        <div className="bg-white border-2 border-dashed border-slate-300 rounded-2xl p-20 text-center">
+           <div className="bg-slate-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+              <BookOpen className="w-10 h-10 text-slate-400" />
            </div>
-           <h3 className="text-xl font-bold text-gray-900 mb-2">No courses yet</h3>
-           <p className="text-gray-500 max-w-sm mx-auto mb-8">
+           <h3 className="text-xl font-bold text-slate-900 mb-2">No courses yet</h3>
+           <p className="text-slate-500 max-w-sm mx-auto mb-8">
               You haven't built any courses. Use the "Create New Course" button to start your first AI-powered learning experience.
            </p>
         </div>
@@ -120,27 +121,30 @@ export default function CoursesDashboard({ onViewCourse, onEditCourse, onStartCh
                      </div>
                   </div>
 
-                  <div className="p-4 bg-gray-50 border-t border-gray-100 flex flex-col sm:flex-row gap-2">
-                    <button 
+                  <div className="p-4 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row gap-2.5">
+                    <Button
+                      variant="primary"
+                      className="flex-1"
                       onClick={() => onViewCourse && onViewCourse(course)}
-                      className="flex-1 bg-white border border-gray-200 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 text-gray-700 text-sm font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2 shadow-sm"
                     >
                        <PlayCircle className="w-4 h-4" /> Start
-                    </button>
-                    <button 
+                    </Button>
+                    <Button
+                      variant="secondary-amber"
+                      className="px-4"
                       onClick={() => onEditCourse && onEditCourse(course)}
-                      className="bg-white border border-gray-200 hover:bg-yellow-50 hover:text-yellow-600 hover:border-yellow-200 text-gray-600 text-sm font-bold py-2.5 px-4 rounded-xl transition flex items-center justify-center shadow-sm"
                       title="Edit Course"
                     >
                        <Edit3 className="w-4 h-4" />
-                    </button>
-                    <button 
+                    </Button>
+                    <Button
+                      variant="secondary-danger"
+                      className="px-4"
                       onClick={() => handleDelete(course.id)}
-                      className="bg-white border border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-gray-600 text-sm font-bold py-2.5 px-4 rounded-xl transition flex items-center justify-center shadow-sm"
                       title="Delete Course"
                     >
                        <Trash2 className="w-4 h-4" />
-                    </button>
+                    </Button>
                   </div>
                </div>
              )

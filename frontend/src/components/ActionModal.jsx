@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertCircle, CheckCircle2, Info, X } from 'lucide-react';
+import Button from './ui/Button.jsx';
 
 export default function ActionModal({ 
   isOpen, 
@@ -51,27 +52,24 @@ export default function ActionModal({
 
         <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3 justify-end">
           {isConfirm && (
-            <button 
-              onClick={onClose}
-              className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-200 transition"
-            >
+            <Button variant="ghost" onClick={onClose}>
               {cancelText}
-            </button>
+            </Button>
           )}
-          <button 
+          <Button
+            variant={
+              type === 'warning' ? 'warning' :
+              type === 'success' ? 'success' :
+              type === 'confirm' ? 'indigo' :
+              'primary'
+            }
             onClick={() => {
               if (onConfirm) onConfirm();
               else onClose();
             }}
-            className={`px-5 py-2.5 rounded-xl text-sm font-bold text-white shadow-lg transition active:scale-95 ${
-              type === 'warning' ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-100' :
-              type === 'success' ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-100' :
-              type === 'confirm' ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100' :
-              'bg-sky-600 hover:bg-sky-700 shadow-sky-100'
-            }`}
           >
             {confirmText}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

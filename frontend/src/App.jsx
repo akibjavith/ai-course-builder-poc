@@ -11,6 +11,7 @@ import LessonPreviewEditorModal from './components/LessonPreviewEditorModal';
 import ChatbotCourseCreator from './components/ChatbotCourseCreator';
 import { getCourseById } from './api';
 import logo from './assets/logo.png';
+import Button from './components/ui/Button.jsx';
 
 
 function App() {
@@ -131,26 +132,20 @@ function App() {
 
   if (view === 'dashboard') {
     return (
-      <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
-        <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-          <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+      <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
+        <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
+          <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex flex-wrap justify-between items-center gap-3">
              <div className="flex items-center gap-3">
                 <img src={logo} alt="Logo" className="h-10 w-auto object-contain" />
                 <h1 className="text-2xl font-bold text-slate-900 tracking-tight">AI Course Builder</h1>
              </div>
-            <div className="flex gap-3">
-              <button 
-                onClick={() => setView('chatbot')}
-                className="bg-sky-600 hover:bg-sky-700 text-white px-6 py-2.5 rounded-xl font-bold transition shadow-sm active:scale-95 flex items-center gap-2"
-              >
+            <div className="flex flex-wrap gap-3">
+              <Button variant="primary" onClick={() => setView('chatbot')}>
                 <Sparkles className="w-4 h-4" /> Create via AI Chatbot
-              </button>
-              <button 
-                onClick={() => { resetBuilder(); setView('builder'); }}
-                className="bg-sky-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-sky-700 transition shadow-sm active:scale-95"
-              >
+              </Button>
+              <Button variant="primary" onClick={() => { resetBuilder(); setView('builder'); }}>
                 + Create New Course
-              </button>
+              </Button>
             </div>
           </div>
         </header>
@@ -188,16 +183,16 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
-        <header className="bg-white border-b border-gray-200 mb-8 sticky top-0 z-50">
-           <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
+        <header className="bg-white border-b border-slate-200 mb-8 sticky top-0 z-50">
+           <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex flex-wrap justify-between items-center gap-3">
              <div className="flex items-center gap-3">
                 <img src={logo} alt="Logo" className="h-10 w-auto object-contain" />
                 <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Course Builder Wizard</h1>
              </div>
-             <button 
+             <button
                onClick={() => setView('dashboard')}
-               className="text-sky-600 hover:text-sky-900 font-semibold transition"
+               className="text-sky-600 hover:text-sky-800 font-semibold transition rounded-lg px-2 py-1 -mx-2 -my-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40"
              >
                Back to Dashboard
              </button>

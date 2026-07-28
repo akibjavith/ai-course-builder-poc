@@ -9,6 +9,7 @@ import AIAssistantSidebar from './AIAssistantSidebar';
 import ActionModal from './ActionModal';
 import LessonPreviewEditorModal from './LessonPreviewEditorModal';
 import { generateLessonContent, uploadChapterMedia } from '../api';
+import Button from './ui/Button.jsx';
 
 const CONTENT_TYPES = [
   { id: 'html', label: 'HTML', icon: FileCode, color: 'text-sky-500', bg: 'bg-sky-50', disabled: false },
@@ -622,9 +623,9 @@ export default function CourseContent({ courseData, updateCourseData, contentGen
         </div>
       )}
 
-      <div className="grid grid-cols-12 gap-8 h-[800px]">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:h-[min(800px,calc(100vh-160px))]">
         {/* Main Content Section */}
-        <div className="col-span-12 lg:col-span-8 bg-white rounded-[2rem] border border-gray-100 shadow-xl overflow-hidden flex flex-col h-full">
+        <div className="col-span-full lg:col-span-8 bg-white rounded-[2rem] border border-slate-100 shadow-xl overflow-hidden flex flex-col h-auto lg:h-full">
           <div className="p-6 md:p-8 flex-1 overflow-y-auto no-scrollbar scroll-smooth">
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
@@ -638,26 +639,20 @@ export default function CourseContent({ courseData, updateCourseData, contentGen
                 <p className="text-slate-400 font-semibold text-[10px] tracking-wide uppercase leading-relaxed">Grouped by modules. AI is enabled by default with HTML content.</p>
               </div>
 
-              <div className="flex items-center gap-2 relative">
+              <div className="flex flex-wrap items-center gap-2 relative">
                 {/* ASK AI Button (moved to the left) */}
-                <button 
-                  onClick={() => setShowSidebar(true)}
-                  className="flex items-center gap-2 bg-sky-600 text-white px-5 py-3 rounded-xl text-xs font-bold hover:bg-sky-700 transition shadow-lg shadow-sky-100 active:scale-95 group"
-                >
-                  <MessageSquareText className="w-3.5 h-3.5" /> 
+                <Button variant="primary" size="md" onClick={() => setShowSidebar(true)}>
+                  <MessageSquareText className="w-3.5 h-3.5" />
                   <span>ASK AI</span>
-                </button>
+                </Button>
 
                 {/* Bulk Action Dropdown Container */}
                 <div className="relative" ref={bulkMenuRef}>
-                  <button 
-                    onClick={() => setShowBulkMenu(!showBulkMenu)}
-                    className="flex items-center gap-2 bg-white border-2 border-slate-100 text-slate-700 px-5 py-3 rounded-xl text-xs font-bold hover:bg-slate-50 hover:border-slate-200 transition shadow-sm active:scale-95"
-                  >
+                  <Button variant="secondary" size="md" onClick={() => setShowBulkMenu(!showBulkMenu)}>
                     <Zap className="w-3.5 h-3.5 text-sky-600 animate-pulse" />
                     <span>BULK ACTION</span>
                     <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${showBulkMenu ? 'rotate-180' : ''}`} />
-                  </button>
+                  </Button>
 
                   {/* Dropdown Menu */}
                   {showBulkMenu && (
@@ -771,7 +766,7 @@ export default function CourseContent({ courseData, updateCourseData, contentGen
                               </div>
                               <button 
                                 onClick={() => setExpandedLesson(expandedLesson?.mIdx === mIdx && expandedLesson?.cIdx === cIdx ? null : { mIdx, cIdx })}
-                                className={`p-1 text-slate-400 hover:bg-slate-100 rounded-lg transition-transform ${expandedLesson?.mIdx === mIdx && expandedLesson?.cIdx === cIdx ? '' : '-rotate-90'}`}
+                                className={`p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40 ${expandedLesson?.mIdx === mIdx && expandedLesson?.cIdx === cIdx ? '' : '-rotate-90'}`}
                               >
                                 <ChevronDown className="w-4 h-4" />
                               </button>
@@ -875,7 +870,7 @@ export default function CourseContent({ courseData, updateCourseData, contentGen
                                       <textarea 
                                         value={chap.content?.prompt || ''}
                                         onChange={(e) => updateLessonContent(mIdx, cIdx, { prompt: e.target.value })}
-                                        className="w-full bg-slate-50/50 border-2 border-slate-50 rounded-2xl p-5 text-[11px] text-slate-700 font-medium min-h-[140px] focus:ring-0 focus:border-sky-100 transition-all outline-none resize-none leading-relaxed"
+                                        className="w-full bg-slate-50/50 border-2 border-slate-50 rounded-2xl p-5 text-[11px] text-slate-700 font-medium min-h-[140px] focus:ring-2 focus:ring-sky-500/30 focus:border-sky-400 transition-all outline-none resize-none leading-relaxed"
                                         placeholder="Describe what content AI should generate for this block..."
                                       />
                                       <div className="absolute bottom-4 right-4 flex items-center gap-2">
@@ -936,19 +931,13 @@ export default function CourseContent({ courseData, updateCourseData, contentGen
           </div>
 
           {/* Footer Actions */}
-          <div className="p-6 bg-gray-50/50 border-t border-gray-50 flex flex-col md:flex-row justify-between gap-4">
-            <button 
-              onClick={onBack}
-              className="px-6 py-3.5 border-2 border-slate-100 text-slate-600 rounded-2xl font-bold uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 hover:bg-white hover:text-sky-600 transition-all active:scale-95"
-            >
+          <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex flex-col md:flex-row justify-between gap-4">
+            <Button variant="secondary" size="lg" onClick={onBack} className="uppercase tracking-widest">
               <ChevronLeft className="w-4 h-4" /> Back
-            </button>
-            <button 
-              onClick={onNext}
-              className="flex-1 bg-gradient-to-r from-sky-600 to-sky-700 text-white px-6 py-4 rounded-2xl font-bold uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 hover:from-sky-700 hover:to-sky-800 transition-all shadow-xl shadow-sky-100 active:scale-[0.98]"
-            >
+            </Button>
+            <Button variant="primary" size="lg" onClick={onNext} className="flex-1 uppercase tracking-widest">
               Confirm & Continue <ChevronRight className="w-4 h-4" />
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -964,21 +953,18 @@ export default function CourseContent({ courseData, updateCourseData, contentGen
         )}
 
         {/* AI Assistant Sidebar Area */}
-        <div className="col-span-12 lg:col-span-4 h-full relative lg:sticky lg:top-6 flex-shrink-0 min-w-[400px]">
+        <div className="col-span-full lg:col-span-4 h-auto lg:h-full relative lg:sticky lg:top-6 flex-shrink-0 lg:min-w-[400px]">
           {!showSidebar ? (
-            <div className="h-[800px] w-full rounded-[2rem] bg-white border border-slate-100 shadow-xl flex flex-col items-center justify-center text-center p-8 group transition-all">
+            <div className="h-[500px] lg:h-[800px] w-full rounded-[2rem] bg-white border border-slate-100 shadow-xl flex flex-col items-center justify-center text-center p-8 group transition-all">
                <div className="w-16 h-16 bg-slate-50 rounded-2xl shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                   <MessageSquareText className="w-8 h-8 text-sky-400 opacity-50" />
                </div>
                <h3 className="text-slate-400 font-bold text-sm mb-2 uppercase tracking-tight">AI Content Workspace</h3>
                <p className="text-[10px] text-slate-300 font-medium max-w-[160px] mb-6 uppercase leading-relaxed font-bold tracking-widest">Toggle the assistant to generate lesson prompts or refine your content strategy.</p>
-               <button 
-                  onClick={() => setShowSidebar(true)}
-                  className="flex items-center gap-2 bg-sky-600 text-white px-5 py-3 rounded-xl text-xs font-bold hover:bg-sky-700 transition shadow-lg shadow-sky-100 active:scale-95 group"
-                >
+               <Button variant="primary" size="sm" onClick={() => setShowSidebar(true)}>
                   <MessageSquareText className="w-3.5 h-3.5" />
                   <span>ASK AI</span>
-                </button>
+                </Button>
             </div>
           ) : (
             <AIAssistantSidebar 

@@ -152,8 +152,8 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
   };
 
   return (
-    <div className={`flex flex-col bg-white rounded-3xl border border-slate-100 shadow-2xl overflow-hidden animate-in slide-in-from-right duration-500 transition-all flex-shrink-0 ${isMinimized ? 'h-[72px] w-[320px]' : 'h-[800px] w-[400px]'}`}>
-      <div className="bg-white border-b border-gray-50 p-4 flex items-center justify-between relative z-10">
+    <div className={`flex flex-col bg-white rounded-3xl border border-slate-100 shadow-2xl overflow-hidden animate-in slide-in-from-right duration-500 transition-all flex-shrink-0 w-full ${isMinimized ? 'max-w-[320px] h-[72px]' : 'max-w-[400px] h-[min(800px,calc(100vh-160px))]'}`}>
+      <div className="bg-white border-b border-slate-50 p-4 flex items-center justify-between relative z-10">
         <div className="flex items-center gap-2">
           <h3 className="font-bold text-sm text-slate-900 tracking-tight flex items-center gap-2">
             AI Assistant
@@ -361,7 +361,7 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
           </div>
 
           {/* Input Area */}
-          <div className="p-4 bg-white border-t border-gray-50">
+          <div className="p-4 bg-white border-t border-slate-50">
             <div className="relative flex items-center">
               <input 
                 type="text" 

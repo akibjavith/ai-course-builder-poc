@@ -1600,7 +1600,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                             disabled={isGenerating || hasContent}
                             className={`px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition active:scale-95 ${
                               hasContent 
-                                ? 'bg-slate-900 text-slate-500 cursor-not-allowed border border-slate-850'
+                                ? 'bg-slate-900 text-slate-500 cursor-not-allowed border border-slate-800'
                                 : isGenerating
                                   ? 'bg-indigo-950 text-indigo-400 border border-indigo-900/30'
                                   : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm'
@@ -1636,7 +1636,7 @@ export default function ChatbotCourseCreator({ onClose }) {
             );
           })}
         </div>
-        <div className="border-t border-slate-850 pt-3">
+        <div className="border-t border-slate-800 pt-3">
           <button
             onClick={() => {
               setCurrentStep('QUIZ_GEN');
@@ -1665,9 +1665,9 @@ export default function ChatbotCourseCreator({ onClose }) {
           switch (block.type) {
             case 'heading':
               return (
-                <h3 key={idx} className={`font-black tracking-tight text-slate-150 mt-6 ${
-                  block.level === 1 ? 'text-sm border-b border-slate-850 pb-1 text-indigo-400 uppercase tracking-wide' :
-                  block.level === 2 ? 'text-xs text-slate-200' : 'text-[11px] text-slate-350'
+                <h3 key={idx} className={`font-black tracking-tight text-slate-100 mt-6 ${
+                  block.level === 1 ? 'text-sm border-b border-slate-800 pb-1 text-indigo-400 uppercase tracking-wide' :
+                  block.level === 2 ? 'text-xs text-slate-200' : 'text-[11px] text-slate-300'
                 }`}>
                   {block.text}
                 </h3>
@@ -1680,20 +1680,20 @@ export default function ChatbotCourseCreator({ onClose }) {
               );
             case 'bullet_list':
               return (
-                <ul key={idx} className="list-disc list-inside text-xs text-slate-350 space-y-1 mt-2 pl-3">
+                <ul key={idx} className="list-disc list-inside text-xs text-slate-300 space-y-1 mt-2 pl-3">
                   {block.items?.map((item, i) => <li key={i}>{item}</li>)}
                 </ul>
               );
             case 'numbered_list':
               return (
-                <ol key={idx} className="list-decimal list-inside text-xs text-slate-350 space-y-1 mt-2 pl-3">
+                <ol key={idx} className="list-decimal list-inside text-xs text-slate-300 space-y-1 mt-2 pl-3">
                   {block.items?.map((item, i) => <li key={i}>{item}</li>)}
                 </ol>
               );
             case 'image':
               return (
                 <div key={idx} className="my-4 space-y-1.5 text-center">
-                  <div className="bg-slate-950 border border-slate-850 rounded-xl p-5 text-slate-400 text-[10px]">
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 text-slate-400 text-[10px]">
                     [AI Illustration Representation: {block.caption}]
                   </div>
                   {block.caption && <p className="text-[9px] text-slate-500 italic">{block.caption}</p>}
@@ -1702,7 +1702,7 @@ export default function ChatbotCourseCreator({ onClose }) {
             case 'video':
               return (
                 <div key={idx} className="my-4 space-y-1.5 text-center">
-                  <div className="bg-slate-950 border border-slate-850 rounded-xl p-5 text-slate-400 text-[10px]">
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 text-slate-400 text-[10px]">
                     [AI Video Representation: {block.caption}]
                   </div>
                   {block.caption && <p className="text-[9px] text-slate-500 italic">{block.caption}</p>}
@@ -1710,17 +1710,17 @@ export default function ChatbotCourseCreator({ onClose }) {
               );
             case 'table':
               return (
-                <div key={idx} className="overflow-x-auto my-4 rounded-xl border border-slate-850 shadow-inner">
+                <div key={idx} className="overflow-x-auto my-4 rounded-xl border border-slate-800 shadow-inner">
                   <table className="min-w-full text-xs text-slate-300">
                     <thead className="bg-slate-950 text-indigo-400 font-bold uppercase tracking-wider text-[9px] border-b border-slate-800">
                       <tr>
                         {block.headers?.map((h, i) => <th key={i} className="px-3 py-2 text-left">{h}</th>)}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-850 bg-slate-950/20">
+                    <tbody className="divide-y divide-slate-800 bg-slate-950/20">
                       {block.rows?.map((row, rIdx) => (
                         <tr key={rIdx} className="hover:bg-slate-900/30">
-                          {row.map((cell, cIdx) => <td key={cIdx} className="px-3 py-2 text-slate-305">{cell}</td>)}
+                          {row.map((cell, cIdx) => <td key={cIdx} className="px-3 py-2 text-slate-300">{cell}</td>)}
                         </tr>
                       ))}
                     </tbody>
@@ -1730,20 +1730,20 @@ export default function ChatbotCourseCreator({ onClose }) {
             case 'callout':
               return (
                 <div key={idx} className={`p-4 rounded-xl border my-4 text-xs leading-relaxed ${
-                  block.callout_type === 'info' ? 'bg-blue-550/10 border-blue-500/25 text-blue-300' :
-                  block.callout_type === 'warning' ? 'bg-amber-550/10 border-amber-500/25 text-amber-300' :
-                  block.callout_type === 'danger' ? 'bg-red-550/10 border-red-500/25 text-red-300' :
-                  'bg-emerald-550/10 border-emerald-500/25 text-emerald-300'
+                  block.callout_type === 'info' ? 'bg-blue-500/10 border-blue-500/25 text-blue-300' :
+                  block.callout_type === 'warning' ? 'bg-amber-500/10 border-amber-500/25 text-amber-300' :
+                  block.callout_type === 'danger' ? 'bg-red-500/10 border-red-500/25 text-red-300' :
+                  'bg-emerald-500/10 border-emerald-500/25 text-emerald-300'
                 }`}>
                   {block.text}
                 </div>
               );
             case 'code':
               return (
-                <div key={idx} className="bg-slate-950 rounded-xl border border-slate-850 p-3.5 my-4 font-mono text-[10px] text-slate-300 relative shadow-md">
+                <div key={idx} className="bg-slate-950 rounded-xl border border-slate-800 p-3.5 my-4 font-mono text-[10px] text-slate-300 relative shadow-md">
                   <button 
                     onClick={() => handleCopyText(block.code)}
-                    className="absolute top-3 right-3 text-slate-500 hover:text-indigo-400 transition"
+                    className="absolute top-2 right-2 p-1.5 rounded-lg text-slate-500 hover:text-indigo-400 hover:bg-white/5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50"
                     title="Copy Code"
                   >
                     <Copy className="w-3.5 h-3.5" />
@@ -1761,10 +1761,10 @@ export default function ChatbotCourseCreator({ onClose }) {
               );
             case 'example':
               return (
-                <div key={idx} className="bg-slate-950 border border-slate-850 rounded-xl p-4 my-4 space-y-2 text-xs">
+                <div key={idx} className="bg-slate-950 border border-slate-800 rounded-xl p-4 my-4 space-y-2 text-xs">
                   <span className="text-[9px] bg-sky-500/20 text-sky-400 border border-sky-500/30 px-2 py-0.5 rounded font-black uppercase tracking-wider">Example</span>
                   <p className="font-bold text-slate-200">{block.scenario}</p>
-                  <p className="text-slate-350 leading-relaxed text-[10px]">{block.detail}</p>
+                  <p className="text-slate-300 leading-relaxed text-[10px]">{block.detail}</p>
                 </div>
               );
             case 'quiz':
@@ -1782,7 +1782,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                         className={`p-2 rounded border text-[10px] ${
                           opt === (block.correctAnswer || block.answer) 
                             ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 font-bold' 
-                            : 'bg-slate-900/40 border-slate-850 text-slate-500'
+                            : 'bg-slate-900/40 border-slate-800 text-slate-500'
                         }`}
                       >
                         {opt}
@@ -1790,7 +1790,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                     ))}
                   </div>
                   {block.explanation && (
-                    <p className="text-[9px] text-slate-450 border-t border-slate-900/50 pt-2.5 mt-2.5 leading-relaxed italic">
+                    <p className="text-[9px] text-slate-400 border-t border-slate-900/50 pt-2.5 mt-2.5 leading-relaxed italic">
                       {block.explanation}
                     </p>
                   )}
@@ -1798,17 +1798,17 @@ export default function ChatbotCourseCreator({ onClose }) {
               );
             case 'summary':
               return (
-                <div key={idx} className="bg-slate-950 border border-slate-850 rounded-xl p-4 my-4 space-y-2 text-xs">
+                <div key={idx} className="bg-slate-950 border border-slate-800 rounded-xl p-4 my-4 space-y-2 text-xs">
                   <span className="text-[9px] bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded font-black uppercase tracking-wider">Key Takeaways</span>
-                  <ul className="list-disc list-inside space-y-1 text-slate-350 mt-1">
+                  <ul className="list-disc list-inside space-y-1 text-slate-300 mt-1">
                     {block.points?.map((pt, i) => <li key={i}>{pt}</li>)}
                   </ul>
                 </div>
               );
             case 'reference':
               return (
-                <div key={idx} className="inline-flex items-center gap-1.5 bg-slate-950 border border-slate-850 px-3 py-1 rounded-full text-[9px] text-slate-300 hover:text-indigo-400 hover:border-indigo-500/30 transition mr-2 mb-2">
-                  <Compass className="w-3.5 h-3.5 text-indigo-450" />
+                <div key={idx} className="inline-flex items-center gap-1.5 bg-slate-950 border border-slate-800 px-3 py-1 rounded-full text-[9px] text-slate-300 hover:text-indigo-400 hover:border-indigo-500/30 transition mr-2 mb-2">
+                  <Compass className="w-3.5 h-3.5 text-indigo-400" />
                   <a href={block.url} target="_blank" rel="noreferrer" className="underline">{block.title}</a>
                 </div>
               );
@@ -1827,7 +1827,7 @@ export default function ChatbotCourseCreator({ onClose }) {
     return (
       <div className="mt-4 bg-white border border-slate-200/80 shadow-md rounded-2xl p-5 space-y-4 text-left animate-fade-in text-slate-800 max-w-lg w-full">
         <div className="flex justify-between items-center border-b border-slate-100 pb-2.5">
-          <h4 className="font-extrabold text-xs text-indigo-650 flex items-center gap-1.5 uppercase tracking-wider">
+          <h4 className="font-extrabold text-xs text-indigo-600 flex items-center gap-1.5 uppercase tracking-wider">
             <FileText className="w-3.5 h-3.5" /> Learning Goals Summary
           </h4>
           <span className="text-[9px] bg-emerald-50 text-emerald-600 border border-emerald-100 px-2 py-0.5 rounded font-black uppercase tracking-wider">
@@ -1946,7 +1946,7 @@ export default function ChatbotCourseCreator({ onClose }) {
         if (match.index > lastIdx) {
           parts.push(content.substring(lastIdx, match.index));
         }
-        parts.push(<strong key={match.index} className="font-black text-slate-905">{match[1]}</strong>);
+        parts.push(<strong key={match.index} className="font-black text-slate-900">{match[1]}</strong>);
         lastIdx = regex.lastIndex;
       }
       if (lastIdx < content.length) {
@@ -1984,7 +1984,7 @@ export default function ChatbotCourseCreator({ onClose }) {
               <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold flex items-center gap-1 ${
                 (currentStep === 'OUTLINE_EDIT' || currentStep === 'EDIT_OUTLINE_CHOICE' || currentStep === 'ASK_REDUCE_COUNT' || currentStep === 'ASK_ADD_TOPIC')
                   ? 'bg-amber-50 text-amber-600 border border-amber-200'
-                  : 'bg-emerald-50 text-emerald-600 border border-emerald-250'
+                  : 'bg-emerald-50 text-emerald-600 border border-emerald-200'
               }`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${
                   (currentStep === 'OUTLINE_EDIT' || currentStep === 'EDIT_OUTLINE_CHOICE' || currentStep === 'ASK_REDUCE_COUNT' || currentStep === 'ASK_ADD_TOPIC')
@@ -2067,7 +2067,7 @@ export default function ChatbotCourseCreator({ onClose }) {
           <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold flex items-center gap-1 ${
             (isLatest && (currentStep === 'CONFIRM_DETAILS' || currentStep === 'EDIT_DETAILS_CHOICE'))
               ? 'bg-amber-50 text-amber-600 border border-amber-200'
-              : 'bg-emerald-50 text-emerald-600 border border-emerald-250'
+              : 'bg-emerald-50 text-emerald-600 border border-emerald-200'
           }`}>
             <span className={`w-1.5 h-1.5 rounded-full ${
               (isLatest && (currentStep === 'CONFIRM_DETAILS' || currentStep === 'EDIT_DETAILS_CHOICE'))
@@ -2144,7 +2144,7 @@ export default function ChatbotCourseCreator({ onClose }) {
             if (!q) return null;
             return (
               <div key={idx} className="bg-slate-950/80 border border-slate-900 rounded-xl p-3 space-y-2 text-xs">
-                <p className="font-bold text-slate-350">{idx+1}. {q.question}</p>
+                <p className="font-bold text-slate-300">{idx+1}. {q.question}</p>
                 <div className="grid grid-cols-2 gap-1.5 mt-2">
                   {Array.isArray(q.options) && q.options.map((opt, oIdx) => (
                     <div 
@@ -2152,7 +2152,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                       className={`p-1.5 rounded text-[10px] border ${
                         opt === q.answer 
                           ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 font-bold' 
-                          : 'bg-slate-900/50 border-slate-850 text-slate-500'
+                          : 'bg-slate-900/50 border-slate-800 text-slate-500'
                       }`}
                     >
                       {opt}
@@ -2163,7 +2163,7 @@ export default function ChatbotCourseCreator({ onClose }) {
             );
           })}
         </div>
-        <div className="border-t border-slate-850 pt-3">
+        <div className="border-t border-slate-800 pt-3">
           <button
             onClick={() => {
               setCurrentStep('READY');
@@ -2378,7 +2378,7 @@ export default function ChatbotCourseCreator({ onClose }) {
       {/* 1. Collapsible Left Navigation Sidebar */}
       <div 
         className={`h-full flex flex-col justify-between bg-white/70 backdrop-blur-md border-r border-white/50 relative overflow-hidden ${isDraggingSidebar ? '' : 'transition-all duration-300'}`}
-        style={{ width: sidebarOpen ? `${sidebarWidth}px` : '64px' }}
+        style={{ width: sidebarOpen ? `${sidebarWidth}px` : '64px', maxWidth: sidebarOpen ? '85vw' : undefined }}
       >
         {sidebarOpen ? (
           /* Expandable Full View Sidebar */
@@ -2403,11 +2403,11 @@ export default function ChatbotCourseCreator({ onClose }) {
             {/* New Course Action Button */}
             <button
               onClick={handleResetWithoutConfirm}
-              className="w-full relative group overflow-hidden bg-slate-900 hover:bg-slate-850 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow active:scale-95 transition-all duration-300 border border-slate-850"
+              className="w-full relative group overflow-hidden bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow active:scale-95 transition-all duration-300 border border-slate-800"
             >
               {/* Subtle hover background glow */}
               <div className="absolute inset-0 bg-gradient-to-r from-rose-500/10 via-violet-500/10 to-sky-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-              <div className="w-4 h-4 rounded-full bg-gradient-to-tr from-rose-250 via-violet-300 to-sky-300 flex items-center justify-center text-slate-900 shadow-sm group-hover:rotate-90 transition-transform duration-500">
+              <div className="w-4 h-4 rounded-full bg-gradient-to-tr from-rose-200 via-violet-300 to-sky-300 flex items-center justify-center text-slate-900 shadow-sm group-hover:rotate-90 transition-transform duration-500">
                 <Plus className="w-2.5 h-2.5 stroke-[3.5] text-slate-800" />
               </div>
               <span className="relative z-10 font-bold tracking-wide">New Course</span>
@@ -2421,10 +2421,10 @@ export default function ChatbotCourseCreator({ onClose }) {
                 placeholder="Search drafts..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white/50 border border-slate-200/60 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500/30 transition shadow-inner"
+                className="w-full bg-white/50 border border-slate-200/60 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400/40 focus:border-indigo-400 transition shadow-inner"
               />
               {searchQuery && (
-                <X className="w-3 h-3 text-slate-400 hover:text-slate-655 absolute right-3 top-3 cursor-pointer" onClick={() => setSearchQuery('')} />
+                <X className="w-3 h-3 text-slate-400 hover:text-slate-600 absolute right-3 top-3 cursor-pointer" onClick={() => setSearchQuery('')} />
               )}
             </div>
 
@@ -2472,7 +2472,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                               className={`group flex items-center justify-between p-2 rounded-xl text-xs cursor-pointer transition ${
                                 isActive 
                                   ? 'bg-indigo-600 text-white shadow font-semibold' 
-                                  : 'text-slate-605 hover:bg-slate-105/80 hover:text-slate-900'
+                                  : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
                               }`}
                             >
                               {isEditing ? (
@@ -2490,7 +2490,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                                   }}
                                   autoFocus
                                   onClick={(e) => e.stopPropagation()}
-                                  className="bg-white text-slate-800 px-2 py-0.5 rounded border border-indigo-400 text-xs w-full focus:outline-none"
+                                  className="bg-white text-slate-800 px-2 py-0.5 rounded border border-indigo-400 text-xs w-full focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
                                 />
                               ) : (
                                 <div className="flex flex-col flex-1 min-w-0 items-start select-none text-left">
@@ -2550,7 +2550,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                                           isActive
                                             ? 'bg-white/20 text-white border border-white/10'
                                             : isPublished ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
-                                              isUnpublished ? 'bg-indigo-50 text-indigo-600 border border-indigo-150' :
+                                              isUnpublished ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' :
                                               isInProgress ? 'bg-sky-50 text-sky-600 border border-sky-200 animate-pulse' :
                                               isOnHold ? 'bg-amber-50 text-amber-600 border border-amber-200' :
                                               'bg-slate-100 text-slate-500 border border-slate-200/60'
@@ -2561,8 +2561,8 @@ export default function ChatbotCourseCreator({ onClose }) {
                                           <span className={`text-[8px] px-1 py-0.2 rounded-md font-black tracking-wide ${
                                             isActive
                                               ? 'bg-white/30 text-white'
-                                              : isInProgress ? 'bg-sky-100 text-sky-700 border border-sky-150' :
-                                                'bg-amber-100 text-amber-700 border border-amber-150'
+                                              : isInProgress ? 'bg-sky-100 text-sky-700 border border-sky-100' :
+                                                'bg-amber-100 text-amber-700 border border-amber-100'
                                           }`}>
                                             {percent}%
                                           </span>
@@ -2575,7 +2575,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                               {!isEditing && (
                                 <button
                                   onClick={(e) => handleDeleteDraft(d.id, e)}
-                                  className={`opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-655 transition ${isActive ? 'hover:bg-indigo-700 text-indigo-300 hover:text-white' : ''}`}
+                                  className={`opacity-0 group-hover:opacity-100 p-1.5 -m-0.5 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-600 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50 ${isActive ? 'hover:bg-indigo-700 text-indigo-300 hover:text-white' : ''}`}
                                   title="Delete draft"
                                 >
                                   <Trash2 className="w-3 h-3" />
@@ -2619,7 +2619,7 @@ export default function ChatbotCourseCreator({ onClose }) {
               </div>
               <button 
                 onClick={onClose}
-                className="p-1.5 hover:bg-red-50 hover:text-red-650 rounded-lg text-slate-400 transition"
+                className="p-1.5 hover:bg-red-50 hover:text-red-600 rounded-lg text-slate-400 transition"
                 title="Exit to Dashboard"
               >
                 <X className="w-4 h-4" />
@@ -2660,7 +2660,7 @@ export default function ChatbotCourseCreator({ onClose }) {
               {/* Search Button */}
               <button 
                 onClick={() => setSidebarOpen(true)}
-                className="w-10 h-10 rounded-full flex items-center justify-center bg-transparent hover:bg-gradient-to-tr hover:from-rose-100 hover:via-violet-100 hover:to-sky-100 text-slate-500 hover:text-slate-850 hover:shadow-sm hover:border hover:border-white/50 transition active:scale-95"
+                className="w-10 h-10 rounded-full flex items-center justify-center bg-transparent hover:bg-gradient-to-tr hover:from-rose-100 hover:via-violet-100 hover:to-sky-100 text-slate-500 hover:text-slate-800 hover:shadow-sm hover:border hover:border-white/50 transition active:scale-95"
                 title="Search drafts"
               >
                 <Search className="w-4 h-4 stroke-[2]" />
@@ -2677,7 +2677,7 @@ export default function ChatbotCourseCreator({ onClose }) {
               </div>
               <button 
                 onClick={onClose}
-                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-red-50 hover:text-red-600 text-slate-450 transition active:scale-95"
+                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-red-50 hover:text-red-600 text-slate-400 transition active:scale-95"
                 title="Exit to Dashboard"
               >
                 <X className="w-3.5 h-3.5" />
@@ -2689,7 +2689,7 @@ export default function ChatbotCourseCreator({ onClose }) {
         {sidebarOpen && (
           <div 
             onMouseDown={handleSidebarMouseDown}
-            className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-500/40 active:bg-indigo-505 transition-colors z-50"
+            className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-500/40 active:bg-indigo-500 transition-colors z-50"
             title="Drag to resize"
           />
         )}
@@ -2730,7 +2730,7 @@ export default function ChatbotCourseCreator({ onClose }) {
 
 
             {/* Welcome bottom Input container */}
-            <div className="w-full max-w-2xl bg-white/80 backdrop-blur-md rounded-2xl border border-white/60 p-3 shadow-lg flex flex-col gap-2">
+            <div className="w-full max-w-2xl bg-white/80 backdrop-blur-md rounded-2xl border border-white/60 p-3 shadow-lg flex flex-col gap-2 focus-within:ring-2 focus-within:ring-indigo-400/40 focus-within:border-indigo-400 transition">
               <textarea
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
@@ -2762,7 +2762,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                   <button
                     key={index}
                     onClick={() => handleSendMessage(reply, null, null, getElaboratedSentence(reply))}
-                    className="bg-white/80 hover:bg-indigo-50 text-indigo-600 hover:text-indigo-805 border border-slate-200/80 hover:border-indigo-300 px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-sm transition active:scale-95"
+                    className="bg-white/80 hover:bg-indigo-50 text-indigo-600 hover:text-indigo-800 border border-slate-200/80 hover:border-indigo-300 px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-sm transition active:scale-95"
                   >
                     {reply}
                   </button>
@@ -2844,7 +2844,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                 
                 <button 
                   onClick={handleReset}
-                  className="bg-white/80 hover:bg-red-50 text-slate-655 hover:text-red-650 border border-slate-250/60 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition active:scale-95 shadow-sm"
+                  className="bg-white/80 hover:bg-red-50 text-slate-600 hover:text-red-600 border border-slate-200/60 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition active:scale-95 shadow-sm"
                 >
                   Discard
                 </button>
@@ -3056,7 +3056,7 @@ export default function ChatbotCourseCreator({ onClose }) {
                                     <Eye className="w-3.5 h-3.5 text-indigo-600" /> Preview Course
                                   </button>
                                   {courseData.mysql_id ? (
-                                    <div className="flex-1 bg-emerald-50 text-emerald-600 border border-emerald-250 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-inner">
+                                    <div className="flex-1 bg-emerald-50 text-emerald-600 border border-emerald-200 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-inner">
                                       <CheckCircle className="w-3.5 h-3.5" /> Course Published
                                     </div>
                                   ) : (
@@ -3131,7 +3131,7 @@ export default function ChatbotCourseCreator({ onClose }) {
 
             {/* Bottom active Chat Input Console */}
             <div className="p-4 bg-transparent border-t border-slate-200/20 backdrop-blur-sm">
-              <div className="max-w-4xl mx-auto bg-white/85 backdrop-blur-md rounded-2xl border border-slate-200/60 p-2.5 shadow-md flex flex-col gap-2">
+              <div className="max-w-4xl mx-auto bg-white/85 backdrop-blur-md rounded-2xl border border-slate-200/60 p-2.5 shadow-md flex flex-col gap-2 focus-within:ring-2 focus-within:ring-indigo-400/40 focus-within:border-indigo-400 transition">
                 <textarea
                   ref={chatInputRef}
                   value={inputMessage}
@@ -3191,7 +3191,7 @@ export default function ChatbotCourseCreator({ onClose }) {
               </div>
               <button
                 onClick={() => setActiveLessonModal(null)}
-                className="p-1.5 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-250 transition"
+                className="p-1.5 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-200 transition"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -3247,7 +3247,7 @@ export default function ChatbotCourseCreator({ onClose }) {
               </div>
               <button
                 onClick={() => setLimitModalInfo(null)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+                className="text-slate-400 hover:text-white p-2 -m-1 rounded-lg hover:bg-slate-800 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50"
               >
                 <X className="w-4 h-4" />
               </button>

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { storeCourse } from '../api';
-import { Loader2, CheckCircle2, Database, ChevronLeft, Sparkles, AlertCircle, Rocket, Eye } from 'lucide-react';
+import { CheckCircle2, Database, ChevronLeft, Sparkles, AlertCircle, Rocket, Eye } from 'lucide-react';
 import LessonPreviewEditorModal from './LessonPreviewEditorModal';
 import ActionModal from './ActionModal';
+import Button from './ui/Button.jsx';
 
 export default function PublishDashboard({ courseData, updateCourseData, onBack, onComplete }) {
   const [saving, setSaving] = useState(false);
@@ -82,7 +83,7 @@ export default function PublishDashboard({ courseData, updateCourseData, onBack,
       </div>
 
       {saved ? (
-        <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl p-12 text-center space-y-6 animate-scale-in overflow-hidden relative max-w-4xl mx-auto mt-12">
+        <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-2xl p-12 text-center space-y-6 animate-scale-in overflow-hidden relative max-w-4xl mx-auto mt-12">
            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-green-400 to-emerald-500"></div>
            <div className="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mx-auto shadow-inner">
               <Rocket className="h-12 w-12 text-green-500 animate-bounce" />
@@ -106,9 +107,9 @@ export default function PublishDashboard({ courseData, updateCourseData, onBack,
             </div>
           )}
 
-          <div className="grid grid-cols-12 gap-8 h-[750px]">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:h-[min(750px,calc(100vh-160px))]">
             {/* Main Summary Section - Left (col-span-8) */}
-            <div className="col-span-12 lg:col-span-8 bg-white rounded-[2rem] border border-gray-100 shadow-xl overflow-hidden flex flex-col h-full">
+            <div className="col-span-full lg:col-span-8 bg-white rounded-[2rem] border border-slate-100 shadow-xl overflow-hidden flex flex-col h-auto lg:h-full">
               <div className="p-8 flex-1 overflow-y-auto no-scrollbar space-y-8">
                 {/* Course Identity Card */}
                 <div className="space-y-6">
@@ -179,27 +180,19 @@ export default function PublishDashboard({ courseData, updateCourseData, onBack,
               </div>
 
               {/* Navigation Footer */}
-              <div className="p-6 bg-slate-50/50 border-t border-slate-50 flex justify-between items-center">
-                <button 
-                  onClick={onBack} 
-                  disabled={saving}
-                  className="px-6 py-3.5 border-2 border-slate-100 text-slate-500 rounded-2xl font-bold uppercase text-[10px] tracking-widest flex items-center gap-2 hover:bg-white hover:text-sky-600 transition-all active:scale-95 disabled:opacity-50"
-                >
+              <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+                <Button variant="secondary" size="lg" onClick={onBack} disabled={saving} className="uppercase tracking-widest">
                   <ChevronLeft className="w-4 h-4" /> Edit Content
-                </button>
-                
-                <button 
-                  onClick={() => openPreview(0, 0)} 
-                  disabled={saving}
-                  className="px-6 py-3.5 bg-sky-50 text-sky-600 rounded-2xl font-bold uppercase text-[10px] tracking-widest flex items-center gap-2 hover:bg-sky-100 transition-all active:scale-95 disabled:opacity-50 border border-sky-100 shadow-sm"
-                >
+                </Button>
+
+                <Button variant="tinted" size="lg" onClick={() => openPreview(0, 0)} disabled={saving} className="uppercase tracking-widest">
                   <Eye className="w-4 h-4" /> Full Course Preview
-                </button>
+                </Button>
               </div>
             </div>
 
             {/* Sidebar Publish Section - Right (col-span-4) */}
-            <div className="col-span-12 lg:col-span-4 h-full relative flex flex-col gap-6 min-w-[400px]">
+            <div className="col-span-full lg:col-span-4 h-auto lg:h-full relative flex flex-col gap-6 lg:min-w-[400px]">
               <div className="bg-sky-600 rounded-[2rem] p-10 text-white shadow-2xl shadow-sky-100 relative overflow-hidden group flex-1 flex flex-col justify-center">
                   <div className="absolute -right-8 -top-8 w-32 h-32 bg-white/10 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-700"></div>
                   <div className="absolute -left-12 -bottom-12 w-48 h-48 bg-sky-400/20 rounded-full blur-3xl"></div>
@@ -214,18 +207,17 @@ export default function PublishDashboard({ courseData, updateCourseData, onBack,
                     </div>
                     
                     <div className="space-y-4 pt-4">
-                      <button 
+                      <Button
+                        variant="white"
+                        size="xl"
+                        loading={saving}
                         onClick={handleSave}
                         disabled={saving}
-                        className="w-full bg-white text-sky-600 hover:bg-sky-50 px-6 py-5 rounded-[1.5rem] font-bold uppercase text-xs tracking-[0.15em] shadow-2xl shadow-sky-900/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3"
+                        className="w-full uppercase tracking-[0.15em]"
                       >
-                        {saving ? (
-                          <><Loader2 className="w-5 h-5 animate-spin" /> Finalizing...</>
-                        ) : (
-                          <><Database className="w-5 h-5" /> Publish Course</>
-                        )}
-                      </button>
-                      
+                        {saving ? 'Finalizing...' : (<><Database className="w-5 h-5" /> Publish Course</>)}
+                      </Button>
+
                       <div className="flex items-center gap-3 px-2">
                         <div className="flex -space-x-2">
                           {[1,2,3].map(i => <div key={i} className="w-6 h-6 rounded-full border-2 border-sky-600 bg-sky-400"></div>)}

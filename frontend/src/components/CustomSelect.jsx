@@ -24,7 +24,7 @@ export default function CustomSelect({ label, value, options, onChange, placehol
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
-          className={`w-full flex items-center justify-between px-5 py-3 bg-slate-50 border-2 border-slate-50 rounded-2xl focus:bg-white focus:border-sky-500 outline-none transition text-xs text-left ${isOpen ? 'bg-white border-sky-500 ring-0' : ''}`}
+          className={`w-full flex items-center justify-between px-5 py-3 bg-slate-50 border-2 border-slate-50 rounded-2xl hover:border-slate-200 focus:bg-white focus:border-sky-500 focus-visible:ring-2 focus-visible:ring-sky-500/40 outline-none transition text-xs text-left ${isOpen ? 'bg-white border-sky-500 ring-0' : ''}`}
         >
           <span className={selectedOption ? 'text-slate-800 font-medium' : 'text-slate-300'}>
             {selectedOption ? selectedOption.label : placeholder}
@@ -33,7 +33,7 @@ export default function CustomSelect({ label, value, options, onChange, placehol
         </button>
 
         {isOpen && (
-          <div className="absolute z-50 w-full mt-2 bg-white border border-gray-100 rounded-2xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="absolute z-50 w-full mt-2 bg-white border border-slate-100 rounded-2xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
             <div className="py-2 max-h-60 overflow-y-auto custom-scrollbar">
               {options.map((option) => (
                 <button

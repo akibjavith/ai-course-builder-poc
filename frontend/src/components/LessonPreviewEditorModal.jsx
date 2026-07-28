@@ -171,8 +171,8 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
     return (
       <div className="interactive-quiz-container">
         <div className="flex items-center gap-2 mb-4">
-          <HelpCircle className="w-5 h-5 text-purple-500" />
-          <span className="text-xs font-bold text-purple-600 uppercase tracking-widest">Interactive Quiz Block</span>
+          <HelpCircle className="w-5 h-5 text-sky-500" />
+          <span className="text-xs font-bold text-sky-600 uppercase tracking-widest">Interactive Quiz Block</span>
         </div>
         <div className="space-y-3">
           <div>
@@ -227,8 +227,8 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
   return (
     <div className="interactive-quiz-container">
       <div className="flex items-center gap-2 mb-4">
-        <HelpCircle className="w-5 h-5 text-purple-500" />
-        <span className="text-xs font-black text-purple-600 uppercase tracking-widest">Knowledge Challenge</span>
+        <HelpCircle className="w-5 h-5 text-sky-500" />
+        <span className="text-xs font-black text-sky-600 uppercase tracking-widest">Knowledge Challenge</span>
       </div>
       <h3 className="quiz-question-title">{block.question}</h3>
       <div className="grid grid-cols-1 gap-3 my-4">
@@ -925,9 +925,9 @@ export default function LessonPreviewEditorModal({
                       {editMode && (
                         <div className="block-hover-header">
                           <span>{block.type}</span>
-                          <button 
+                          <button
                             onClick={() => handleDeleteBlock(idx)}
-                            className="text-red-500 hover:text-red-700"
+                            className="text-red-500 hover:text-red-700 p-1 -m-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50"
                             title="Delete Block"
                           >
                             <Trash className="w-2.5 h-2.5" />
@@ -1500,7 +1500,7 @@ export default function LessonPreviewEditorModal({
                                   <span className="text-xs font-bold text-green-700 truncate flex-1">{block.file_name || block.file_url}</span>
                                   <button
                                     onClick={() => handleUpdateBlock(idx, { file_url: '', file_name: '' })}
-                                    className="text-red-400 hover:text-red-600 flex-shrink-0"
+                                    className="text-red-400 hover:text-red-600 flex-shrink-0 p-1.5 -m-1.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50"
                                     title="Remove file"
                                   >
                                     <Trash className="w-3.5 h-3.5" />
@@ -1508,17 +1508,17 @@ export default function LessonPreviewEditorModal({
                                 </div>
                               ) : (
                                 <div className="space-y-3">
-                                  <div className="flex border-b border-slate-150 text-xs">
+                                  <div className="flex border-b border-slate-100 text-xs">
                                     <button
                                       type="button"
-                                      className={`px-3 py-1.5 font-bold transition-all border-b-2 ${(!attachmentTabs[idx] || attachmentTabs[idx] === 'upload') ? 'border-sky-500 text-sky-650' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                                      className={`px-3 py-1.5 font-bold transition-all border-b-2 ${(!attachmentTabs[idx] || attachmentTabs[idx] === 'upload') ? 'border-sky-500 text-sky-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
                                       onClick={() => setAttachmentTabs(prev => ({ ...prev, [idx]: 'upload' }))}
                                     >
                                       Upload New
                                     </button>
                                     <button
                                       type="button"
-                                      className={`px-3 py-1.5 font-bold transition-all border-b-2 ${(attachmentTabs[idx] === 'internal') ? 'border-sky-500 text-sky-650' : 'border-transparent text-slate-400 hover:text-slate-650'}`}
+                                      className={`px-3 py-1.5 font-bold transition-all border-b-2 ${(attachmentTabs[idx] === 'internal') ? 'border-sky-500 text-sky-600' : 'border-transparent text-slate-400 hover:text-slate-650'}`}
                                       onClick={() => {
                                         setAttachmentTabs(prev => ({ ...prev, [idx]: 'internal' }));
                                         fetchMedia();
@@ -1639,7 +1639,7 @@ export default function LessonPreviewEditorModal({
                           </button>
                           
                           {activeInsertMenuIdx === idx && (
-                            <div className="absolute top-7 bg-white border border-slate-150 shadow-xl rounded-2xl p-3 grid grid-cols-3 sm:grid-cols-5 gap-2 max-w-lg z-30 animate-scale-in">
+                            <div className="absolute top-7 bg-white border border-slate-100 shadow-xl rounded-2xl p-3 grid grid-cols-3 sm:grid-cols-5 gap-2 max-w-lg z-30 animate-scale-in">
                               {Object.entries(BLOCK_INFO).map(([bType, info]) => {
                                 const IconComp = info.icon;
                                 return (

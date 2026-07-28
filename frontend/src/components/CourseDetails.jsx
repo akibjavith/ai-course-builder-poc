@@ -3,6 +3,7 @@ import { Sparkles, ChevronLeft, ChevronRight, Plus, X, CheckCircle2, MessageSqua
 import CustomSelect from './CustomSelect';
 import AIAssistantSidebar from './AIAssistantSidebar';
 import { autoFillCourseDetails, getSubjects } from '../api';
+import Button from './ui/Button.jsx';
 
 export default function CourseDetails({ courseData, updateCourseData, onNext, onBack }) {
   const [details, setDetails] = useState(courseData.details || {
@@ -167,9 +168,9 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
         </div>
       )}
 
-      <div className="grid grid-cols-12 gap-8 h-[850px]">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:h-[min(850px,calc(100vh-160px))]">
         {/* Main Form Section */}
-        <div className="col-span-12 lg:col-span-8 bg-white rounded-[2rem] border border-gray-100 shadow-xl overflow-hidden flex flex-col h-full">
+        <div className="col-span-full lg:col-span-8 bg-white rounded-[2rem] border border-slate-100 shadow-xl overflow-hidden flex flex-col h-auto lg:h-full">
           
           <div className="p-6 md:p-8 flex-1 scroll-smooth overflow-y-auto no-scrollbar">
             {/* Header */}
@@ -189,13 +190,10 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
               </div>
               
               <div className="flex items-center gap-2">
-                <button 
-                  onClick={() => setShowSidebar(true)}
-                  className="flex items-center gap-2 bg-sky-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-sky-700 transition shadow-lg shadow-sky-100 active:scale-95 group"
-                >
-                  <MessageSquareText className="w-3.5 h-3.5" /> 
+                <Button variant="primary" size="sm" onClick={() => setShowSidebar(true)}>
+                  <MessageSquareText className="w-3.5 h-3.5" />
                   <span>ASK AI</span>
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -344,25 +342,24 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
           </div>
 
           {/* Footer Actions */}
-          <div className="p-6 bg-gray-50/50 border-t border-gray-50 flex flex-col md:flex-row justify-between gap-4">
-            <button 
-              onClick={onBack}
-              className="px-6 py-3.5 border-2 border-slate-100 text-slate-600 rounded-2xl font-bold uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 hover:bg-white hover:text-sky-600 transition-all active:scale-95"
-            >
+          <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex flex-col md:flex-row justify-between gap-4">
+            <Button variant="secondary" size="lg" onClick={onBack} className="uppercase tracking-widest">
               <ChevronLeft className="w-4 h-4" /> Back
-            </button>
-            <button 
+            </Button>
+            <Button
+              variant="primary"
+              size="lg"
               onClick={onNext}
               disabled={!isMandatoryFilled}
-              className="flex-1 bg-gradient-to-r from-sky-600 to-sky-700 text-white px-6 py-4 rounded-2xl font-bold uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 hover:from-sky-700 hover:to-sky-800 transition-all shadow-xl shadow-sky-100 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
+              className="flex-1 uppercase tracking-widest"
             >
               Confirm & Generate Structure <ChevronRight className="w-4 h-4" />
-            </button>
+            </Button>
           </div>
         </div>
 
         {/* AI Assistant Sidebar */}
-        <div className="col-span-12 lg:col-span-4 h-full relative lg:sticky lg:top-6 flex-shrink-0 min-w-[400px]">
+        <div className="col-span-full lg:col-span-4 h-auto lg:h-full relative lg:sticky lg:top-6 flex-shrink-0 lg:min-w-[400px]">
           {!showSidebar ? (
             <div className="h-full w-full rounded-[2rem] bg-white border border-slate-100 shadow-xl flex flex-col items-center justify-center text-center p-8 group transition-all">
                <div className="w-16 h-16 bg-slate-50 rounded-2xl shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
@@ -370,13 +367,10 @@ export default function CourseDetails({ courseData, updateCourseData, onNext, on
                </div>
                <h3 className="text-slate-400 font-bold text-sm mb-2">AI Assistant Workspace</h3>
                <p className="text-[10px] text-slate-300 font-medium max-w-[160px] mb-6">Toggle the assistant to brainstorm or refine your course details.</p>
-               <button 
-                  onClick={() => setShowSidebar(true)}
-                  className="flex items-center gap-2 bg-sky-600 text-white px-5 py-3 rounded-xl text-xs font-bold hover:bg-sky-700 transition shadow-lg shadow-sky-100 active:scale-95 group"
-                >
+               <Button variant="primary" size="sm" onClick={() => setShowSidebar(true)}>
                   <MessageSquareText className="w-3.5 h-3.5" />
                   <span>ASK AI</span>
-                </button>
+                </Button>
             </div>
           ) : (
             <AIAssistantSidebar 

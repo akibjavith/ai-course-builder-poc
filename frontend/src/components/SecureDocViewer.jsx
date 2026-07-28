@@ -116,7 +116,7 @@ export default function SecureDocViewer({ url, onClose }) {
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* Viewer Header */}
-      <header className="bg-gray-950/90 border-b border-gray-850 px-4 py-3 flex items-center justify-between text-white">
+      <header className="bg-gray-950/90 border-b border-gray-800 px-4 py-3 flex items-center justify-between text-white">
         <div className="flex items-center gap-2">
           <Paperclip className="w-5 h-5 text-orange-400" />
           <span className="font-bold text-sm">Secure Document Reader</span>
@@ -125,37 +125,37 @@ export default function SecureDocViewer({ url, onClose }) {
         {/* Toolbar Controls */}
         {pdf && (
           <div className="flex items-center gap-4 bg-gray-900 border border-gray-800 rounded-xl px-3 py-1.5">
-            <button 
-              onClick={goPrev} 
+            <button
+              onClick={goPrev}
               disabled={pageNum <= 1}
-              className="text-gray-400 hover:text-white disabled:opacity-30 disabled:hover:text-gray-400 transition"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/50 disabled:opacity-30 disabled:hover:text-gray-400 disabled:hover:bg-transparent transition"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
             <span className="text-xs font-mono">
               Page {pageNum} of {numPages}
             </span>
-            <button 
-              onClick={goNext} 
+            <button
+              onClick={goNext}
               disabled={pageNum >= numPages}
-              className="text-gray-400 hover:text-white disabled:opacity-30 disabled:hover:text-gray-400 transition"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/50 disabled:opacity-30 disabled:hover:text-gray-400 disabled:hover:bg-transparent transition"
             >
               <ChevronRight className="w-5 h-5" />
             </button>
             <div className="h-4 w-px bg-gray-800" />
-            <button onClick={zoomOut} className="text-gray-400 hover:text-white transition">
+            <button onClick={zoomOut} className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/50 transition">
               <ZoomOut className="w-4 h-4" />
             </button>
             <span className="text-xs font-mono">{Math.round(scale * 100)}%</span>
-            <button onClick={zoomIn} className="text-gray-400 hover:text-white transition">
+            <button onClick={zoomIn} className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/50 transition">
               <ZoomIn className="w-4 h-4" />
             </button>
           </div>
         )}
 
-        <button 
-          onClick={onClose} 
-          className="text-gray-400 hover:text-white transition p-1 hover:bg-gray-900 rounded-lg"
+        <button
+          onClick={onClose}
+          className="text-gray-400 hover:text-white transition p-2 hover:bg-gray-900 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/50"
         >
           <X className="w-5 h-5" />
         </button>
@@ -170,9 +170,9 @@ export default function SecureDocViewer({ url, onClose }) {
               <h3 className="font-bold text-white text-base">Failed to Display Document</h3>
               <p className="text-xs text-gray-400 mt-2 leading-relaxed">{error}</p>
             </div>
-            <button 
-              onClick={onClose} 
-              className="mt-2 bg-gray-800 hover:bg-gray-755 text-white text-xs font-bold px-5 py-2.5 rounded-xl border border-gray-700 transition"
+            <button
+              onClick={onClose}
+              className="mt-2 bg-gray-800 hover:bg-gray-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl border border-gray-700 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/50"
             >
               Close Reader
             </button>
