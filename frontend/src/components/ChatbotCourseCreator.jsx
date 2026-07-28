@@ -1768,11 +1768,10 @@ export default function ChatbotCourseCreator({ onClose }) {
                 </div>
               );
             case 'quiz':
-            case 'knowledge_check':
               return (
                 <div key={idx} className="bg-indigo-950/20 border border-indigo-900/30 rounded-xl p-4 my-4 space-y-2 text-xs">
                   <span className="text-[9px] bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded font-black uppercase tracking-wider">
-                    {block.type === 'quiz' ? 'Interactive Quiz' : 'Knowledge Check'}
+                    Interactive Quiz
                   </span>
                   <p className="font-bold text-slate-200">{block.question}</p>
                   <div className="grid grid-cols-2 gap-2 mt-2">

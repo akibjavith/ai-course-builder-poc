@@ -27,7 +27,6 @@ const BLOCK_INFO = {
   example: { label: 'Example', icon: Lightbulb, color: 'text-emerald-500', bg: 'bg-emerald-50' },
   quiz: { label: 'Quiz', icon: HelpCircle, color: 'text-purple-500', bg: 'bg-purple-50' },
   assignment: { label: 'Assignment', icon: CheckSquare, color: 'text-violet-500', bg: 'bg-violet-50' },
-  knowledge_check: { label: 'Knowledge Check', icon: HelpCircle, color: 'text-fuchsia-500', bg: 'bg-fuchsia-50' },
   summary: { label: 'Summary', icon: BookOpen, color: 'text-sky-500', bg: 'bg-sky-50' },
   reference: { label: 'Reference', icon: ExternalLink, color: 'text-blue-500', bg: 'bg-blue-50' },
   attachment: { label: 'File Attachment', icon: Paperclip, color: 'text-orange-500', bg: 'bg-orange-50' },
@@ -563,7 +562,6 @@ export default function LessonPreviewEditorModal({
     else if (type === 'example') { newBlock.scenario = 'Scenario title'; newBlock.detail = 'Example detailed description'; }
     else if (type === 'quiz') { newBlock.question = 'Question?'; newBlock.options = ['Option A', 'Option B']; newBlock.correctAnswer = 'Option A'; newBlock.explanation = 'Why Option A is correct'; }
     else if (type === 'assignment') { newBlock.task = 'Assignment task'; newBlock.instructions = 'Instructions'; newBlock.grading_criteria = ['Criterion 1']; }
-    else if (type === 'knowledge_check') { newBlock.question = 'Question?'; newBlock.options = ['Option A', 'Option B']; newBlock.answer = 'Option A'; newBlock.explanation = 'Explanation'; }
     else if (type === 'summary') { newBlock.points = ['Point 1', 'Point 2']; }
     else if (type === 'reference') { newBlock.title = 'Resource Link'; newBlock.url = 'https://example.com'; }
     else if (type === 'attachment') { newBlock.title = 'Attached File'; newBlock.file_url = ''; newBlock.file_name = ''; }
@@ -1310,7 +1308,7 @@ export default function LessonPreviewEditorModal({
                           )
                         )}
 
-                        {(block.type === 'quiz' || block.type === 'knowledge_check') && (
+                        {block.type === 'quiz' && (
                           <InteractiveQuiz 
                             block={block} 
                             editMode={editMode} 

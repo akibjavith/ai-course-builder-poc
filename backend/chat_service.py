@@ -102,7 +102,7 @@ def build_system_prompt(scope: str, details: dict, course_data: dict, available_
         "   - Worked Examples / Dialogue transcripts / Case Studies -> example block (scenario, detail) or code block.\n"
         "   - Step-by-step guidance / Steps -> numbered_list block.\n"
         "   - Code Snippets (if programming) -> code block (language, code, explanation).\n"
-        "   - Quizzes & Knowledge Checks -> quiz and knowledge_check blocks (question, options, correctAnswer/answer, explanation).\n"
+        "   - Quizzes -> quiz blocks (question, options, correctAnswer, explanation).\n"
         "   - Assignments / Practical Tasks -> assignment block (task, instructions, grading_criteria).\n"
         "   - Summaries -> summary block (points).\n"
         "   - References / Further Reading -> reference block (title, url).\n"

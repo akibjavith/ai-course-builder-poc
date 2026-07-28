@@ -98,7 +98,7 @@ async def generate_lesson_blocks(req: LessonRequest):
             system_size_rules = (
                 "CONTENT SIZE LAW — 1-HOUR MICRO COURSE: "
                 "Every paragraph block MUST contain a minimum of 40 words. "
-                "Every quiz or knowledge_check block MUST contain exactly 1 question. "
+                "Every quiz block MUST contain exactly 1 question. "
                 "You are FORBIDDEN from writing paragraphs shorter than 40 words."
             )
         elif duration_hours == 2:
@@ -108,7 +108,7 @@ async def generate_lesson_blocks(req: LessonRequest):
             system_size_rules = (
                 "CONTENT SIZE LAW — 2-HOUR SHORT COURSE: "
                 "Every paragraph block MUST contain a minimum of 60 words. "
-                "Every quiz or knowledge_check block MUST contain exactly 1 question. "
+                "Every quiz block MUST contain exactly 1 question. "
                 "You are FORBIDDEN from writing paragraphs shorter than 60 words."
             )
         elif 3 <= duration_hours <= 5:
@@ -118,7 +118,7 @@ async def generate_lesson_blocks(req: LessonRequest):
             system_size_rules = (
                 f"CONTENT SIZE LAW — {duration_hours}-HOUR COMPACT COURSE: "
                 "Every paragraph block MUST contain a minimum of 90 words. "
-                "Every quiz or knowledge_check block MUST contain exactly 2 questions. "
+                "Every quiz block MUST contain exactly 2 questions. "
                 "You are FORBIDDEN from writing paragraphs shorter than 90 words."
             )
         elif 6 <= duration_hours <= 9:
@@ -128,7 +128,7 @@ async def generate_lesson_blocks(req: LessonRequest):
             system_size_rules = (
                 f"CONTENT SIZE LAW — {duration_hours}-HOUR STANDARD COURSE: "
                 "Every paragraph block MUST contain a minimum of 130 words. "
-                "Every quiz or knowledge_check block MUST contain exactly 2 questions. "
+                "Every quiz block MUST contain exactly 2 questions. "
                 "You are FORBIDDEN from writing paragraphs shorter than 130 words."
             )
         elif 10 <= duration_hours <= 14:
@@ -138,7 +138,7 @@ async def generate_lesson_blocks(req: LessonRequest):
             system_size_rules = (
                 f"CONTENT SIZE LAW — {duration_hours}-HOUR MEDIUM COURSE: "
                 "Every paragraph block MUST contain a minimum of 160 words. "
-                "Every quiz or knowledge_check block MUST contain exactly 3 questions. "
+                "Every quiz block MUST contain exactly 3 questions. "
                 "You are FORBIDDEN from writing paragraphs shorter than 160 words."
             )
         elif 15 <= duration_hours <= 17:
@@ -149,7 +149,7 @@ async def generate_lesson_blocks(req: LessonRequest):
                 f"CONTENT SIZE LAW — {duration_hours}-HOUR IN-DEPTH COURSE: "
                 "Every paragraph block MUST contain a minimum of 220 words. "
                 "You MUST generate at least 2 paragraph blocks per major sub-topic. "
-                "Every quiz or knowledge_check block MUST contain exactly 4 questions. "
+                "Every quiz block MUST contain exactly 4 questions. "
                 "You are FORBIDDEN from writing paragraphs shorter than 220 words."
             )
         else:
@@ -161,7 +161,7 @@ async def generate_lesson_blocks(req: LessonRequest):
                 f"CONTENT SIZE LAW — {duration_hours}-HOUR COMPREHENSIVE COURSE: "
                 "Every paragraph block MUST contain a minimum of 250 words. "
                 "You MUST generate at least 3 paragraph blocks per major sub-topic. "
-                "Every quiz or knowledge_check block MUST contain exactly 5 questions. "
+                "Every quiz block MUST contain exactly 5 questions. "
                 "The total lesson word count MUST exceed 1500 words. "
                 "You are FORBIDDEN from writing paragraphs shorter than 250 words. "
                 "You will be penalized for short, brief, or summarized content."
@@ -176,7 +176,7 @@ async def generate_lesson_blocks(req: LessonRequest):
         - Paragraph blocks: Minimum 40 words each. One focused idea per paragraph.
         - Bullet / numbered lists: Maximum 2 items.
         - Tables: Maximum 1 data row.
-        - Quiz / knowledge_check: Exactly 1 question per block.
+        - Quiz: Exactly 1 question per block.
         - Do NOT include assignments or multi-part examples.
         """
         elif duration_hours == 2:
@@ -185,7 +185,7 @@ async def generate_lesson_blocks(req: LessonRequest):
         - Paragraph blocks: Minimum 60 words each. Cover the core idea fully.
         - Bullet / numbered lists: 2 to 3 items.
         - Tables: Maximum 2 data rows.
-        - Quiz / knowledge_check: Exactly 1 question per block.
+        - Quiz: Exactly 1 question per block.
         """
         elif 3 <= duration_hours <= 5:
             duration_guidelines = f"""
@@ -193,7 +193,7 @@ async def generate_lesson_blocks(req: LessonRequest):
         - Paragraph blocks: Minimum 90 words each. Be clear and practical.
         - Bullet / numbered lists: 3 to 4 items.
         - Tables: 2 to 3 data rows.
-        - Quiz / knowledge_check: Exactly 2 questions per block.
+        - Quiz: Exactly 2 questions per block.
         """
         elif 6 <= duration_hours <= 9:
             duration_guidelines = f"""
@@ -201,7 +201,7 @@ async def generate_lesson_blocks(req: LessonRequest):
         - Paragraph blocks: Minimum 130 words each. Include practical context and explanation.
         - Bullet / numbered lists: 3 to 5 items.
         - Tables: 3 to 4 data rows.
-        - Quiz / knowledge_check: Exactly 2 questions per block.
+        - Quiz: Exactly 2 questions per block.
         """
         elif 10 <= duration_hours <= 14:
             duration_guidelines = f"""
@@ -209,7 +209,7 @@ async def generate_lesson_blocks(req: LessonRequest):
         - Paragraph blocks: Minimum 160 words each. Cover the concept thoroughly with examples embedded in the text.
         - Bullet / numbered lists: 4 to 6 items, each with a brief description.
         - Tables: 3 to 5 data rows.
-        - Quiz / knowledge_check: Exactly 3 questions per block.
+        - Quiz: Exactly 3 questions per block.
         """
         elif 15 <= duration_hours <= 17:
             duration_guidelines = f"""
@@ -217,7 +217,7 @@ async def generate_lesson_blocks(req: LessonRequest):
         - Paragraph blocks: Minimum 220 words each. Write at least 2 paragraphs per major sub-topic. Explain concepts, context, and implications exhaustively.
         - Bullet / numbered lists: 5 to 8 items, each with a detailed description.
         - Tables: 4 to 6 data rows.
-        - Quiz / knowledge_check: Exactly 4 questions per block.
+        - Quiz: Exactly 4 questions per block.
         - Include at least one practical assignment block.
         """
         else:
@@ -227,7 +227,7 @@ async def generate_lesson_blocks(req: LessonRequest):
         - Paragraph blocks: Minimum 250 words each. Write at least 3 paragraphs per major sub-topic. Every paragraph must be a deep-dive textbook-quality explanation — no summaries, no shortcuts.
         - Bullet / numbered lists: 6 to 10 items, each with a detailed multi-sentence description.
         - Tables: 5 or more data rows.
-        - Quiz / knowledge_check: Exactly 5 questions per block.
+        - Quiz: Exactly 5 questions per block.
         - Include at least one assignment block with full grading criteria.
         - Total lesson word count MUST exceed 1500 words across all blocks.
         """
@@ -245,12 +245,12 @@ async def generate_lesson_blocks(req: LessonRequest):
             style_guidelines = """
         PRIMARY LEARNING STYLE PREFERENCE: 'Detailed Explanations'.
         - PRIMARY MANDATE: EVERY SINGLE SUB-MODULE / LESSON MUST CONTAIN EXHAUSTIVE "paragraph" TEXTBOOK BLOCKS elaborating on core theories, design rationales, and background context.
-        - DIVERSITY MANDATE: In addition to detailed paragraphs, EVERY lesson MUST include supporting blocks such as "callout" boxes (important concepts), "example" case studies, "table" feature breakdowns, "knowledge_check" self-assessments, and a "summary" block.
+        - DIVERSITY MANDATE: In addition to detailed paragraphs, EVERY lesson MUST include supporting blocks such as "callout" boxes (important concepts), "example" case studies, "table" feature breakdowns, "quiz" self-assessments, and a "summary" block.
         """
         elif "quiz" in style_lower or "question" in style_lower or "check" in style_lower:
             style_guidelines = """
         PRIMARY LEARNING STYLE PREFERENCE: 'Interactive Quizzes'.
-        - PRIMARY MANDATE: EVERY SINGLE SUB-MODULE / LESSON MUST FEATURE MULTIPLE "knowledge_check" AND "quiz" SELF-ASSESSMENT BLOCKS throughout the learning flow.
+        - PRIMARY MANDATE: EVERY SINGLE SUB-MODULE / LESSON MUST FEATURE MULTIPLE "quiz" SELF-ASSESSMENT BLOCKS throughout the learning flow.
         - DIVERSITY MANDATE: In addition to quizzes, EVERY lesson MUST include supporting blocks such as explanatory "paragraph" context, "callout" key points, "table" or "code" reference blocks, and a "summary" block.
         """
         elif "table" in style_lower or "structure" in style_lower or "chart" in style_lower:
@@ -263,18 +263,18 @@ async def generate_lesson_blocks(req: LessonRequest):
             style_guidelines = """
         PRIMARY LEARNING STYLE PREFERENCE: 'Visual Diagrams & Infographics'.
         - PRIMARY MANDATE: EVERY SINGLE SUB-MODULE / LESSON MUST CONTAIN AT LEAST ONE "image" BLOCK with a detailed, descriptive caption explaining what the visual diagram, architectural flowchart, or infographic represents.
-        - DIVERSITY MANDATE: In addition to image blocks, EVERY lesson MUST include supporting blocks such as explanatory "paragraph" text, "callout" boxes, "table" breakdowns, "knowledge_check" self-assessments, and a "summary" block.
+        - DIVERSITY MANDATE: In addition to image blocks, EVERY lesson MUST include supporting blocks such as explanatory "paragraph" text, "callout" boxes, "table" breakdowns, "quiz" self-assessments, and a "summary" block.
         """
         elif "video" in style_lower or "lecture" in style_lower or "multimedia" in style_lower or "narration" in style_lower:
             style_guidelines = """
         PRIMARY LEARNING STYLE PREFERENCE: 'Video & Multimedia Lectures'.
         - PRIMARY MANDATE: EVERY SINGLE SUB-MODULE / LESSON MUST CONTAIN AT LEAST ONE "video" BLOCK with a full video narration script and scene breakdown in the caption field.
-        - DIVERSITY MANDATE: In addition to video blocks, EVERY lesson MUST include supporting blocks such as explanatory "paragraph" text, "callout" notes, "table" summaries, "knowledge_check" questions, and a "summary" block.
+        - DIVERSITY MANDATE: In addition to video blocks, EVERY lesson MUST include supporting blocks such as explanatory "paragraph" text, "callout" notes, "table" summaries, "quiz" questions, and a "summary" block.
         """
         else:
             style_guidelines = """
         PRIMARY LEARNING STYLE PREFERENCE: 'Balanced Combination'.
-        - PRIMARY MANDATE: EVERY SINGLE SUB-MODULE / LESSON MUST CONTAIN A RICH, DIVERSE FLOW OF BLOCKS combining explanatory "paragraph" text, "callout" tips, "table" breakdowns, "code" snippets (if applicable), "knowledge_check" questions, and a "summary" block.
+        - PRIMARY MANDATE: EVERY SINGLE SUB-MODULE / LESSON MUST CONTAIN A RICH, DIVERSE FLOW OF BLOCKS combining explanatory "paragraph" text, "callout" tips, "table" breakdowns, "code" snippets (if applicable), "quiz" questions, and a "summary" block.
         """
 
         # ── End-of-prompt reinforcement (recency bias — model weights last instructions highest) ──
@@ -282,7 +282,7 @@ async def generate_lesson_blocks(req: LessonRequest):
         ━━━ FINAL CONTENT SIZE ENFORCEMENT — READ THIS LAST ━━━
         This lesson is for a {duration_hours}-hour course. These rules are NON-NEGOTIABLE:
         1. Every "paragraph" block text field MUST contain a MINIMUM of {paragraph_min} words. Count them. Do NOT submit a paragraph shorter than {paragraph_min} words under any circumstance.
-        2. Every "quiz" and "knowledge_check" block MUST contain exactly {quiz_exact} question(s) in their options array.
+        2. Every "quiz" block MUST contain exactly {quiz_exact} question(s) in their options array.
         3. You are FORBIDDEN from writing short, brief, or summarized paragraph blocks. If a paragraph feels done before {paragraph_min} words — continue writing. Add more explanation, a real-world example, or deeper context.
         4. These size rules apply to EVERY block you choose to include, regardless of block type.
         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -322,9 +322,8 @@ async def generate_lesson_blocks(req: LessonRequest):
         10. "example": scenario, detail. Real-world scenario case study, math calculation, or code walk-through. Must contain the complete scenario and result.
         11. "quiz": question, options (list of strings), correctAnswer (the exact string from options), explanation. Make sure the question is actual learner assessment, not placeholder text. Follow the question count defined in the COURSE DEPTH section above.
         12. "assignment": task, instructions, grading_criteria (list of strings). Write actual tasks the student can work on.
-        13. "knowledge_check": question, options (list of strings), answer (the exact string from options), explanation. Follow the question count defined in the COURSE DEPTH section above.
-        14. "summary": points (list of strings summarizing key takeaways).
-        15. "reference": title, url (trusted educational platforms/documentation, no hallucinated URLs).
+        13. "summary": points (list of strings summarizing key takeaways).
+        14. "reference": title, url (trusted educational platforms/documentation, no hallucinated URLs).
 
         SUBJECT ADAPTATION MATRIX:
         - Language Lessons: Use paragraph blocks for reading passages, code blocks or paragraph blocks formatted as dialogue scripts (e.g., Speaker A vs Speaker B), and table blocks for vocabulary definitions.
@@ -500,8 +499,8 @@ async def generate_lesson_blocks(req: LessonRequest):
                     "example_block": "example",
                     "quiz_block": "quiz",
                     "assignment_block": "assignment",
-                    "knowledgecheck": "knowledge_check",
-                    "knowledge-check": "knowledge_check",
+                    "knowledgecheck": "quiz",
+                    "knowledge-check": "quiz",
                     "summary_block": "summary",
                     "reference_block": "reference",
                     "table_block": "table",
@@ -517,10 +516,8 @@ async def generate_lesson_blocks(req: LessonRequest):
                     block["type"] = "code"
                 elif "scenario" in block or "detail" in block:
                     block["type"] = "example"
-                elif "correctAnswer" in block:
+                elif "correctAnswer" in block or "answer" in block:
                     block["type"] = "quiz"
-                elif "answer" in block:
-                    block["type"] = "knowledge_check"
                 elif "task" in block or "grading_criteria" in block:
                     block["type"] = "assignment"
                 elif "points" in block:
@@ -542,7 +539,7 @@ async def generate_lesson_blocks(req: LessonRequest):
             allowed_types = {
                 "heading", "paragraph", "bullet_list", "numbered_list", "image", "video", 
                 "table", "callout", "code", "example", "quiz", "assignment", 
-                "knowledge_check", "summary", "reference"
+                "summary", "reference"
             }
             if block.get("type") not in allowed_types:
                 block["type"] = "paragraph"
@@ -642,25 +639,6 @@ async def generate_lesson_blocks(req: LessonRequest):
                     block["grading_criteria"] = [str(x) for x in grading if x is not None]
                 else:
                     block["grading_criteria"] = [str(grading)]
-                    
-            elif block_type == "knowledge_check":
-                block["question"] = str(block.get("question") or "")
-                options = block.get("options")
-                if options is None:
-                    block["options"] = []
-                elif isinstance(options, list):
-                    block["options"] = [str(x) for x in options if x is not None]
-                else:
-                    block["options"] = [str(options)]
-                    
-                answer = block.get("answer") or block.get("correctAnswer") or ""
-                if isinstance(answer, int) and 0 <= answer < len(block["options"]):
-                    answer = block["options"][answer]
-                block["answer"] = str(answer)
-                block["explanation"] = str(block.get("explanation") or "")
-                
-                if block["options"] and block["answer"] not in block["options"]:
-                    block["options"].append(block["answer"])
                     
             elif block_type == "summary":
                 points = block.get("points")

@@ -227,14 +227,6 @@ class AssignmentBlock(BaseModel):
     instructions: str
     grading_criteria: List[str]
 
-class KnowledgeCheckBlock(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    type: Literal["knowledge_check"] = "knowledge_check"
-    question: str
-    options: List[str]
-    answer: str
-    explanation: str
-
 class SummaryBlock(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     type: Literal["summary"] = "summary"
@@ -262,7 +254,6 @@ LessonBlock = Annotated[
         ExampleBlock,
         QuizBlock,
         AssignmentBlock,
-        KnowledgeCheckBlock,
         SummaryBlock,
         ReferenceBlock
     ],
