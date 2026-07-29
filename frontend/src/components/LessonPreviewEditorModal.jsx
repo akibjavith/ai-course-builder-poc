@@ -288,12 +288,12 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
       <div className="p-5 bg-slate-50/70 border border-slate-200 rounded-2xl space-y-4">
         <div className="flex justify-between items-center border-b border-slate-200 pb-3">
           <div className="flex items-center gap-2">
-            <HelpCircle className="w-5 h-5 text-indigo-500" />
-            <span className="text-xs font-bold text-indigo-700 uppercase tracking-widest">Quiz Block Editor</span>
+            <HelpCircle className="w-5 h-5 text-sky-500" />
+            <span className="text-xs font-bold text-sky-700 uppercase tracking-widest">Quiz Block Editor</span>
           </div>
           <button
             onClick={handleAddQuestion}
-            className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1"
+            className="px-3 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1"
           >
             <Plus className="w-3.5 h-3.5" /> Add Question
           </button>
@@ -337,7 +337,7 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
           {questions.map((q, qIdx) => (
             <div key={qIdx} className="p-4 bg-white border border-slate-200 rounded-xl space-y-3 relative shadow-sm">
               <div className="flex justify-between items-center">
-                <span className="text-xs font-bold text-indigo-600 uppercase">Question {qIdx + 1}</span>
+                <span className="text-xs font-bold text-sky-600 uppercase">Question {qIdx + 1}</span>
                 {questions.length > 1 && (
                   <button
                     onClick={() => handleDeleteQuestion(qIdx)}
@@ -403,15 +403,15 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
       <div className="my-6 p-6 bg-slate-50/80 border border-slate-200/80 rounded-2xl space-y-5 shadow-sm">
         {/* Header Badge & Title */}
         <div className="space-y-1">
-          <span className="px-2.5 py-0.5 bg-indigo-500/10 text-indigo-600 border border-indigo-500/20 text-[10px] font-extrabold uppercase tracking-widest rounded-full">
+          <span className="px-2.5 py-0.5 bg-sky-500/10 text-sky-600 border border-sky-500/20 text-[10px] font-extrabold uppercase tracking-widest rounded-full">
             QUIZ
           </span>
           <h3 className="text-xl font-black text-slate-800 tracking-tight">{title}</h3>
         </div>
 
         {/* Objective Box */}
-        <div className="p-3.5 bg-indigo-50/50 border border-indigo-100/80 rounded-xl text-xs text-indigo-900 leading-relaxed font-medium">
-          <span className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 block mb-0.5">OBJECTIVE</span>
+        <div className="p-3.5 bg-sky-50/50 border border-sky-100/80 rounded-xl text-xs text-sky-900 leading-relaxed font-medium">
+          <span className="text-[10px] font-extrabold uppercase tracking-widest text-sky-600 block mb-0.5">OBJECTIVE</span>
           {objective}
         </div>
 
@@ -435,7 +435,7 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
         <div className="flex flex-wrap items-center gap-3 pt-1">
           <button
             onClick={handleStartQuiz}
-            className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-indigo-600/20 flex items-center gap-1.5"
+            className="px-6 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-sky-600/20 flex items-center gap-1.5"
           >
             {lastResults ? 'Retake quiz' : 'Start quiz'}
           </button>
@@ -461,14 +461,14 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
         {/* Top Control Bar */}
         <div className="flex items-center justify-between border-b border-slate-200 pb-4">
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-600 text-[10px] font-extrabold uppercase rounded-md">
+            <span className="px-2 py-0.5 bg-sky-500/10 text-sky-600 text-[10px] font-extrabold uppercase rounded-md">
               QUIZ
             </span>
             <h4 className="text-sm font-bold text-slate-800">{title}</h4>
           </div>
           <button
             onClick={() => setQuizMode('landing')}
-            className="px-3.5 py-1.5 bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 rounded-lg text-xs font-semibold transition"
+            className="px-3.5 py-2.5 bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-bold transition shadow-sm"
           >
             Stop Quiz, Continue learning
           </button>
@@ -482,13 +482,13 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
               <span className="font-bold text-slate-700 uppercase tracking-wider text-[10px]">
                 {answeredCount} OF {totalQuestions} ANSWERED
               </span>
-              <span className="font-bold text-indigo-600 font-mono">
+              <span className="font-bold text-sky-600 font-mono">
                 {answeredCount * 10} / {totalPoints} pts potential
               </span>
             </div>
             <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
               <div
-                className="h-full bg-indigo-600 transition-all duration-300 rounded-full"
+                className="h-full bg-sky-600 transition-all duration-300 rounded-full"
                 style={{ width: `${(answeredCount / totalQuestions) * 100}%` }}
               />
             </div>
@@ -572,7 +572,7 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
           <div className="pt-2 flex justify-end">
             <button
               onClick={handleFinishQuiz}
-              className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold uppercase tracking-wider transition shadow-lg shadow-indigo-600/25"
+              className="px-6 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-sky-600/20"
             >
               Submit Quiz & View Results
             </button>
@@ -590,7 +590,7 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
   return (
     <div className="my-6 p-6 bg-slate-50/90 border border-slate-200 rounded-2xl space-y-6 shadow-md max-w-2xl mx-auto">
       <div className="text-center space-y-2 border-b border-slate-200 pb-5">
-        <span className="px-3 py-1 bg-indigo-500/10 text-indigo-600 rounded-full text-[10px] font-extrabold uppercase tracking-widest">
+        <span className="px-3 py-1 bg-sky-500/10 text-sky-600 rounded-full text-[10px] font-extrabold uppercase tracking-widest">
           QUIZ COMPLETED
         </span>
         <h3 className="text-2xl font-black text-slate-800">{title}</h3>
@@ -599,7 +599,7 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
 
       {/* Score Summary Box */}
       <div className="p-6 bg-white border border-slate-200 rounded-2xl text-center space-y-3 shadow-sm">
-        <div className="text-4xl font-black text-indigo-600 font-mono">{percentage}%</div>
+        <div className="text-4xl font-black text-sky-600 font-mono">{percentage}%</div>
         <div className="text-xs font-bold text-slate-700 uppercase tracking-wider">
           Score: {score} / {totalPoints} pts
         </div>
@@ -653,7 +653,7 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
         </button>
         <button
           onClick={handleStartQuiz}
-          className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-indigo-600/20"
+          className="px-6 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-sky-600/20"
         >
           Retake Quiz
         </button>
@@ -713,12 +713,12 @@ function InteractiveFlashcards({ block, editMode, onUpdateBlock }) {
       <div className="p-5 bg-slate-50/70 border border-slate-200 rounded-2xl space-y-4">
         <div className="flex justify-between items-center border-b border-slate-200 pb-3">
           <div className="flex items-center gap-2">
-            <Layers className="w-5 h-5 text-amber-500" />
-            <span className="text-xs font-bold text-amber-700 uppercase tracking-widest">Flashcards Editor</span>
+            <Layers className="w-5 h-5 text-sky-500" />
+            <span className="text-xs font-bold text-sky-700 uppercase tracking-widest">Flashcards Editor</span>
           </div>
           <button
             onClick={handleAddCard}
-            className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold transition flex items-center gap-1"
+            className="px-3 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1"
           >
             <Plus className="w-3.5 h-3.5" /> Add Card
           </button>
@@ -786,7 +786,7 @@ function InteractiveFlashcards({ block, editMode, onUpdateBlock }) {
       {/* Header Badge + Title */}
       <div className="flex items-center justify-between border-b border-slate-100 pb-3">
         <div className="flex items-center gap-2.5">
-          <span className="px-2.5 py-0.5 bg-amber-500/10 text-amber-700 border border-amber-500/20 text-[10px] font-extrabold uppercase tracking-widest rounded-full">
+          <span className="px-2.5 py-0.5 bg-sky-500/10 text-sky-700 border border-sky-500/20 text-[10px] font-extrabold uppercase tracking-widest rounded-full">
             FLASHCARDS
           </span>
           <h3 className="text-base font-bold text-slate-800">{block.title || 'Key Terminology & Flashcards'}</h3>
@@ -812,14 +812,14 @@ function InteractiveFlashcards({ block, editMode, onUpdateBlock }) {
           {/* Card Front */}
           <div className="absolute inset-0 bg-white border border-slate-200 rounded-2xl p-8 flex flex-col justify-between items-center text-center [backface-visibility:hidden]">
             <div className="w-full flex justify-between items-center text-xs text-slate-400">
-              <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md uppercase tracking-wider">
+              <span className="text-[10px] font-bold text-sky-600 bg-sky-50 px-2 py-0.5 rounded-md uppercase tracking-wider">
                 Front
               </span>
               <span className="text-[11px] font-mono text-slate-400">Click to flip ↺</span>
             </div>
             <div className="my-auto space-y-2">
               <h4 className="text-xl sm:text-2xl font-extrabold text-slate-800 leading-snug">{currentCard.front}</h4>
-              <p className="text-xs font-medium text-amber-600/80">Front · click to flip</p>
+              <p className="text-xs font-medium text-sky-600/80">Front · click to flip</p>
             </div>
             <div className="text-[10px] font-medium text-slate-400 uppercase tracking-widest">
               Card {currentIdx + 1} of {cards.length}

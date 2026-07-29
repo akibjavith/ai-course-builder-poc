@@ -124,7 +124,7 @@ async def generate_lesson_blocks(req: LessonRequest):
         elif "quiz" in style_lower or "question" in style_lower or "check" in style_lower:
             style_guidelines = """
         PRIMARY LEARNING STYLE PREFERENCE: 'Interactive Quizzes'.
-        - Include multiple self-assessment "quiz" and "flashcard" blocks alongside explanatory paragraph context.
+        - Include self-assessment "quiz" and "flashcard" blocks alongside explanatory paragraph context. Put ALL quiz questions for this lesson into a single "quiz" block's "questions" list (do not create multiple separate quiz blocks); similarly put all flashcards into a single "flashcard" block's "cards" list.
         """
         elif "table" in style_lower or "structure" in style_lower or "chart" in style_lower:
             style_guidelines = """
@@ -179,9 +179,9 @@ async def generate_lesson_blocks(req: LessonRequest):
         8. "callout": text, callout_type (one of: "info", "warning", "tip", "danger").
         9. "code": language, code, explanation. Write actual functional code without markdown backticks inside the code field.
         10. "example": scenario, detail. Real-world scenario case study, math calculation, or code walk-through. Must contain the complete scenario and result.
-        11. "quiz": question, options (list of strings), correctAnswer (the exact string from options), explanation. Make sure the question is actual learner assessment, not placeholder text.
+        11. "quiz": title (optional string), objective (optional string), questions — a list of objects, each with question, options (list of strings), correctAnswer (the exact string from options), explanation. Include ALL quiz questions for this lesson as multiple entries in this single "questions" list — do NOT create more than one "quiz" block per lesson. Make sure each question is actual learner assessment, not placeholder text.
         12. "assignment": task, instructions, grading_criteria (list of strings). Write actual tasks the student can work on.
-        13. "flashcard": title (optional string), cards (list of objects with "front" and "back" strings). Front contains key term/concept/question, Back contains definition/explanation/answer.
+        13. "flashcard": title (optional string), cards (list of objects with "front" and "back" strings). Front contains key term/concept/question, Back contains definition/explanation/answer. Include ALL flashcards for this lesson as multiple entries in this single "cards" list — do NOT create more than one "flashcard" block per lesson.
         14. "summary": points (list of strings summarizing key takeaways).
         15. "reference": title, url (trusted educational platforms/documentation, no hallucinated URLs).
 
@@ -206,9 +206,27 @@ async def generate_lesson_blocks(req: LessonRequest):
                     "type": "paragraph",
                     "text": "..."
                 }},
+                {{
+                    "type": "quiz",
+                    "title": "...",
+                    "objective": "...",
+                    "questions": [
+                        {{ "question": "...", "options": ["...", "...", "...", "..."], "correctAnswer": "...", "explanation": "..." }},
+                        {{ "question": "...", "options": ["...", "...", "...", "..."], "correctAnswer": "...", "explanation": "..." }}
+                    ]
+                }},
+                {{
+                    "type": "flashcard",
+                    "title": "...",
+                    "cards": [
+                        {{ "front": "...", "back": "..." }},
+                        {{ "front": "...", "back": "..." }}
+                    ]
+                }},
                 ...
             ]
         }}
+        Notice above: ALL quiz questions live inside ONE "quiz" block's "questions" list, and ALL flashcards live inside ONE "flashcard" block's "cards" list — never split them into multiple separate "quiz" or "flashcard" blocks.
         """
 
         # Build dynamic system prompt: base identity + tier-specific size law
