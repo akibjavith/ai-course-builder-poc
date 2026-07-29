@@ -87,163 +87,25 @@ async def generate_lesson_blocks(req: LessonRequest):
         duration_hours = max(1, min(duration_hours, 20))
         logger.info(f"[LessonBlocks] resolved duration_hours: {duration_hours}")
 
-        # ── Per-tier token budget and system-level enforcement rules ─────────────
-        # max_tokens: explicitly signal the expected response size to the model.
-        # system_size_rules: injected into the system prompt (highest model weight).
-        # paragraph_min / quiz_exact: used for end-of-prompt reinforcement.
-        if duration_hours == 1:
-            max_tokens_for_tier = 2000
-            paragraph_min = 40
-            quiz_exact = 1
-            flashcard_exact = 3
-            system_size_rules = (
-                "CONTENT SIZE LAW — 1-HOUR MICRO COURSE: "
-                "Every paragraph block MUST contain a minimum of 40 words. "
-                "Every quiz block MUST contain exactly 1 question. "
-                "Every flashcard block MUST contain exactly 3 cards. "
-                "You are FORBIDDEN from writing paragraphs shorter than 40 words."
-            )
-        elif duration_hours == 2:
-            max_tokens_for_tier = 3500
-            paragraph_min = 60
-            quiz_exact = 1
-            flashcard_exact = 4
-            system_size_rules = (
-                "CONTENT SIZE LAW — 2-HOUR SHORT COURSE: "
-                "Every paragraph block MUST contain a minimum of 60 words. "
-                "Every quiz block MUST contain exactly 1 question. "
-                "Every flashcard block MUST contain exactly 4 cards. "
-                "You are FORBIDDEN from writing paragraphs shorter than 60 words."
-            )
-        elif 3 <= duration_hours <= 5:
-            max_tokens_for_tier = 5000
-            paragraph_min = 90
-            quiz_exact = 2
-            flashcard_exact = 5
-            system_size_rules = (
-                f"CONTENT SIZE LAW — {duration_hours}-HOUR COMPACT COURSE: "
-                "Every paragraph block MUST contain a minimum of 90 words. "
-                "Every quiz block MUST contain exactly 2 questions. "
-                "Every flashcard block MUST contain between 5 and 6 cards. "
-                "You are FORBIDDEN from writing paragraphs shorter than 90 words."
-            )
-        elif 6 <= duration_hours <= 9:
-            max_tokens_for_tier = 7000
-            paragraph_min = 130
-            quiz_exact = 2
-            flashcard_exact = 7
-            system_size_rules = (
-                f"CONTENT SIZE LAW — {duration_hours}-HOUR STANDARD COURSE: "
-                "Every paragraph block MUST contain a minimum of 130 words. "
-                "Every quiz block MUST contain exactly 2 questions. "
-                "Every flashcard block MUST contain between 7 and 8 cards. "
-                "You are FORBIDDEN from writing paragraphs shorter than 130 words."
-            )
-        elif 10 <= duration_hours <= 14:
-            max_tokens_for_tier = 9000
-            paragraph_min = 160
-            quiz_exact = 3
-            flashcard_exact = 9
-            system_size_rules = (
-                f"CONTENT SIZE LAW — {duration_hours}-HOUR MEDIUM COURSE: "
-                "Every paragraph block MUST contain a minimum of 160 words. "
-                "Every quiz block MUST contain exactly 3 questions. "
-                "Every flashcard block MUST contain between 9 and 10 cards. "
-                "You are FORBIDDEN from writing paragraphs shorter than 160 words."
-            )
-        elif 15 <= duration_hours <= 17:
-            max_tokens_for_tier = 10500
-            paragraph_min = 220
-            quiz_exact = 4
-            flashcard_exact = 11
-            system_size_rules = (
-                f"CONTENT SIZE LAW — {duration_hours}-HOUR IN-DEPTH COURSE: "
-                "Every paragraph block MUST contain a minimum of 220 words. "
-                "You MUST generate at least 2 paragraph blocks per major sub-topic. "
-                "Every quiz block MUST contain exactly 4 questions. "
-                "Every flashcard block MUST contain between 11 and 12 cards. "
-                "You are FORBIDDEN from writing paragraphs shorter than 220 words."
-            )
-        else:
-            # 18–20 hours
-            max_tokens_for_tier = 14000
-            paragraph_min = 250
-            quiz_exact = 5
-            flashcard_exact = 13
-            system_size_rules = (
-                f"CONTENT SIZE LAW — {duration_hours}-HOUR COMPREHENSIVE COURSE: "
-                "Every paragraph block MUST contain a minimum of 250 words. "
-                "You MUST generate at least 3 paragraph blocks per major sub-topic. "
-                "Every quiz block MUST contain exactly 5 questions. "
-                "Every flashcard block MUST contain between 13 and 15 cards. "
-                "The total lesson word count MUST exceed 1500 words. "
-                "You are FORBIDDEN from writing paragraphs shorter than 250 words. "
-                "You will be penalized for short, brief, or summarized content."
-            )
+        # ── Per-hour granular token budget and dynamic system rules ───────────────
+        # Formula: 3650 base tokens for 1h, scaling +480 tokens per additional hour up to 12,800 tokens for 20h
+        initial_max_tokens = min(12800, 3650 + (duration_hours - 1) * 480)
+        max_tokens_for_tier = initial_max_tokens
 
-        logger.info(f"[LessonBlocks] tier: {duration_hours}h | max_tokens: {max_tokens_for_tier} | para_min: {paragraph_min} | quiz: {quiz_exact}")
+        system_size_rules = (
+            f"COURSE DEPTH LAW — {duration_hours}-HOUR COURSE: "
+            f"This lesson is designed for a {duration_hours}-hour course level. Write high-quality, comprehensive textbook material "
+            "proportional to this course depth. You are FORBIDDEN from writing superficial summaries or placeholder text. "
+            "Organically select and mix the best content blocks (code, tables, lists, callouts, paragraphs, sub-paragraphs, quizzes, flashcards, assignments) "
+            "that best fit this specific topic without forcing artificial word-count padding."
+        )
 
-        # ── Per-hour content-depth guidelines (user prompt body) ─────────────────
-        if duration_hours == 1:
-            duration_guidelines = """
-        COURSE DEPTH: MICRO COURSE (1 Hour).
-        - Paragraph blocks: Minimum 40 words each. One focused idea per paragraph.
-        - Bullet / numbered lists: Maximum 2 items.
-        - Tables: Maximum 1 data row.
-        - Quiz: Exactly 1 question per block.
-        - Do NOT include assignments or multi-part examples.
-        """
-        elif duration_hours == 2:
-            duration_guidelines = """
-        COURSE DEPTH: SHORT COURSE (2 Hours).
-        - Paragraph blocks: Minimum 60 words each. Cover the core idea fully.
-        - Bullet / numbered lists: 2 to 3 items.
-        - Tables: Maximum 2 data rows.
-        - Quiz: Exactly 1 question per block.
-        """
-        elif 3 <= duration_hours <= 5:
-            duration_guidelines = f"""
-        COURSE DEPTH: COMPACT COURSE ({duration_hours} Hours).
-        - Paragraph blocks: Minimum 90 words each. Be clear and practical.
-        - Bullet / numbered lists: 3 to 4 items.
-        - Tables: 2 to 3 data rows.
-        - Quiz: Exactly 2 questions per block.
-        """
-        elif 6 <= duration_hours <= 9:
-            duration_guidelines = f"""
-        COURSE DEPTH: STANDARD COURSE ({duration_hours} Hours).
-        - Paragraph blocks: Minimum 130 words each. Include practical context and explanation.
-        - Bullet / numbered lists: 3 to 5 items.
-        - Tables: 3 to 4 data rows.
-        - Quiz: Exactly 2 questions per block.
-        """
-        elif 10 <= duration_hours <= 14:
-            duration_guidelines = f"""
-        COURSE DEPTH: MEDIUM COURSE ({duration_hours} Hours).
-        - Paragraph blocks: Minimum 160 words each. Cover the concept thoroughly with examples embedded in the text.
-        - Bullet / numbered lists: 4 to 6 items, each with a brief description.
-        - Tables: 3 to 5 data rows.
-        - Quiz: Exactly 3 questions per block.
-        """
-        elif 15 <= duration_hours <= 17:
-            duration_guidelines = f"""
-        COURSE DEPTH: IN-DEPTH COURSE ({duration_hours} Hours).
-        - Paragraph blocks: Minimum 220 words each. Write at least 2 paragraphs per major sub-topic. Explain concepts, context, and implications exhaustively.
-        - Bullet / numbered lists: 5 to 8 items, each with a detailed description.
-        - Tables: 4 to 6 data rows.
-        - Quiz: Exactly 4 questions per block.
-        - Include at least one practical assignment block.
-        """
-        else:
-            # 18–20 hours
-            duration_guidelines = f"""
-        COURSE DEPTH: COMPREHENSIVE COURSE ({duration_hours} Hours).
-        - Paragraph blocks: Minimum 250 words each. Write at least 3 paragraphs per major sub-topic. Every paragraph must be a deep-dive textbook-quality explanation — no summaries, no shortcuts.
-        - Bullet / numbered lists: 6 to 10 items, each with a detailed multi-sentence description.
-        - Tables: 5 or more data rows.
-        - Quiz: Exactly 5 questions per block.
-        - Include at least one assignment block with full grading criteria.
-        - Total lesson word count MUST exceed 1500 words across all blocks.
+        logger.info(f"[LessonBlocks] duration: {duration_hours}h | initial_max_tokens: {initial_max_tokens}")
+
+        duration_guidelines = f"""
+        COURSE DEPTH: {duration_hours}-HOUR COURSE.
+        - Tailor the richness, depth of explanation, number of worked examples, and exercise blocks proportionally for a {duration_hours}-hour learning experience.
+        - Write direct, learner-ready textbook content—no teacher guidelines or placeholder text.
         """
 
         # Extract style to adapt content block priorities while maintaining rich block diversity
@@ -252,54 +114,37 @@ async def generate_lesson_blocks(req: LessonRequest):
         if "coding" in style_lower or "programming" in style_lower or "code" in style_lower:
             style_guidelines = """
         PRIMARY LEARNING STYLE PREFERENCE: 'Hands-on Coding'.
-        - PRIMARY MANDATE: EVERY SINGLE SUB-MODULE / LESSON MUST CONTAIN AT LEAST ONE FUNCTIONAL "code" BLOCK with thorough line-by-line explanations (never skip code, even for overview, architecture, or deployment topics).
-        - DIVERSITY MANDATE: In addition to code, EVERY lesson MUST include supporting blocks such as introductory "paragraph" theory, "callout" boxes (pro-tips/warnings), "example" real-world scenarios, a "summary" key takeaways block, and "reference" documentation links.
+        - Prioritize functional "code" blocks with thorough line-by-line explanations alongside supporting "paragraph", "callout", and "example" blocks.
         """
         elif "explain" in style_lower or "text" in style_lower or "detailed" in style_lower:
             style_guidelines = """
         PRIMARY LEARNING STYLE PREFERENCE: 'Detailed Explanations'.
-        - PRIMARY MANDATE: EVERY SINGLE SUB-MODULE / LESSON MUST CONTAIN EXHAUSTIVE "paragraph" TEXTBOOK BLOCKS elaborating on core theories, design rationales, and background context.
-        - DIVERSITY MANDATE: In addition to detailed paragraphs, EVERY lesson MUST include supporting blocks such as "callout" boxes (important concepts), "example" case studies, "table" feature breakdowns, "quiz" self-assessments, and a "summary" block.
+        - Prioritize thorough "paragraph" textbook blocks, "callout" notes, and "example" case studies.
         """
         elif "quiz" in style_lower or "question" in style_lower or "check" in style_lower:
             style_guidelines = """
         PRIMARY LEARNING STYLE PREFERENCE: 'Interactive Quizzes'.
-        - PRIMARY MANDATE: EVERY SINGLE SUB-MODULE / LESSON MUST FEATURE MULTIPLE "quiz" SELF-ASSESSMENT BLOCKS throughout the learning flow.
-        - DIVERSITY MANDATE: In addition to quizzes, EVERY lesson MUST include supporting blocks such as explanatory "paragraph" context, "callout" key points, "table" or "code" reference blocks, and a "summary" block.
+        - Include multiple self-assessment "quiz" and "flashcard" blocks alongside explanatory paragraph context.
         """
         elif "table" in style_lower or "structure" in style_lower or "chart" in style_lower:
             style_guidelines = """
         PRIMARY LEARNING STYLE PREFERENCE: 'Structured Tables'.
-        - PRIMARY MANDATE: EVERY SINGLE SUB-MODULE / LESSON MUST CONTAIN AT LEAST ONE DATA-RICH "table" BLOCK (comparison matrices, feature breakdowns, or reference tables).
-        - DIVERSITY MANDATE: In addition to tables, EVERY lesson MUST include supporting blocks such as explanatory "paragraph" text, "callout" takeaways, "example" scenarios, and a "summary" block.
+        - Prioritize data-rich "table" blocks (comparison matrices, feature breakdowns) alongside explanatory paragraphs.
         """
         elif "image" in style_lower or "visual" in style_lower or "diagram" in style_lower or "infographic" in style_lower:
             style_guidelines = """
         PRIMARY LEARNING STYLE PREFERENCE: 'Visual Diagrams & Infographics'.
-        - PRIMARY MANDATE: EVERY SINGLE SUB-MODULE / LESSON MUST CONTAIN AT LEAST ONE "image" BLOCK with a detailed, descriptive caption explaining what the visual diagram, architectural flowchart, or infographic represents.
-        - DIVERSITY MANDATE: In addition to image blocks, EVERY lesson MUST include supporting blocks such as explanatory "paragraph" text, "callout" boxes, "table" breakdowns, "quiz" self-assessments, and a "summary" block.
+        - Include "image" blocks with descriptive captions alongside explanatory text and summary points.
         """
         elif "video" in style_lower or "lecture" in style_lower or "multimedia" in style_lower or "narration" in style_lower:
             style_guidelines = """
         PRIMARY LEARNING STYLE PREFERENCE: 'Video & Multimedia Lectures'.
-        - PRIMARY MANDATE: EVERY SINGLE SUB-MODULE / LESSON MUST CONTAIN AT LEAST ONE "video" BLOCK with a full video narration script and scene breakdown in the caption field.
-        - DIVERSITY MANDATE: In addition to video blocks, EVERY lesson MUST include supporting blocks such as explanatory "paragraph" text, "callout" notes, "table" summaries, "quiz" questions, and a "summary" block.
+        - Include "video" blocks with narration breakdowns alongside explanatory text and summary blocks.
         """
         else:
             style_guidelines = """
         PRIMARY LEARNING STYLE PREFERENCE: 'Balanced Combination'.
-        - PRIMARY MANDATE: EVERY SINGLE SUB-MODULE / LESSON MUST CONTAIN A RICH, DIVERSE FLOW OF BLOCKS combining explanatory "paragraph" text, "callout" tips, "table" breakdowns, "code" snippets (if applicable), "quiz" questions, and a "summary" block.
-        """
-
-        # ── End-of-prompt reinforcement (recency bias — model weights last instructions highest) ──
-        end_reinforcement = f"""
-        ━━━ FINAL CONTENT SIZE ENFORCEMENT — READ THIS LAST ━━━
-        This lesson is for a {duration_hours}-hour course. These rules are NON-NEGOTIABLE:
-        1. Every "paragraph" block text field MUST contain a MINIMUM of {paragraph_min} words. Count them. Do NOT submit a paragraph shorter than {paragraph_min} words under any circumstance.
-        2. Every "quiz" block MUST contain exactly {quiz_exact} question(s) in their options array.
-        3. You are FORBIDDEN from writing short, brief, or summarized paragraph blocks. If a paragraph feels done before {paragraph_min} words — continue writing. Add more explanation, a real-world example, or deeper context.
-        4. These size rules apply to EVERY block you choose to include, regardless of block type.
-        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        - Combine explanatory "paragraph" text, "callout" tips, "table" breakdowns, "code" snippets (if applicable), "quiz" questions, and "flashcard" blocks into a rich learning flow.
         """
 
         prompt_str = f"""
@@ -325,18 +170,18 @@ async def generate_lesson_blocks(req: LessonRequest):
         
         The allowed block types and their exact structure/rules are:
         1. "heading": level (1, 2, or 3), text. Use this for outline and sub-topics.
-        2. "paragraph": text. CRITICAL: Every paragraph block MUST meet the minimum word count defined in the COURSE DEPTH section above. Write directly to the student.
-        3. "bullet_list": items (list of strings). Follow the item count defined in the COURSE DEPTH section above.
-        4. "numbered_list": items (list of strings). Follow the item count defined in the COURSE DEPTH section above.
+        2. "paragraph": text. Write clear, thorough, learner-ready content. Use sub-paragraphs or multiple paragraph blocks as needed.
+        3. "bullet_list": items (list of strings).
+        4. "numbered_list": items (list of strings).
         5. "image": url (always output "" for now), caption (describe what the visual should represent).
         6. "video": url (always output "" for now), caption (describe what the video/narration should show).
-        7. "table": headers (list of strings), rows (list of lists of strings). Used for comparisons, classifications, and vocabulary guides. Follow the row count defined in the COURSE DEPTH section above. Every cell must contain actual comparative or vocabulary data, not descriptions.
+        7. "table": headers (list of strings), rows (list of lists of strings). Used for comparisons, classifications, and vocabulary guides.
         8. "callout": text, callout_type (one of: "info", "warning", "tip", "danger").
         9. "code": language, code, explanation. Write actual functional code without markdown backticks inside the code field.
         10. "example": scenario, detail. Real-world scenario case study, math calculation, or code walk-through. Must contain the complete scenario and result.
-        11. "quiz": question, options (list of strings), correctAnswer (the exact string from options), explanation. Make sure the question is actual learner assessment, not placeholder text. Follow the question count defined in the COURSE DEPTH section above.
+        11. "quiz": question, options (list of strings), correctAnswer (the exact string from options), explanation. Make sure the question is actual learner assessment, not placeholder text.
         12. "assignment": task, instructions, grading_criteria (list of strings). Write actual tasks the student can work on.
-        13. "flashcard": title (optional string), cards (list of objects with "front" and "back" strings). Front contains the key term/concept/question, Back contains the definition/explanation/answer. Every flashcard block MUST contain {flashcard_exact} card items.
+        13. "flashcard": title (optional string), cards (list of objects with "front" and "back" strings). Front contains key term/concept/question, Back contains definition/explanation/answer.
         14. "summary": points (list of strings summarizing key takeaways).
         15. "reference": title, url (trusted educational platforms/documentation, no hallucinated URLs).
 
@@ -347,8 +192,6 @@ async def generate_lesson_blocks(req: LessonRequest):
         - Science Lessons: Detail observations, case studies, or step-by-step experiments.
         - Cybersecurity Lessons: Detail security configurations, threat analyses, and interactive scenarios.
         - Business Lessons: Detail case study text, strategic analyses, and practical scenarios.
-
-        {end_reinforcement}
 
         Ensure to output ONLY valid JSON matching this schema:
         {{
@@ -372,7 +215,7 @@ async def generate_lesson_blocks(req: LessonRequest):
         system_content = (
             "You are a world-class educational textbook author. "
             "Your goal is to write highly detailed, comprehensive, in-depth, and exhaustive textbook material. "
-            "You write extremely long, thorough, and complete lessons. Never summarize or omit details. "
+            "You write extremely thorough and complete lessons. Never summarize or omit details. "
             "Output JSON only.\n\n"
             f"{system_size_rules}"
         )
