@@ -157,125 +157,507 @@ function buildPreviewContent(chapter) {
 }
 
 // Interactive Quiz block renderer
+// Interactive Quiz block renderer with Landing Card, Taking Mode, and Results
 function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
-  const [selected, setSelected] = useState(null);
-  const [submitted, setSubmitted] = useState(false);
+  // Extract normalized question list from block.questions or legacy single question
+  const questions = useMemo(() => {
+    if (block.questions && Array.isArray(block.questions) && block.questions.length > 0) {
+      return block.questions;
+    }
+    if (block.question || block.options) {
+      return [{
+        question: block.question || 'Assess your understanding:',
+        options: block.options || [],
+        correctAnswer: block.correctAnswer || '',
+        explanation: block.explanation || '',
+        question_type: 'SINGLE CHOICE'
+      }];
+    }
+    return [{
+      question: 'Sample Question',
+      options: ['Option A', 'Option B'],
+      correctAnswer: 'Option A',
+      explanation: 'Sample explanation text.',
+      question_type: 'SINGLE CHOICE'
+    }];
+  }, [block.questions, block.question, block.options, block.correctAnswer, block.explanation]);
 
-  // Reset quiz selection if block changes
+  const [quizMode, setQuizMode] = useState('landing'); // 'landing' | 'taking' | 'results'
+  const [userAnswers, setUserAnswers] = useState({}); // { [qIdx]: option }
+  const [showExplanations, setShowExplanations] = useState({}); // { [qIdx]: boolean }
+  const [lastResults, setLastResults] = useState(null); // { score, totalPoints, percentage, userAnswers }
+
+  // Reset quiz mode if block ID changes
   useEffect(() => {
-    setSelected(null);
-    setSubmitted(false);
+    setQuizMode('landing');
+    setUserAnswers({});
+    setShowExplanations({});
+    setLastResults(null);
   }, [block.id]);
 
+  const title = block.title || 'Knowledge Check & Assessment';
+  const objective = block.objective || 'Work through mixed question types in one quiz set. Each question scores independently.';
+  const totalQuestions = questions.length;
+  const totalPoints = totalQuestions * 10;
+  const estimatedTime = block.estimated_time || `~${Math.max(1, totalQuestions * 2)} min`;
+
+  // Start/Retake Quiz action
+  const handleStartQuiz = () => {
+    setUserAnswers({});
+    setShowExplanations({});
+    setQuizMode('taking');
+  };
+
+  // Option select handler - locks question choice once selected
+  const handleSelectOption = (qIdx, opt) => {
+    if (userAnswers[qIdx] !== undefined) return; // locked once selected
+    setUserAnswers(prev => ({ ...prev, [qIdx]: opt }));
+  };
+
+  // Toggle answer description explanation
+  const toggleExplanation = (qIdx) => {
+    setShowExplanations(prev => ({ ...prev, [qIdx]: !prev[qIdx] }));
+  };
+
+  // Submit/Finish quiz
+  const handleFinishQuiz = () => {
+    let score = 0;
+    questions.forEach((q, idx) => {
+      if (userAnswers[idx] === q.correctAnswer) {
+        score += 10;
+      }
+    });
+    const percentage = Math.round((score / (totalQuestions * 10)) * 100);
+    const results = {
+      score,
+      totalPoints,
+      percentage,
+      userAnswers: { ...userAnswers }
+    };
+    setLastResults(results);
+    setQuizMode('results');
+  };
+
+  // Edit Mode Renderer
   if (editMode) {
+    const handleQuestionChange = (qIdx, field, val) => {
+      const updatedQ = [...questions];
+      updatedQ[qIdx] = { ...updatedQ[qIdx], [field]: val };
+      onUpdateBlock({
+        questions: updatedQ,
+        question: updatedQ[0].question,
+        options: updatedQ[0].options,
+        correctAnswer: updatedQ[0].correctAnswer,
+        explanation: updatedQ[0].explanation
+      });
+    };
+
+    const handleAddQuestion = () => {
+      const updatedQ = [
+        ...questions,
+        {
+          question: `Question ${questions.length + 1}?`,
+          options: ['Option A', 'Option B'],
+          correctAnswer: 'Option A',
+          explanation: 'Explanation text',
+          question_type: 'SINGLE CHOICE'
+        }
+      ];
+      onUpdateBlock({
+        questions: updatedQ,
+        question: updatedQ[0].question,
+        options: updatedQ[0].options,
+        correctAnswer: updatedQ[0].correctAnswer,
+        explanation: updatedQ[0].explanation
+      });
+    };
+
+    const handleDeleteQuestion = (qIdx) => {
+      if (questions.length <= 1) return;
+      const updatedQ = questions.filter((_, idx) => idx !== qIdx);
+      onUpdateBlock({
+        questions: updatedQ,
+        question: updatedQ[0].question,
+        options: updatedQ[0].options,
+        correctAnswer: updatedQ[0].correctAnswer,
+        explanation: updatedQ[0].explanation
+      });
+    };
+
     return (
-      <div className="interactive-quiz-container">
-        <div className="flex items-center gap-2 mb-4">
-          <HelpCircle className="w-5 h-5 text-sky-500" />
-          <span className="text-xs font-bold text-sky-600 uppercase tracking-widest">Interactive Quiz Block</span>
+      <div className="p-5 bg-slate-50/70 border border-slate-200 rounded-2xl space-y-4">
+        <div className="flex justify-between items-center border-b border-slate-200 pb-3">
+          <div className="flex items-center gap-2">
+            <HelpCircle className="w-5 h-5 text-indigo-500" />
+            <span className="text-xs font-bold text-indigo-700 uppercase tracking-widest">Quiz Block Editor</span>
+          </div>
+          <button
+            onClick={handleAddQuestion}
+            className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1"
+          >
+            <Plus className="w-3.5 h-3.5" /> Add Question
+          </button>
         </div>
-        <div className="space-y-3">
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Question</label>
-            <input 
-              type="text" 
-              value={block.question || ''}
-              onChange={(e) => onUpdateBlock({ question: e.target.value })}
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Quiz Title</label>
+            <input
+              type="text"
+              value={block.title || ''}
+              onChange={(e) => onUpdateBlock({ title: e.target.value })}
               className="editor-text-input"
+              placeholder="e.g. Cloud Concepts Quiz"
             />
           </div>
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Options (One per line)</label>
-            <textarea
-              value={(block.options || []).join('\n')}
-              onChange={(e) => onUpdateBlock({ options: e.target.value.split('\n') })}
-              rows={4}
-              className="editor-textarea-field resize-none"
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Estimated Time</label>
+            <input
+              type="text"
+              value={block.estimated_time || ''}
+              onChange={(e) => onUpdateBlock({ estimated_time: e.target.value })}
+              className="editor-text-input"
+              placeholder="e.g. ~5 min"
             />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Correct Answer</label>
-              <select
-                value={block.correctAnswer || ''}
-                onChange={(e) => onUpdateBlock({ correctAnswer: e.target.value })}
-                className="editor-select-field"
-              >
-                <option value="">Select Correct Option</option>
-                {(block.options || []).map((opt, idx) => (
-                  <option key={idx} value={opt}>{opt}</option>
-                ))}
-              </select>
+        </div>
+
+        <div>
+          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Objective / Description</label>
+          <textarea
+            value={block.objective || ''}
+            onChange={(e) => onUpdateBlock({ objective: e.target.value })}
+            rows={2}
+            className="editor-textarea-field resize-none !text-xs"
+            placeholder="Work through mixed questions in one quiz set..."
+          />
+        </div>
+
+        <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
+          {questions.map((q, qIdx) => (
+            <div key={qIdx} className="p-4 bg-white border border-slate-200 rounded-xl space-y-3 relative shadow-sm">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold text-indigo-600 uppercase">Question {qIdx + 1}</span>
+                {questions.length > 1 && (
+                  <button
+                    onClick={() => handleDeleteQuestion(qIdx)}
+                    className="text-rose-500 hover:text-rose-700 p-1"
+                    title="Delete Question"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <div>
+                <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Question Text</label>
+                <input
+                  type="text"
+                  value={q.question || ''}
+                  onChange={(e) => handleQuestionChange(qIdx, 'question', e.target.value)}
+                  className="editor-text-input"
+                />
+              </div>
+              <div>
+                <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Options (One per line)</label>
+                <textarea
+                  value={(q.options || []).join('\n')}
+                  onChange={(e) => handleQuestionChange(qIdx, 'options', e.target.value.split('\n'))}
+                  rows={3}
+                  className="editor-textarea-field resize-none !text-xs"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Correct Answer</label>
+                  <select
+                    value={q.correctAnswer || ''}
+                    onChange={(e) => handleQuestionChange(qIdx, 'correctAnswer', e.target.value)}
+                    className="editor-select-field !text-xs"
+                  >
+                    <option value="">Select Correct Option</option>
+                    {(q.options || []).map((opt, idx) => (
+                      <option key={idx} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Explanation</label>
+                  <input
+                    type="text"
+                    value={q.explanation || ''}
+                    onChange={(e) => handleQuestionChange(qIdx, 'explanation', e.target.value)}
+                    className="editor-text-input"
+                  />
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Explanation</label>
-              <input 
-                type="text" 
-                value={block.explanation || ''}
-                onChange={(e) => onUpdateBlock({ explanation: e.target.value })}
-                className="editor-text-input"
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // State 1: Summary Landing Card View (Image 1 reference)
+  if (quizMode === 'landing') {
+    return (
+      <div className="my-6 p-6 bg-slate-50/80 border border-slate-200/80 rounded-2xl space-y-5 shadow-sm">
+        {/* Header Badge & Title */}
+        <div className="space-y-1">
+          <span className="px-2.5 py-0.5 bg-indigo-500/10 text-indigo-600 border border-indigo-500/20 text-[10px] font-extrabold uppercase tracking-widest rounded-full">
+            QUIZ
+          </span>
+          <h3 className="text-xl font-black text-slate-800 tracking-tight">{title}</h3>
+        </div>
+
+        {/* Objective Box */}
+        <div className="p-3.5 bg-indigo-50/50 border border-indigo-100/80 rounded-xl text-xs text-indigo-900 leading-relaxed font-medium">
+          <span className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 block mb-0.5">OBJECTIVE</span>
+          {objective}
+        </div>
+
+        {/* Metrics Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="p-3.5 bg-white border border-slate-200/80 rounded-xl space-y-0.5 shadow-sm">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">TOTAL QUESTIONS</span>
+            <span className="text-lg font-black text-slate-800">{totalQuestions}</span>
+          </div>
+          <div className="p-3.5 bg-white border border-slate-200/80 rounded-xl space-y-0.5 shadow-sm">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">TOTAL POINTS</span>
+            <span className="text-lg font-black text-slate-800">{totalPoints} pts</span>
+          </div>
+          <div className="p-3.5 bg-white border border-slate-200/80 rounded-xl space-y-0.5 shadow-sm">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">ESTIMATED TIME</span>
+            <span className="text-lg font-black text-slate-800">{estimatedTime}</span>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex flex-wrap items-center gap-3 pt-1">
+          <button
+            onClick={handleStartQuiz}
+            className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-indigo-600/20 flex items-center gap-1.5"
+          >
+            {lastResults ? 'Retake quiz' : 'Start quiz'}
+          </button>
+          {lastResults && (
+            <button
+              onClick={() => setQuizMode('results')}
+              className="px-5 py-2.5 bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-bold transition shadow-sm"
+            >
+              View last results
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // State 2: Active Taking Mode (Image 2 reference)
+  if (quizMode === 'taking') {
+    const answeredCount = Object.keys(userAnswers).length;
+
+    return (
+      <div className="my-6 p-6 bg-slate-50/90 border border-slate-200 rounded-2xl space-y-6 shadow-md">
+        {/* Top Control Bar */}
+        <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-600 text-[10px] font-extrabold uppercase rounded-md">
+              QUIZ
+            </span>
+            <h4 className="text-sm font-bold text-slate-800">{title}</h4>
+          </div>
+          <button
+            onClick={() => setQuizMode('landing')}
+            className="px-3.5 py-1.5 bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 rounded-lg text-xs font-semibold transition"
+          >
+            Stop Quiz, Continue learning
+          </button>
+        </div>
+
+        {/* Questions Container */}
+        <div className="max-w-2xl mx-auto space-y-6">
+          {/* Progress Tracker */}
+          <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2 shadow-sm">
+            <div className="flex justify-between items-center text-xs">
+              <span className="font-bold text-slate-700 uppercase tracking-wider text-[10px]">
+                {answeredCount} OF {totalQuestions} ANSWERED
+              </span>
+              <span className="font-bold text-indigo-600 font-mono">
+                {answeredCount * 10} / {totalPoints} pts potential
+              </span>
+            </div>
+            <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-indigo-600 transition-all duration-300 rounded-full"
+                style={{ width: `${(answeredCount / totalQuestions) * 100}%` }}
               />
             </div>
+          </div>
+
+          {/* List of Questions */}
+          {questions.map((q, qIdx) => {
+            const selectedOpt = userAnswers[qIdx];
+            const isAnswered = selectedOpt !== undefined;
+            const isCorrect = selectedOpt === q.correctAnswer;
+
+            return (
+              <div key={qIdx} className="bg-white border border-slate-200/90 rounded-2xl p-6 space-y-4 shadow-sm">
+                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-slate-400">Q{qIdx + 1}</span>
+                    <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[9px] font-bold uppercase rounded">
+                      {q.question_type || 'SINGLE CHOICE'}
+                    </span>
+                  </div>
+                  {isAnswered && (
+                    <span className={`text-[10px] font-extrabold uppercase ${isCorrect ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {isCorrect ? '✓ CORRECT' : '✗ INCORRECT'}
+                    </span>
+                  )}
+                </div>
+
+                <h4 className="text-base font-bold text-slate-800 leading-snug">{q.question}</h4>
+
+                {/* Options List */}
+                <div className="space-y-2.5">
+                  {(q.options || []).map((opt, optIdx) => {
+                    const isOptionSelected = selectedOpt === opt;
+                    let btnStyle = "w-full text-left p-3.5 rounded-xl border text-xs font-medium transition flex justify-between items-center ";
+                    if (isOptionSelected) {
+                      btnStyle += isCorrect
+                        ? "bg-emerald-50/80 border-emerald-300 text-emerald-900 font-bold"
+                        : "bg-rose-50/80 border-rose-300 text-rose-900 font-bold";
+                    } else if (isAnswered) {
+                      btnStyle += "bg-slate-50/50 border-slate-200 text-slate-400 cursor-not-allowed opacity-60";
+                    } else {
+                      btnStyle += "bg-white border-slate-200 text-slate-700 hover:bg-slate-50";
+                    }
+
+                    return (
+                      <button
+                        key={optIdx}
+                        disabled={isAnswered}
+                        onClick={() => handleSelectOption(qIdx, opt)}
+                        className={btnStyle}
+                      >
+                        <span>{opt}</span>
+                        {isOptionSelected && isCorrect && <Check className="w-4 h-4 text-emerald-600" />}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Explanation Toggle */}
+                {q.explanation && (
+                  <div className="pt-2">
+                    <button
+                      onClick={() => toggleExplanation(qIdx)}
+                      className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full text-[11px] font-semibold transition"
+                    >
+                      {showExplanations[qIdx] ? 'Hide answer description' : 'Show answer description'}
+                    </button>
+                    {showExplanations[qIdx] && (
+                      <div className="mt-2.5 p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 leading-relaxed italic">
+                        <span className="font-bold not-italic block mb-0.5 text-slate-800 text-[10px] uppercase">Explanation:</span>
+                        {q.explanation}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Finish Quiz Button */}
+          <div className="pt-2 flex justify-end">
+            <button
+              onClick={handleFinishQuiz}
+              className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold uppercase tracking-wider transition shadow-lg shadow-indigo-600/25"
+            >
+              Submit Quiz & View Results
+            </button>
           </div>
         </div>
       </div>
     );
   }
 
-  const isCorrect = selected === block.correctAnswer;
+  // State 3 & 4: Final Score Results View
+  const score = lastResults?.score || 0;
+  const percentage = lastResults?.percentage || 0;
+  const isPassed = percentage >= 70;
 
   return (
-    <div className="interactive-quiz-container">
-      <div className="flex items-center gap-2 mb-4">
-        <HelpCircle className="w-5 h-5 text-sky-500" />
-        <span className="text-xs font-black text-sky-600 uppercase tracking-widest">Knowledge Challenge</span>
+    <div className="my-6 p-6 bg-slate-50/90 border border-slate-200 rounded-2xl space-y-6 shadow-md max-w-2xl mx-auto">
+      <div className="text-center space-y-2 border-b border-slate-200 pb-5">
+        <span className="px-3 py-1 bg-indigo-500/10 text-indigo-600 rounded-full text-[10px] font-extrabold uppercase tracking-widest">
+          QUIZ COMPLETED
+        </span>
+        <h3 className="text-2xl font-black text-slate-800">{title}</h3>
+        <p className="text-xs text-slate-500 font-medium">{objective}</p>
       </div>
-      <h3 className="quiz-question-title">{block.question}</h3>
-      <div className="grid grid-cols-1 gap-3 my-4">
-        {(block.options || []).map((opt, idx) => {
-          let btnClass = "quiz-option-button";
-          if (submitted) {
-            if (opt === block.correctAnswer) {
-              btnClass += " quiz-option-correct";
-            } else if (selected === opt) {
-              btnClass += " quiz-option-incorrect";
-            } else {
-              btnClass += " quiz-option-dimmed";
-            }
-          } else if (selected === opt) {
-            btnClass += " quiz-option-active";
-          }
+
+      {/* Score Summary Box */}
+      <div className="p-6 bg-white border border-slate-200 rounded-2xl text-center space-y-3 shadow-sm">
+        <div className="text-4xl font-black text-indigo-600 font-mono">{percentage}%</div>
+        <div className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+          Score: {score} / {totalPoints} pts
+        </div>
+        <span className={`inline-block px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wider ${
+          isPassed ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-amber-100 text-amber-800 border border-amber-200'
+        }`}>
+          {isPassed ? '🎉 Quiz Passed!' : '📖 Review Recommended'}
+        </span>
+      </div>
+
+      {/* Detailed Question Review */}
+      <div className="space-y-3">
+        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Question Review</h4>
+        {questions.map((q, idx) => {
+          const userAns = lastResults?.userAnswers?.[idx];
+          const isCorrect = userAns === q.correctAnswer;
+
           return (
-            <button
-              key={idx}
-              disabled={submitted}
-              onClick={() => setSelected(opt)}
-              className={btnClass}
-            >
-              <span className="flex items-center justify-between w-full">
-                <span>{opt}</span>
-                {submitted && opt === block.correctAnswer && <Check className="w-4 h-4 text-green-600" />}
-              </span>
-            </button>
+            <div key={idx} className="p-4 bg-white border border-slate-200 rounded-xl space-y-2 text-xs">
+              <div className="flex justify-between items-center font-bold">
+                <span className="text-slate-800">Q{idx + 1}. {q.question}</span>
+                <span className={isCorrect ? 'text-emerald-600' : 'text-rose-600'}>
+                  {isCorrect ? '✓ Correct' : '✗ Incorrect'}
+                </span>
+              </div>
+              <p className="text-slate-500 text-[11px]">
+                Your answer: <span className="font-semibold text-slate-700">{userAns || 'Not answered'}</span>
+              </p>
+              {!isCorrect && (
+                <p className="text-emerald-600 text-[11px]">
+                  Correct answer: <span className="font-semibold">{q.correctAnswer}</span>
+                </p>
+              )}
+              {q.explanation && (
+                <p className="text-slate-400 text-[10px] italic border-t border-slate-100 pt-1 mt-1">
+                  {q.explanation}
+                </p>
+              )}
+            </div>
           );
         })}
       </div>
-      {!submitted && selected && (
+
+      {/* Action Buttons */}
+      <div className="flex items-center justify-between pt-2">
         <button
-          onClick={() => setSubmitted(true)}
-          className="quiz-submit-button"
+          onClick={() => setQuizMode('landing')}
+          className="px-5 py-2.5 bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-bold transition shadow-sm"
         >
-          Submit Answer
+          Back to Lesson
         </button>
-      )}
-      {submitted && (
-        <div className={`quiz-explanation-box ${isCorrect ? 'quiz-option-correct' : 'quiz-option-incorrect'}`}>
-          <p className="text-xs font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5">
-            {isCorrect ? '✨ Correct!' : '❌ Incorrect'}
-          </p>
-          <p className="text-sm font-medium leading-relaxed">{block.explanation}</p>
-        </div>
-      )}
+        <button
+          onClick={handleStartQuiz}
+          className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-indigo-600/20"
+        >
+          Retake Quiz
+        </button>
+      </div>
     </div>
   );
 }
@@ -770,7 +1152,18 @@ export default function LessonPreviewEditorModal({
     else if (type === 'callout') { newBlock.text = 'Note text'; newBlock.callout_type = 'info'; }
     else if (type === 'code') { newBlock.language = 'javascript'; newBlock.code = '// Code snippet'; newBlock.explanation = 'Explain the code'; }
     else if (type === 'example') { newBlock.scenario = 'Scenario title'; newBlock.detail = 'Example detailed description'; }
-    else if (type === 'quiz') { newBlock.question = 'Question?'; newBlock.options = ['Option A', 'Option B']; newBlock.correctAnswer = 'Option A'; newBlock.explanation = 'Why Option A is correct'; }
+    else if (type === 'quiz') { 
+      newBlock.title = 'Knowledge Check & Assessment';
+      newBlock.objective = 'Work through mixed question types in one quiz set. Each question scores independently.';
+      newBlock.estimated_time = '~3 min';
+      newBlock.questions = [
+        { question: 'Sample Question 1?', options: ['Option A', 'Option B'], correctAnswer: 'Option A', explanation: 'Why Option A is correct', question_type: 'SINGLE CHOICE' }
+      ];
+      newBlock.question = 'Sample Question 1?';
+      newBlock.options = ['Option A', 'Option B'];
+      newBlock.correctAnswer = 'Option A';
+      newBlock.explanation = 'Why Option A is correct';
+    }
     else if (type === 'assignment') { newBlock.task = 'Assignment task'; newBlock.instructions = 'Instructions'; newBlock.grading_criteria = ['Criterion 1']; }
     else if (type === 'flashcard') {
       newBlock.title = 'Key Terminology & Flashcards';

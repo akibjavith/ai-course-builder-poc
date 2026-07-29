@@ -474,23 +474,75 @@ async def generate_lesson_blocks(req: LessonRequest):
                 block["detail"] = str(block.get("detail") or "")
                 
             elif block_type == "quiz":
-                block["question"] = str(block.get("question") or "")
-                options = block.get("options")
-                if options is None:
-                    block["options"] = []
-                elif isinstance(options, list):
-                    block["options"] = [str(x) for x in options if x is not None]
-                else:
-                    block["options"] = [str(options)]
-                    
-                correct_answer = block.get("correctAnswer") or block.get("answer") or ""
-                if isinstance(correct_answer, int) and 0 <= correct_answer < len(block["options"]):
-                    correct_answer = block["options"][correct_answer]
-                block["correctAnswer"] = str(correct_answer)
-                block["explanation"] = str(block.get("explanation") or "")
+                block["title"] = str(block.get("title") or "Knowledge Check & Assessment")
+                block["objective"] = str(block.get("objective") or "Work through mixed question types in one quiz set. Each question scores independently.")
                 
-                if block["options"] and block["correctAnswer"] not in block["options"]:
-                    block["options"].append(block["correctAnswer"])
+                # Check for multi-question vs single question format
+                raw_questions = block.get("questions")
+                normalized_questions = []
+                if isinstance(raw_questions, list) and len(raw_questions) > 0:
+                    for q in raw_questions:
+                        if isinstance(q, dict):
+                            q_text = str(q.get("question") or "")
+                            q_opts = q.get("options") or []
+                            if not isinstance(q_opts, list):
+                                q_opts = [str(q_opts)]
+                            else:
+                                q_opts = [str(x) for x in q_opts if x is not None]
+                            q_ans = str(q.get("correctAnswer") or q.get("answer") or "")
+                            if isinstance(q.get("correctAnswer"), int) and 0 <= q.get("correctAnswer") < len(q_opts):
+                                q_ans = q_opts[q.get("correctAnswer")]
+                            q_exp = str(q.get("explanation") or "")
+                            q_type = str(q.get("question_type") or "SINGLE CHOICE")
+                            if q_text:
+                                normalized_questions.append({
+                                    "question": q_text,
+                                    "options": q_opts,
+                                    "correctAnswer": q_ans,
+                                    "explanation": q_exp,
+                                    "question_type": q_type
+                                })
+                
+                # Fallback to single question format if questions array is empty
+                if not normalized_questions:
+                    single_q = str(block.get("question") or "")
+                    options = block.get("options")
+                    if options is None:
+                        options = []
+                    elif isinstance(options, list):
+                        options = [str(x) for x in options if x is not None]
+                    else:
+                        options = [str(options)]
+                    correct_answer = str(block.get("correctAnswer") or block.get("answer") or "")
+                    explanation = str(block.get("explanation") or "")
+                    if single_q or options:
+                        normalized_questions.append({
+                            "question": single_q or "Assess your understanding:",
+                            "options": options,
+                            "correctAnswer": correct_answer,
+                            "explanation": explanation,
+                            "question_type": "SINGLE CHOICE"
+                        })
+                
+                if not normalized_questions:
+                    normalized_questions = [{
+                        "question": "Sample Question",
+                        "options": ["Option A", "Option B"],
+                        "correctAnswer": "Option A",
+                        "explanation": "Explanation text.",
+                        "question_type": "SINGLE CHOICE"
+                    }]
+
+                block["questions"] = normalized_questions
+                # Keep top-level single question fields synchronized for legacy support
+                first_q = normalized_questions[0]
+                block["question"] = first_q["question"]
+                block["options"] = first_q["options"]
+                block["correctAnswer"] = first_q["correctAnswer"]
+                block["explanation"] = first_q["explanation"]
+                
+                q_count = len(normalized_questions)
+                block["estimated_time"] = str(block.get("estimated_time") or f"~{max(1, q_count * 2)} min")
                     
             elif block_type == "assignment":
                 block["task"] = str(block.get("task") or "")

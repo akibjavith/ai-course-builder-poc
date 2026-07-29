@@ -1790,33 +1790,36 @@ export default function ChatbotCourseCreator({ onClose }) {
                 </div>
               );
             case 'quiz':
-              return (
-                <div key={idx} className="bg-indigo-950/20 border border-indigo-900/30 rounded-xl p-4 my-4 space-y-2 text-xs">
-                  <span className="text-[9px] bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded font-black uppercase tracking-wider">
-                    Interactive Quiz
-                  </span>
-                  <p className="font-bold text-slate-200">{block.question}</p>
-                  <div className="grid grid-cols-2 gap-2 mt-2">
-                    {block.options?.map((opt, i) => (
-                      <div 
-                        key={i} 
-                        className={`p-2 rounded border text-[10px] ${
-                          opt === (block.correctAnswer || block.answer) 
-                            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 font-bold' 
-                            : 'bg-slate-900/40 border-slate-800 text-slate-500'
-                        }`}
-                      >
-                        {opt}
+              {
+                const qCount = block.questions?.length || (block.question ? 1 : 0);
+                const quizTitle = block.title || 'Knowledge Check & Assessment';
+                const quizObj = block.objective || 'Work through questions in one quiz set. Each question scores independently.';
+                return (
+                  <div key={idx} className="bg-indigo-950/20 border border-indigo-900/30 rounded-xl p-4 my-4 space-y-3 text-xs">
+                    <div className="flex justify-between items-center border-b border-indigo-900/30 pb-2">
+                      <span className="text-[9px] bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded font-black uppercase tracking-wider">
+                        QUIZ ({qCount} {qCount === 1 ? 'Question' : 'Questions'})
+                      </span>
+                      <span className="font-bold text-slate-200 text-[11px]">{quizTitle}</span>
+                    </div>
+                    <p className="text-[10px] text-slate-300 italic">{quizObj}</p>
+                    <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
+                      <div className="p-2 bg-slate-900/60 border border-slate-800 rounded-lg">
+                        <span className="text-[8px] text-slate-400 uppercase block">Questions</span>
+                        <span className="font-bold text-indigo-400">{qCount}</span>
                       </div>
-                    ))}
+                      <div className="p-2 bg-slate-900/60 border border-slate-800 rounded-lg">
+                        <span className="text-[8px] text-slate-400 uppercase block">Points</span>
+                        <span className="font-bold text-indigo-400">{qCount * 10} pts</span>
+                      </div>
+                      <div className="p-2 bg-slate-900/60 border border-slate-800 rounded-lg">
+                        <span className="text-[8px] text-slate-400 uppercase block">Est. Time</span>
+                        <span className="font-bold text-indigo-400">{block.estimated_time || `~${Math.max(1, qCount * 2)} min`}</span>
+                      </div>
+                    </div>
                   </div>
-                  {block.explanation && (
-                    <p className="text-[9px] text-slate-400 border-t border-slate-900/50 pt-2.5 mt-2.5 leading-relaxed italic">
-                      {block.explanation}
-                    </p>
-                  )}
-                </div>
-              );
+                );
+              }
             case 'summary':
               return (
                 <div key={idx} className="bg-slate-950 border border-slate-800 rounded-xl p-4 my-4 space-y-2 text-xs">

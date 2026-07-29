@@ -212,13 +212,25 @@ class ExampleBlock(BaseModel):
     scenario: str
     detail: str
 
-class QuizBlock(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    type: Literal["quiz"] = "quiz"
+class QuizQuestionItem(BaseModel):
     question: str
     options: List[str]
     correctAnswer: str
-    explanation: str
+    explanation: Optional[str] = ""
+    question_type: Optional[str] = "SINGLE CHOICE"
+
+class QuizBlock(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: Literal["quiz"] = "quiz"
+    title: Optional[str] = "Knowledge Assessment"
+    objective: Optional[str] = "Work through mixed question types in one quiz set. Each question scores independently."
+    estimated_time: Optional[str] = "~3 min"
+    questions: Optional[List[QuizQuestionItem]] = None
+    # Top-level single question fields for backward compatibility
+    question: Optional[str] = ""
+    options: Optional[List[str]] = None
+    correctAnswer: Optional[str] = ""
+    explanation: Optional[str] = ""
 
 class AssignmentBlock(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
