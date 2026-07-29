@@ -95,73 +95,87 @@ async def generate_lesson_blocks(req: LessonRequest):
             max_tokens_for_tier = 2000
             paragraph_min = 40
             quiz_exact = 1
+            flashcard_exact = 3
             system_size_rules = (
                 "CONTENT SIZE LAW — 1-HOUR MICRO COURSE: "
                 "Every paragraph block MUST contain a minimum of 40 words. "
                 "Every quiz block MUST contain exactly 1 question. "
+                "Every flashcard block MUST contain exactly 3 cards. "
                 "You are FORBIDDEN from writing paragraphs shorter than 40 words."
             )
         elif duration_hours == 2:
             max_tokens_for_tier = 3500
             paragraph_min = 60
             quiz_exact = 1
+            flashcard_exact = 4
             system_size_rules = (
                 "CONTENT SIZE LAW — 2-HOUR SHORT COURSE: "
                 "Every paragraph block MUST contain a minimum of 60 words. "
                 "Every quiz block MUST contain exactly 1 question. "
+                "Every flashcard block MUST contain exactly 4 cards. "
                 "You are FORBIDDEN from writing paragraphs shorter than 60 words."
             )
         elif 3 <= duration_hours <= 5:
             max_tokens_for_tier = 5000
             paragraph_min = 90
             quiz_exact = 2
+            flashcard_exact = 5
             system_size_rules = (
                 f"CONTENT SIZE LAW — {duration_hours}-HOUR COMPACT COURSE: "
                 "Every paragraph block MUST contain a minimum of 90 words. "
                 "Every quiz block MUST contain exactly 2 questions. "
+                "Every flashcard block MUST contain between 5 and 6 cards. "
                 "You are FORBIDDEN from writing paragraphs shorter than 90 words."
             )
         elif 6 <= duration_hours <= 9:
             max_tokens_for_tier = 7000
             paragraph_min = 130
             quiz_exact = 2
+            flashcard_exact = 7
             system_size_rules = (
                 f"CONTENT SIZE LAW — {duration_hours}-HOUR STANDARD COURSE: "
                 "Every paragraph block MUST contain a minimum of 130 words. "
                 "Every quiz block MUST contain exactly 2 questions. "
+                "Every flashcard block MUST contain between 7 and 8 cards. "
                 "You are FORBIDDEN from writing paragraphs shorter than 130 words."
             )
         elif 10 <= duration_hours <= 14:
-            max_tokens_for_tier = 9000  # reduced from 6500 — leaves headroom for clean JSON close
+            max_tokens_for_tier = 9000
             paragraph_min = 160
             quiz_exact = 3
+            flashcard_exact = 9
             system_size_rules = (
                 f"CONTENT SIZE LAW — {duration_hours}-HOUR MEDIUM COURSE: "
                 "Every paragraph block MUST contain a minimum of 160 words. "
                 "Every quiz block MUST contain exactly 3 questions. "
+                "Every flashcard block MUST contain between 9 and 10 cards. "
                 "You are FORBIDDEN from writing paragraphs shorter than 160 words."
             )
         elif 15 <= duration_hours <= 17:
-            max_tokens_for_tier = 10500  # reduced from 9000 — leaves headroom for clean JSON close
+            max_tokens_for_tier = 10500
             paragraph_min = 220
             quiz_exact = 4
+            flashcard_exact = 11
             system_size_rules = (
                 f"CONTENT SIZE LAW — {duration_hours}-HOUR IN-DEPTH COURSE: "
                 "Every paragraph block MUST contain a minimum of 220 words. "
                 "You MUST generate at least 2 paragraph blocks per major sub-topic. "
                 "Every quiz block MUST contain exactly 4 questions. "
+                "Every flashcard block MUST contain between 11 and 12 cards. "
                 "You are FORBIDDEN from writing paragraphs shorter than 220 words."
             )
         else:
             # 18–20 hours
-            max_tokens_for_tier = 14000  # raised from 12000 — dense topics (e.g. Neural Networks, SVMs) were hitting the old ceiling and getting truncated
+            max_tokens_for_tier = 14000
             paragraph_min = 250
             quiz_exact = 5
+            flashcard_exact = 13
             system_size_rules = (
                 f"CONTENT SIZE LAW — {duration_hours}-HOUR COMPREHENSIVE COURSE: "
                 "Every paragraph block MUST contain a minimum of 250 words. "
                 "You MUST generate at least 3 paragraph blocks per major sub-topic. "
                 "Every quiz block MUST contain exactly 5 questions. "
+                "Every flashcard block MUST contain between 13 and 15 cards. "
                 "The total lesson word count MUST exceed 1500 words. "
                 "You are FORBIDDEN from writing paragraphs shorter than 250 words. "
                 "You will be penalized for short, brief, or summarized content."
@@ -322,8 +336,9 @@ async def generate_lesson_blocks(req: LessonRequest):
         10. "example": scenario, detail. Real-world scenario case study, math calculation, or code walk-through. Must contain the complete scenario and result.
         11. "quiz": question, options (list of strings), correctAnswer (the exact string from options), explanation. Make sure the question is actual learner assessment, not placeholder text. Follow the question count defined in the COURSE DEPTH section above.
         12. "assignment": task, instructions, grading_criteria (list of strings). Write actual tasks the student can work on.
-        13. "summary": points (list of strings summarizing key takeaways).
-        14. "reference": title, url (trusted educational platforms/documentation, no hallucinated URLs).
+        13. "flashcard": title (optional string), cards (list of objects with "front" and "back" strings). Front contains the key term/concept/question, Back contains the definition/explanation/answer. Every flashcard block MUST contain {flashcard_exact} card items.
+        14. "summary": points (list of strings summarizing key takeaways).
+        15. "reference": title, url (trusted educational platforms/documentation, no hallucinated URLs).
 
         SUBJECT ADAPTATION MATRIX:
         - Language Lessons: Use paragraph blocks for reading passages, code blocks or paragraph blocks formatted as dialogue scripts (e.g., Speaker A vs Speaker B), and table blocks for vocabulary definitions.
@@ -501,6 +516,9 @@ async def generate_lesson_blocks(req: LessonRequest):
                     "assignment_block": "assignment",
                     "knowledgecheck": "quiz",
                     "knowledge-check": "quiz",
+                    "flashcards": "flashcard",
+                    "flashcard_block": "flashcard",
+                    "flash_card": "flashcard",
                     "summary_block": "summary",
                     "reference_block": "reference",
                     "table_block": "table",
@@ -520,6 +538,8 @@ async def generate_lesson_blocks(req: LessonRequest):
                     block["type"] = "quiz"
                 elif "task" in block or "grading_criteria" in block:
                     block["type"] = "assignment"
+                elif "cards" in block or "flashcard" in block:
+                    block["type"] = "flashcard"
                 elif "points" in block:
                     block["type"] = "summary"
                 elif "headers" in block or "rows" in block:
@@ -539,7 +559,7 @@ async def generate_lesson_blocks(req: LessonRequest):
             allowed_types = {
                 "heading", "paragraph", "bullet_list", "numbered_list", "image", "video", 
                 "table", "callout", "code", "example", "quiz", "assignment", 
-                "summary", "reference"
+                "flashcard", "summary", "reference"
             }
             if block.get("type") not in allowed_types:
                 block["type"] = "paragraph"
@@ -639,6 +659,26 @@ async def generate_lesson_blocks(req: LessonRequest):
                     block["grading_criteria"] = [str(x) for x in grading if x is not None]
                 else:
                     block["grading_criteria"] = [str(grading)]
+                    
+            elif block_type == "flashcard":
+                block["title"] = str(block.get("title") or "Key Terminology & Flashcards")
+                raw_cards = block.get("cards")
+                normalized_cards = []
+                if isinstance(raw_cards, list):
+                    for item in raw_cards:
+                        if isinstance(item, dict):
+                            front = str(item.get("front") or item.get("question") or item.get("term") or "")
+                            back = str(item.get("back") or item.get("answer") or item.get("definition") or item.get("explanation") or "")
+                            if front or back:
+                                normalized_cards.append({"front": front, "back": back})
+                        elif isinstance(item, str):
+                            normalized_cards.append({"front": item, "back": ""})
+                if not normalized_cards:
+                    normalized_cards = [
+                        {"front": "Key Term 1", "back": "Definition of key term 1."},
+                        {"front": "Key Term 2", "back": "Definition of key term 2."}
+                    ]
+                block["cards"] = normalized_cards
                     
             elif block_type == "summary":
                 points = block.get("points")

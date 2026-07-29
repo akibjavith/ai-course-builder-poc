@@ -1767,6 +1767,28 @@ export default function ChatbotCourseCreator({ onClose }) {
                   <p className="text-slate-300 leading-relaxed text-[10px]">{block.detail}</p>
                 </div>
               );
+            case 'flashcard':
+              return (
+                <div key={idx} className="bg-amber-950/20 border border-amber-900/30 rounded-xl p-4 my-4 space-y-2 text-xs">
+                  <div className="flex justify-between items-center border-b border-amber-900/30 pb-2">
+                    <span className="text-[9px] bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded font-black uppercase tracking-wider">
+                      FLASHCARDS ({(block.cards?.length || 0)} Cards)
+                    </span>
+                    <span className="font-bold text-slate-200 text-[11px]">{block.title || 'Flashcards'}</span>
+                  </div>
+                  <div className="space-y-1.5 pt-1">
+                    {(block.cards || []).slice(0, 3).map((c, i) => (
+                      <div key={i} className="p-2 bg-slate-900/60 border border-slate-800 rounded-lg flex justify-between gap-2 text-[10px]">
+                        <span className="font-bold text-amber-300">{c.front}</span>
+                        <span className="text-slate-400 text-right">{c.back}</span>
+                      </div>
+                    ))}
+                    {(block.cards?.length || 0) > 3 && (
+                      <p className="text-[9px] text-amber-400/70 font-mono text-center pt-1">+ {(block.cards?.length || 0) - 3} more cards</p>
+                    )}
+                  </div>
+                </div>
+              );
             case 'quiz':
               return (
                 <div key={idx} className="bg-indigo-950/20 border border-indigo-900/30 rounded-xl p-4 my-4 space-y-2 text-xs">

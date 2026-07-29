@@ -351,6 +351,7 @@ export default function CourseContent({ courseData, updateCourseData, contentGen
        - Step-by-step guidance -> numbered_list block.
        - Code Snippets (if programming) -> code block (language, code, explanation).
        - Quizzes -> quiz blocks (question, options, correctAnswer, explanation).
+       - Key Terminology & Concepts -> flashcard block (title, cards: [front, back]).
        - Assignments / Practical Tasks -> assignment block (task, instructions, grading_criteria).
        - Summaries -> summary block (points).
        - References -> reference block (title, url).
@@ -515,6 +516,7 @@ export default function CourseContent({ courseData, updateCourseData, contentGen
     - Step-by-step guidance -> numbered_list block.
     - Code Snippets (if programming) -> code block (language, code, explanation).
     - Quizzes -> quiz blocks (question, options, correctAnswer, explanation).
+    - Key Terminology & Concepts -> flashcard block (title, cards: [front, back]).
     - Assignments / Practical Tasks -> assignment block (task, instructions, grading_criteria).
     - Summaries -> summary block (points).
     - References -> reference block (title, url).
