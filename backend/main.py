@@ -642,9 +642,22 @@ async def api_chat(req: ChatRequest):
             model=LLM_MODEL,
             messages=messages,
             temperature=0.7,
-            max_tokens=6000
+            max_tokens=12000
         )
         
+        # Check for truncation cutoff and retry with maximum ceiling (16384 tokens)
+        if response.choices and response.choices[0].finish_reason == "length":
+            logger.warning("[CourseChat] Response truncated (finish_reason=length) with 12,000 tokens. Retrying with max 16,384 tokens...")
+            try:
+                response = openai_client.chat.completions.create(
+                    model=LLM_MODEL,
+                    messages=messages,
+                    temperature=0.7,
+                    max_tokens=16384
+                )
+            except Exception as retry_err:
+                logger.error(f"[CourseChat] Truncation retry failed: {retry_err}")
+
         # Log token usage
         if hasattr(response, "usage") and response.usage:
             logger.info(f"Token usage - Prompt: {response.usage.prompt_tokens}, Completion: {response.usage.completion_tokens}, Total: {response.usage.total_tokens}")

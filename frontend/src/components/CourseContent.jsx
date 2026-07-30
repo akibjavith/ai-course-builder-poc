@@ -138,25 +138,60 @@ export default function CourseContent({ courseData, updateCourseData, contentGen
 
   const handleApplyAISuggestion = (suggestion) => {
     if (suggestion.prompts && Array.isArray(suggestion.prompts) && suggestion.prompts.length > 0) {
-      const newModules = (courseData.structure?.modules || []).map(mod => ({
-        ...mod,
-        chapters: (mod.chapters || []).map(chap => {
-          const cTitle = (chap.title || "").trim().toLowerCase();
-          const matchingPrompt = suggestion.prompts.find(p => {
-            if (!p) return false;
-            const pTitle = (p.title || p.lesson || "").trim().toLowerCase();
-            return pTitle === cTitle;
-          })?.prompt;
+      let globalLessonCounter = 0;
+      const newModules = (courseData.structure?.modules || []).map((mod) => {
+        const mTitle = (mod.title || "").trim().toLowerCase();
+        return {
+          ...mod,
+          chapters: (mod.chapters || []).map((chap) => {
+            const currentGlobalIdx = globalLessonCounter;
+            globalLessonCounter++;
 
-          if (matchingPrompt) {
-            return {
-              ...chap,
-              content: { ...(chap.content || {}), prompt: matchingPrompt, source: 'ai' }
-            };
-          }
-          return chap;
-        })
-      }));
+            const cTitle = (chap.title || "").trim().toLowerCase();
+            
+            // Pass 1: Exact title match
+            let matchingItem = suggestion.prompts.find(p => {
+              if (!p) return false;
+              const pTitle = (p.title || p.lesson || "").trim().toLowerCase();
+              const pMod = (p.module || "").trim().toLowerCase();
+              return pTitle === cTitle && (!pMod || pMod === mTitle);
+            });
+
+            // Pass 2: Exact title match without module restriction
+            if (!matchingItem) {
+              matchingItem = suggestion.prompts.find(p => {
+                if (!p) return false;
+                const pTitle = (p.title || p.lesson || "").trim().toLowerCase();
+                return pTitle === cTitle;
+              });
+            }
+
+            // Pass 3: Partial substring match
+            if (!matchingItem) {
+              matchingItem = suggestion.prompts.find(p => {
+                if (!p) return false;
+                const pTitle = (p.title || p.lesson || "").trim().toLowerCase();
+                return (pTitle && cTitle) && (pTitle.includes(cTitle) || cTitle.includes(pTitle));
+              });
+            }
+
+            // Pass 4: Positional index fallback if global index exists in prompts array
+            if (!matchingItem && currentGlobalIdx < suggestion.prompts.length) {
+              matchingItem = suggestion.prompts[currentGlobalIdx];
+            }
+
+            const matchingPrompt = matchingItem?.prompt;
+
+            if (matchingPrompt) {
+              return {
+                ...chap,
+                content: { ...(chap.content || {}), prompt: matchingPrompt, source: 'ai' }
+              };
+            }
+            return chap;
+          })
+        };
+      });
       updateCourseData('structure', { ...courseData.structure, modules: newModules });
       setModalConfig({
         title: 'Prompts Applied',
@@ -346,7 +381,7 @@ export default function CourseContent({ courseData, updateCourseData, contentGen
     2. THE GENERATED PROMPT MUST DIRECTLY INSTRUCT THE STAGE 2 AI TO MAP CONTENT INTO THESE 15 ALLOWED BLOCKS:
        - Introduction / Core Concepts -> heading and paragraph blocks.
        - Learning Objectives -> bullet_list block.
-       - Vocabulary / Glossary -> table block containing columns [Word/Term, Definition/Meaning, Example Sentence].
+       - Vocabulary / Glossary -> flashcard block or bulleted key concepts (format terms clearly as bulleted key concepts).
        - Worked Examples / Dialogue transcripts / Case Studies -> example block (scenario, detail) or code block.
        - Step-by-step guidance -> numbered_list block.
        - Code Snippets (if programming) -> code block (language, code, explanation).
@@ -503,7 +538,25 @@ export default function CourseContent({ courseData, updateCourseData, contentGen
     const subject = courseData.details?.subject || 'General';
     const audience = courseData.details?.requirements || 'General learners';
 
-    const prompt = `Please generate high-quality, practical, and EXTREMELY detailed AI content-generation prompts (Stage 1) for ALL lessons in this course. 
+    const lessonChecklist = [];
+    (courseData.structure?.modules || []).forEach((m, mIdx) => {
+      (m.chapters || m.lessons || []).forEach((ch, chIdx) => {
+        lessonChecklist.push({
+          module: m.title || `Module ${mIdx + 1}`,
+          title: ch.title || `Lesson ${chIdx + 1}`
+        });
+      });
+    });
+    const totalLessonsCount = lessonChecklist.length;
+    const checklistText = lessonChecklist.map((l, i) => `${i + 1}. [Module: "${l.module}"] Title: "${l.title}"`).join("\n");
+
+    const prompt = `Please generate high-quality, practical, and EXTREMELY detailed AI content-generation prompts (Stage 1) for ALL ${totalLessonsCount} lessons in this course structure. 
+
+    CRITICAL COVERAGE MANDATE (ZERO OMISSIONS):
+    There are EXACTLY ${totalLessonsCount} lessons in this course. You MUST return an array of EXACTLY ${totalLessonsCount} prompt objects in the JSON array, matching each lesson in the checklist below. Copy the EXACT module titles and lesson titles provided below without altering any words. DO NOT skip any middle lessons and DO NOT stop until all ${totalLessonsCount} items are generated.
+
+    LESSON CHECKLIST (${totalLessonsCount} Total Lessons):
+    ${checklistText}
 
     QUALITY STANDARD:
     For every single lesson, the prompt must be a comprehensive standalone guide (150-250 words) that instructs another AI model (Stage 2) how to generate the lesson. Do NOT generate the lesson content, teacher notes, summaries, or teacher instructions itself.
@@ -511,7 +564,7 @@ export default function CourseContent({ courseData, updateCourseData, contentGen
     Each generated prompt MUST instruct the Stage 2 AI to map content into these 15 allowed blocks:
     - Introduction / Core Concepts -> heading and paragraph blocks.
     - Learning Objectives -> bullet_list block.
-    - Vocabulary / Terminology / Key Terms -> table block containing columns [Word/Term, Definition/Meaning, Example Sentence].
+    - Vocabulary / Terminology / Key Terms -> flashcard block or bulleted key concepts (format terms clearly as bulleted key concepts).
     - Worked Examples / Dialogue transcripts / Case Studies -> example block (scenario, detail) or code block.
     - Step-by-step guidance -> numbered_list block.
     - Code Snippets (if programming) -> code block (language, code, explanation).
@@ -522,14 +575,12 @@ export default function CourseContent({ courseData, updateCourseData, contentGen
     - References -> reference block (title, url).
 
     Subject-Specific Block Rules for "${subject}":
-    - Language lessons: MUST instruct to use table blocks for vocabulary, paragraph blocks for dialogue/reading transcripts, and quiz blocks for comprehension.
+    - Language lessons: MUST instruct to use bulleted vocabulary lists, paragraph blocks for dialogue/reading transcripts, and quiz blocks for comprehension.
     - Programming lessons (Python, C, C++, Java, JavaScript, SQL, C#): MUST instruct to use code blocks for all syntax and implementation examples, assignment blocks for code debug tasks/projects, and paragraph blocks for code analysis.
     - Mathematics/Physics lessons: MUST instruct to use paragraph blocks with LaTeX math notation \\( ... \\) or \\[ ... \\] for formulas, and example blocks for worked calculations/problems.
-    - Science lessons: MUST instruct to use numbered_list blocks for experiments, callout blocks for warnings/tips, and table blocks for observation data.
+    - Science lessons: MUST instruct to use numbered_list blocks for experiments, callout blocks for warnings/tips, and bulleted lists for observation data.
     - Cybersecurity lessons: MUST instruct to use example blocks for threat scenarios and assignment blocks for security configurations.
     - Business lessons: MUST instruct to use example blocks for case study details and table blocks for strategic analysis comparisons.
-
-    CRITICAL RULE: Do NOT provide short or generic single-line summaries. If a course has 10 lessons, you must provide 10 long, highly detailed prompts, each being 150-250 words.
 
     Course Context:
     - Title: "${courseData.details?.courseName || courseData.details?.title}"
