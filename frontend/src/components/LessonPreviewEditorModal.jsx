@@ -457,7 +457,8 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
     const answeredCount = Object.keys(userAnswers).length;
 
     return (
-      <div className="my-6 p-6 bg-slate-50/90 border border-slate-200 rounded-2xl space-y-6 shadow-md">
+      <div className="fixed inset-0 z-[130] bg-slate-900/60 backdrop-blur-md overflow-y-auto flex justify-center p-4 sm:p-6">
+      <div className="my-2 sm:my-6 p-6 bg-slate-50/90 border border-slate-200 rounded-2xl space-y-6 shadow-md w-full max-w-3xl h-fit">
         {/* Top Control Bar */}
         <div className="flex items-center justify-between border-b border-slate-200 pb-4">
           <div className="flex items-center gap-2">
@@ -579,6 +580,7 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
           </div>
         </div>
       </div>
+      </div>
     );
   }
 
@@ -588,7 +590,8 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
   const isPassed = percentage >= 70;
 
   return (
-    <div className="my-6 p-6 bg-slate-50/90 border border-slate-200 rounded-2xl space-y-6 shadow-md max-w-2xl mx-auto">
+    <div className="fixed inset-0 z-[130] bg-slate-900/60 backdrop-blur-md overflow-y-auto flex justify-center p-4 sm:p-6">
+    <div className="my-2 sm:my-6 p-6 bg-slate-50/90 border border-slate-200 rounded-2xl space-y-6 shadow-md w-full max-w-2xl h-fit">
       <div className="text-center space-y-2 border-b border-slate-200 pb-5">
         <span className="px-3 py-1 bg-sky-500/10 text-sky-600 rounded-full text-[10px] font-extrabold uppercase tracking-widest">
           QUIZ COMPLETED
@@ -658,6 +661,7 @@ function InteractiveQuiz({ block, editMode, onUpdateBlock }) {
           Retake Quiz
         </button>
       </div>
+    </div>
     </div>
   );
 }
