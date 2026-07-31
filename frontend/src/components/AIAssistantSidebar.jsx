@@ -443,12 +443,13 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
  
                 {scope.includes("Content") && (
                   <div className="flex flex-wrap gap-2">
-                    <button 
+                    <button
                        onClick={() => {
                           const level = details?.level || 'beginner';
-                          const subject = details?.subject || 'General';                           
+                          const subject = details?.subject || 'General';
+                          const audience = details?.requirements || 'General learners';
                           const lessonChecklist = [];
-                          (courseData?.modules || []).forEach((m, mIdx) => {
+                          (courseData?.structure?.modules || []).forEach((m, mIdx) => {
                              (m.chapters || m.lessons || []).forEach((ch, chIdx) => {
                                lessonChecklist.push({
                                  module: m.title || `Module ${mIdx + 1}`,
@@ -500,7 +501,7 @@ export default function AIAssistantSidebar({ details, courseData, onApply, onClo
                             RETURN THE FULL LIST:
                             Format: { "prompts": [ { "module": "...", "title": "...", "prompt": "..." } ] }`;
                           handleSend(prompt, "Generate All Prompts");
-                       }} 
+                       }}
                        className="text-[10px] font-bold text-slate-500 hover:text-sky-600 hover:bg-sky-50 active:scale-95 active:bg-sky-100 transition-all border border-slate-200 bg-white px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm cursor-pointer hover:shadow"
                      >
                        <Bot className="w-3 h-3 text-sky-500" />

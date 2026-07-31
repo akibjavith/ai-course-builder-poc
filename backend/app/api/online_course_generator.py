@@ -56,6 +56,51 @@ async def generate_lesson(req: LessonRequest):
         detail="This endpoint has been deprecated and disabled. Please use /course/lesson-blocks instead."
     )
 
+# ── Continuous content-depth scaling for /lesson-blocks ─────────────────────
+# Every hour value (1-20) gets its own numeric targets via a straight-line
+# scale between the 1-hour and 20-hour endpoints, instead of snapping into a
+# handful of fixed buckets — so e.g. a 5h and a 7h course actually differ,
+# and so do a 17h and a 20h course. Block-count is deliberately NOT one of
+# these targets: it's a poor proxy for depth (one block can be a sentence or
+# a page) and forcing it required an expensive, unreliable second API call
+# whenever the first pass fell short. Instead we scale the things that
+# actually drive real content depth: available token space, number of
+# sub-topics, worked examples, quiz questions, and flashcard cards.
+def _scale(hours: int, start: float, end: float) -> int:
+    return round(start + (hours - 1) * (end - start) / 19)
+
+
+def _compute_content_scaling(duration_hours: int) -> dict:
+    h = duration_hours
+    max_tokens = _scale(h, 4000, 13500)
+
+    sub_min = _scale(h, 2, 9)
+    examples_min = _scale(h, 1, 5)
+    quiz_min = _scale(h, 2, 10)
+    cards_min = _scale(h, 4, 12)
+    paragraph_depth = _scale(h, 1, 4)
+
+    # Tone/mood doesn't need to change every single hour like the numbers
+    # above do — a handful of rough moods is enough to make the writing feel
+    # different, without needing 20 slightly-different sentences.
+    if h <= 7:
+        mood = "Keep it focused and concise, covering only the essential core concepts — do not pad it out."
+    elif h <= 14:
+        mood = "Write comprehensive, well-rounded material covering the topic thoroughly, without artificial padding."
+    else:
+        mood = "This is a long-form, in-depth chapter — thorough, multi-section coverage with real depth is expected, not optional."
+
+    return {
+        "max_tokens": max_tokens,
+        "sub_topics": f"{sub_min}-{sub_min + 2}",
+        "examples": f"{examples_min}-{examples_min + 1}",
+        "quiz_questions": f"{quiz_min}-{quiz_min + 2}",
+        "flashcard_cards": f"{cards_min}-{cards_min + 2}",
+        "paragraph_depth": paragraph_depth,
+        "mood": mood,
+    }
+
+
 @router.post("/lesson-blocks", response_model=LessonBlocksResponse)
 async def generate_lesson_blocks(req: LessonRequest):
     try:
@@ -87,25 +132,33 @@ async def generate_lesson_blocks(req: LessonRequest):
         duration_hours = max(1, min(duration_hours, 20))
         logger.info(f"[LessonBlocks] resolved duration_hours: {duration_hours}")
 
-        # ── Per-hour granular token budget and dynamic system rules ───────────────
-        # Formula: 3650 base tokens for 1h, scaling +480 tokens per additional hour up to 12,800 tokens for 20h
-        initial_max_tokens = min(12800, 3650 + (duration_hours - 1) * 480)
-        max_tokens_for_tier = initial_max_tokens
+        # ── Continuous content-depth scaling (per exact hour, not a bucket) ────────
+        scaling = _compute_content_scaling(duration_hours)
+        max_tokens_for_tier = scaling["max_tokens"]
 
         system_size_rules = (
             f"COURSE DEPTH LAW — {duration_hours}-HOUR COURSE: "
-            f"This lesson is designed for a {duration_hours}-hour course level. Write high-quality, comprehensive textbook material "
-            "proportional to this course depth. You are FORBIDDEN from writing superficial summaries or placeholder text. "
+            f"This lesson belongs to a {duration_hours}-hour course. {scaling['mood']} "
             "Organically select and mix the best content blocks (code, tables, lists, callouts, paragraphs, sub-paragraphs, quizzes, flashcards, assignments) "
-            "that best fit this specific topic without forcing artificial word-count padding."
+            "that best fit this specific topic. You are FORBIDDEN from writing superficial summaries or placeholder text."
         )
 
-        logger.info(f"[LessonBlocks] duration: {duration_hours}h | initial_max_tokens: {initial_max_tokens}")
+        logger.info(
+            f"[LessonBlocks] duration: {duration_hours}h | max_tokens: {max_tokens_for_tier} | "
+            f"sub_topics: {scaling['sub_topics']} | examples: {scaling['examples']} | "
+            f"quiz_questions: {scaling['quiz_questions']} | flashcard_cards: {scaling['flashcard_cards']} | "
+            f"paragraph_depth: {scaling['paragraph_depth']}"
+        )
 
         duration_guidelines = f"""
         COURSE DEPTH: {duration_hours}-HOUR COURSE.
-        - Tailor the richness, depth of explanation, number of worked examples, and exercise blocks proportionally for a {duration_hours}-hour learning experience.
-        - Write direct, learner-ready textbook content—no teacher guidelines or placeholder text.
+        Guidance for THIS lesson (not the whole course):
+        - Cover {scaling['sub_topics']} distinct sub-topics/sections (use separate "heading" blocks for each) — do not just write one general overview. Only count sub-topics that teach genuinely new content; sections like objectives, quiz, summary, or references do not count toward this.
+        - CONTENT DEPTH PER SUB-TOPIC: every sub-topic must be explained with at least {scaling['paragraph_depth']} full "paragraph" block(s) of real, substantive explanation BEFORE any supporting "bullet_list" or "table" block. Bullet lists and tables are extra support for a sub-topic, never a replacement for proper paragraph explanation — do not cover a sub-topic with only a heading and a short bullet list.
+        - Include {scaling['examples']} fully worked "example" block(s) with complete scenarios and results.
+        - If a "quiz" block is included, bundle {scaling['quiz_questions']} questions into its single "questions" list.
+        - If a "flashcard" block is included, bundle {scaling['flashcard_cards']} cards into its single "cards" list.
+        - Write direct, learner-ready textbook content — no teacher guidelines or placeholder text.
         """
 
         # Extract style to adapt content block priorities while maintaining rich block diversity
