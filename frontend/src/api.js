@@ -1,8 +1,14 @@
 import axios from 'axios';
 
-const API_URL =
+export const API_URL =
   (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL)?.replace(/\/+$/, '') ||
-  'http://192.168.3.191:8000';
+  'http://localhost:8000';
+
+export const resolveMediaUrl = (url) => {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) return url;
+  return `${API_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+};
 
 export const uploadDoc = async (file) => {
   const formData = new FormData();

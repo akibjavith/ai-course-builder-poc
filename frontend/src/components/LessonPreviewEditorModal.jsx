@@ -5,7 +5,7 @@ import {
   BookOpen, ExternalLink, Lightbulb, CheckSquare, ListOrdered, List, Check,
   Paperclip, Upload, Loader2, Palette, Paintbrush, Layers
 } from 'lucide-react';
-import { uploadChapterMedia, listMediaFiles, getThemes, uploadTheme } from '../api';
+import { uploadChapterMedia, listMediaFiles, getThemes, uploadTheme, resolveMediaUrl } from '../api';
 import SecureDocViewer from './SecureDocViewer';
 import ActionModal from './ActionModal';
 import DynamicStyle from './DynamicStyle';
@@ -1672,7 +1672,7 @@ export default function LessonPreviewEditorModal({
                           ) : (
                             <div className="image-block-container">
                               {block.url ? (
-                                <img src={block.url} alt={block.caption || ''} className="max-w-full max-h-[400px] object-contain rounded-xl mx-auto shadow-sm" />
+                                <img src={resolveMediaUrl(block.url)} alt={block.caption || ''} className="max-w-full max-h-[400px] object-contain rounded-xl mx-auto shadow-sm" />
                               ) : (
                                 <div className="h-40 bg-slate-100 flex items-center justify-center rounded-xl border border-dashed border-slate-200 text-slate-400 text-xs">
                                   [Visual Placeholder: {block.caption}]

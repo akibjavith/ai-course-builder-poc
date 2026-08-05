@@ -18,3 +18,4 @@ python-pptx
 youtube-transcript-api
 beautifulsoup4
 mysql-connector-python
+duckduckgo-search

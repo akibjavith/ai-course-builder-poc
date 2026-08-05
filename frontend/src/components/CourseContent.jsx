@@ -136,51 +136,63 @@ export default function CourseContent({ courseData, updateCourseData, contentGen
 
   // NOTE: deleting lessons is not supported here; only content blocks should be deleted.
 
+  const cleanTitle = (str) => {
+    if (!str) return '';
+    return str.toLowerCase()
+      .replace(/^(\d+[\.\-\:]\d*|\bchapter\s*\d+|\bmodule\s*\d+)[\s\:\-\.]*/i, '')
+      .replace(/[^\w\s]/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
   const handleApplyAISuggestion = (suggestion) => {
     if (suggestion.prompts && Array.isArray(suggestion.prompts) && suggestion.prompts.length > 0) {
       let globalLessonCounter = 0;
       const newModules = (courseData.structure?.modules || []).map((mod) => {
-        const mTitle = (mod.title || "").trim().toLowerCase();
+        const mTitleClean = cleanTitle(mod.title);
         return {
           ...mod,
           chapters: (mod.chapters || []).map((chap) => {
             const currentGlobalIdx = globalLessonCounter;
             globalLessonCounter++;
 
-            const cTitle = (chap.title || "").trim().toLowerCase();
+            const cTitleRaw = (chap.title || "").trim().toLowerCase();
+            const cTitleClean = cleanTitle(chap.title);
             
-            // Pass 1: Exact title match
+            // Pass 1: Clean title & module match
             let matchingItem = suggestion.prompts.find(p => {
               if (!p) return false;
-              const pTitle = (p.title || p.lesson || "").trim().toLowerCase();
-              const pMod = (p.module || "").trim().toLowerCase();
-              return pTitle === cTitle && (!pMod || pMod === mTitle);
+              const pTitleClean = cleanTitle(p.title || p.lesson || p.chapter);
+              const pModClean = cleanTitle(p.module);
+              return pTitleClean === cTitleClean && (!pModClean || pModClean === mTitleClean);
             });
 
-            // Pass 2: Exact title match without module restriction
+            // Pass 2: Clean title match without module restriction
             if (!matchingItem) {
               matchingItem = suggestion.prompts.find(p => {
                 if (!p) return false;
-                const pTitle = (p.title || p.lesson || "").trim().toLowerCase();
-                return pTitle === cTitle;
+                const pTitleClean = cleanTitle(p.title || p.lesson || p.chapter);
+                return pTitleClean && pTitleClean === cTitleClean;
               });
             }
 
-            // Pass 3: Partial substring match
+            // Pass 3: Partial substring match (cleaned or raw)
             if (!matchingItem) {
               matchingItem = suggestion.prompts.find(p => {
                 if (!p) return false;
-                const pTitle = (p.title || p.lesson || "").trim().toLowerCase();
-                return (pTitle && cTitle) && (pTitle.includes(cTitle) || cTitle.includes(pTitle));
+                const pTitleRaw = (p.title || p.lesson || p.chapter || "").trim().toLowerCase();
+                const pTitleClean = cleanTitle(pTitleRaw);
+                return (pTitleClean && cTitleClean && (pTitleClean.includes(cTitleClean) || cTitleClean.includes(pTitleClean))) ||
+                       (pTitleRaw && cTitleRaw && (pTitleRaw.includes(cTitleRaw) || cTitleRaw.includes(pTitleRaw)));
               });
             }
 
-            // Pass 4: Positional index fallback if global index exists in prompts array
+            // Pass 4: Positional index fallback
             if (!matchingItem && currentGlobalIdx < suggestion.prompts.length) {
               matchingItem = suggestion.prompts[currentGlobalIdx];
             }
 
-            const matchingPrompt = matchingItem?.prompt;
+            const matchingPrompt = typeof matchingItem === 'string' ? matchingItem : (matchingItem?.prompt || matchingItem?.content);
 
             if (matchingPrompt) {
               return {
@@ -595,7 +607,8 @@ export default function CourseContent({ courseData, updateCourseData, contentGen
     setSidebarRequest({ 
       text: prompt, 
       display: "Generate All Prompts", 
-      fillInput: false 
+      fillInput: false,
+      _ts: Date.now()
     });
     setShowSidebar(true);
     setTimeout(() => setSidebarRequest(null), 100);

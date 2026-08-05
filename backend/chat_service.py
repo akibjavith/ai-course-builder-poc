@@ -114,7 +114,7 @@ def build_system_prompt(scope: str, details: dict, course_data: dict, available_
         "   - Science lessons: MUST instruct to use numbered_list blocks for experiments, callout blocks for warnings/tips, and table blocks for observation data.\n"
         "   - Cybersecurity lessons: MUST instruct to use example blocks for threat scenarios and assignment blocks for security configurations.\n"
         "   - Business lessons: MUST instruct to use example blocks for case study details and table blocks for strategic analysis comparisons.\n"
-        "5. Each individual prompt MUST be highly comprehensive, detailed, and extremely actionable (between 150 and 250 words) to ensure educational quality.\n"
+        "5. Each individual prompt MUST be concise, focused, and actionable (between 60 and 90 words per lesson) to ensure complete coverage of ALL modules and submodules within the output array.\n"
         "6. PROMPT CLEAN FORMATTING RULE (CRITICAL):\n"
         "   - STRICTLY FORBIDDEN FROM OUTPUTTING RAW MARKDOWN TABLES (e.g. do NOT use '|---|', '| Word | Definition |'). Instead, format vocabulary focus as clean bullet points (e.g. '• Variable: A storage location identified by a name').\n"
         "   - STRICTLY FORBIDDEN FROM USING ASTERISK MARKDOWN (e.g. do NOT use '**Learning Objectives:**' or '**Vocabulary:**'). Use clean plain-text section titles (e.g. 'Learning Objectives:', 'Vocabulary Focus:', 'Content Requirements:').\n"

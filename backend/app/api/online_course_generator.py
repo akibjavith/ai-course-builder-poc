@@ -19,6 +19,8 @@ from schemas import (
     OutlineRequest, ChapterContent, CourseQuiz, CourseDetails,
     LessonRequest, QuizRequest, StoreCourseRequest, LessonBlocksResponse
 )
+from image_retriever import retrieve_and_store_educational_image
+
 
 
 _client = None
@@ -139,7 +141,7 @@ async def generate_lesson_blocks(req: LessonRequest):
         system_size_rules = (
             f"COURSE DEPTH LAW — {duration_hours}-HOUR COURSE: "
             f"This lesson belongs to a {duration_hours}-hour course. {scaling['mood']} "
-            "Organically select and mix the best content blocks (code, tables, lists, callouts, paragraphs, sub-paragraphs, quizzes, flashcards, assignments) "
+            "Organically select and mix the best content blocks (image, code, tables, lists, callouts, paragraphs, sub-paragraphs, quizzes, flashcards, assignments) "
             "that best fit this specific topic. You are FORBIDDEN from writing superficial summaries or placeholder text."
         )
 
@@ -155,6 +157,7 @@ async def generate_lesson_blocks(req: LessonRequest):
         Guidance for THIS lesson (not the whole course):
         - Cover {scaling['sub_topics']} distinct sub-topics/sections (use separate "heading" blocks for each) — do not just write one general overview. Only count sub-topics that teach genuinely new content; sections like objectives, quiz, summary, or references do not count toward this.
         - CONTENT DEPTH PER SUB-TOPIC: every sub-topic must be explained with at least {scaling['paragraph_depth']} full "paragraph" block(s) of real, substantive explanation BEFORE any supporting "bullet_list" or "table" block. Bullet lists and tables are extra support for a sub-topic, never a replacement for proper paragraph explanation — do not cover a sub-topic with only a heading and a short bullet list.
+        - Include 1 to 2 "image" blocks with descriptive "search_query" whenever explaining visual concepts, plot layouts, architecture diagrams, data flows, or workflow processes.
         - Include {scaling['examples']} fully worked "example" block(s) with complete scenarios and results.
         - If a "quiz" block is included, bundle {scaling['quiz_questions']} questions into its single "questions" list.
         - If a "flashcard" block is included, bundle {scaling['flashcard_cards']} cards into its single "cards" list.
@@ -167,22 +170,22 @@ async def generate_lesson_blocks(req: LessonRequest):
         if "coding" in style_lower or "programming" in style_lower or "code" in style_lower:
             style_guidelines = """
         PRIMARY LEARNING STYLE PREFERENCE: 'Hands-on Coding'.
-        - Prioritize functional "code" blocks with thorough line-by-line explanations alongside supporting "paragraph", "callout", and "example" blocks.
+        - Prioritize functional "code" blocks with thorough explanations alongside supporting "paragraph", "image" (diagrams, plot structures, flowcharts), "callout", and "example" blocks.
         """
         elif "explain" in style_lower or "text" in style_lower or "detailed" in style_lower:
             style_guidelines = """
         PRIMARY LEARNING STYLE PREFERENCE: 'Detailed Explanations'.
-        - Prioritize thorough "paragraph" textbook blocks, "callout" notes, and "example" case studies.
+        - Prioritize thorough "paragraph" textbook blocks, "image" (concept diagrams, infographics), "callout" notes, and "example" case studies.
         """
         elif "quiz" in style_lower or "question" in style_lower or "check" in style_lower:
             style_guidelines = """
         PRIMARY LEARNING STYLE PREFERENCE: 'Interactive Quizzes'.
-        - Include self-assessment "quiz" and "flashcard" blocks alongside explanatory paragraph context. Put ALL quiz questions for this lesson into a single "quiz" block's "questions" list (do not create multiple separate quiz blocks); similarly put all flashcards into a single "flashcard" block's "cards" list.
+        - Include self-assessment "quiz" and "flashcard" blocks alongside explanatory paragraph context and supporting "image" diagrams. Put ALL quiz questions into a single "quiz" block's "questions" list; similarly put all flashcards into a single "flashcard" block's "cards" list.
         """
         elif "table" in style_lower or "structure" in style_lower or "chart" in style_lower:
             style_guidelines = """
         PRIMARY LEARNING STYLE PREFERENCE: 'Structured Tables'.
-        - Prioritize data-rich "table" blocks (comparison matrices, feature breakdowns) alongside explanatory paragraphs.
+        - Prioritize data-rich "table" blocks (comparison matrices, feature breakdowns) alongside explanatory paragraphs and supporting "image" diagrams.
         """
         elif "image" in style_lower or "visual" in style_lower or "diagram" in style_lower or "infographic" in style_lower:
             style_guidelines = """
@@ -197,7 +200,14 @@ async def generate_lesson_blocks(req: LessonRequest):
         else:
             style_guidelines = """
         PRIMARY LEARNING STYLE PREFERENCE: 'Balanced Combination'.
-        - Combine explanatory "paragraph" text, "callout" tips, "table" breakdowns, "code" snippets (if applicable), "quiz" questions, and "flashcard" blocks into a rich learning flow.
+        - Combine explanatory "paragraph" text, "image" (educational diagrams, flowcharts, infographics), "callout" tips, "table" breakdowns, "code" snippets (if applicable), "quiz" questions, and "flashcard" blocks into a rich learning flow.
+        """
+
+        visual_rule = """
+        EDUCATIONAL VISUAL & DIAGRAM GUIDELINE:
+        - Analyze the lesson topic. Whenever explaining a concept, workflow, architectural diagram, plot layout (e.g. Seaborn chart types, Matplotlib hierarchy), marketing strategy funnel, algorithm, or data pipeline, insert an "image" block.
+        - Set "search_query" to a concise 3-5 word query targeting an educational visual (e.g., "Seaborn jointplot architecture diagram", "Digital marketing funnel strategy diagram").
+        - If a lesson topic is purely abstract or text-only and doesn't benefit from a visual representation, you may omit the image block.
         """
 
         prompt_str = f"""
@@ -209,6 +219,7 @@ async def generate_lesson_blocks(req: LessonRequest):
         
         {duration_guidelines}
         {style_guidelines}
+        {visual_rule}
         
         Additional prompt instructions / focus areas: {req.prompt or 'None'}
 
@@ -226,7 +237,7 @@ async def generate_lesson_blocks(req: LessonRequest):
         2. "paragraph": text. Write clear, thorough, learner-ready content. Use sub-paragraphs or multiple paragraph blocks as needed.
         3. "bullet_list": items (list of strings).
         4. "numbered_list": items (list of strings).
-        5. "image": url (always output "" for now), caption (describe what the visual should represent).
+        5. "image": search_query (specific 3-5 word query targeting an educational diagram, flowchart, architecture model, or infographic for this section, e.g., "Convolutional Neural Network CNN architecture diagram"), caption (educational explanation of what the visual represents). VISUAL AID RULE: For conceptual, technical, architectural, or scientific topics, actively include 1 to 2 "image" blocks in the lesson where a diagram, flowchart, or architecture model helps explain the topic.
         6. "video": url (always output "" for now), caption (describe what the video/narration should show).
         7. "table": headers (list of strings), rows (list of lists of strings). Used for comparisons, classifications, and vocabulary guides.
         8. "callout": text, callout_type (one of: "info", "warning", "tip", "danger").
@@ -240,9 +251,9 @@ async def generate_lesson_blocks(req: LessonRequest):
 
         SUBJECT ADAPTATION MATRIX:
         - Language Lessons: Use paragraph blocks for reading passages, code blocks or paragraph blocks formatted as dialogue scripts (e.g., Speaker A vs Speaker B), and table blocks for vocabulary definitions.
-        - Programming Lessons: Use code blocks for fully functional code snippets and explanations, and paragraph blocks for code analysis.
+        - Programming & AI/ML Lessons: Use code blocks for functional snippets, paragraph blocks for explanations, and "image" blocks for model architecture diagrams, memory layouts, or flowcharts.
         - Mathematics Lessons: Use paragraph blocks for step-by-step worked solutions and example blocks for math problem solving.
-        - Science Lessons: Detail observations, case studies, or step-by-step experiments.
+        - Science Lessons: Detail observations, case studies, or step-by-step experiments with relevant visual diagram blocks.
         - Cybersecurity Lessons: Detail security configurations, threat analyses, and interactive scenarios.
         - Business Lessons: Detail case study text, strategic analyses, and practical scenarios.
 
@@ -258,6 +269,11 @@ async def generate_lesson_blocks(req: LessonRequest):
                 {{
                     "type": "paragraph",
                     "text": "..."
+                }},
+                {{
+                    "type": "image",
+                    "search_query": "Neural Network architecture diagram",
+                    "caption": "Overview of input, hidden, and output layers in an artificial neural network."
                 }},
                 {{
                     "type": "quiz",
@@ -460,7 +476,7 @@ async def generate_lesson_blocks(req: LessonRequest):
                     block["type"] = "table"
                 elif "level" in block:
                     block["type"] = "heading"
-                elif "url" in block and ("caption" in block or "image" in block):
+                elif "search_query" in block or "image_url" in block or ("url" in block and ("caption" in block or "image" in block)):
                     block["type"] = "image"
                 elif "items" in block:
                     block["type"] = "bullet_list"
@@ -504,7 +520,25 @@ async def generate_lesson_blocks(req: LessonRequest):
                 else:
                     block["items"] = [str(items)]
                     
-            elif block_type in ["image", "video"]:
+            elif block_type == "image":
+                block["caption"] = str(block.get("caption") or "")
+                search_q = str(block.get("search_query") or block.get("caption") or req.title or "")
+                session_id = str(req.course_details.courseName if req.course_details else "default_session")
+                course_lang = str(req.course_details.language if req.course_details else "English")
+                
+                # Fetch local educational image path via ImageRetriever
+                local_path = retrieve_and_store_educational_image(
+                    search_query=search_q,
+                    subject=subject,
+                    language=course_lang,
+                    session_id=session_id
+                )
+                if local_path:
+                    block["url"] = local_path
+                else:
+                    block["url"] = str(block.get("url") or "")
+                    
+            elif block_type == "video":
                 block["url"] = str(block.get("url") or "")
                 block["caption"] = str(block.get("caption") or "")
                 

@@ -178,8 +178,9 @@ class NumberedListBlock(BaseModel):
 class ImageBlock(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     type: Literal["image"] = "image"
-    url: str
+    url: Optional[str] = ""
     caption: str
+    search_query: Optional[str] = None
 
 class VideoBlock(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
