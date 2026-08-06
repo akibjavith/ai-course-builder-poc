@@ -5,7 +5,7 @@ import {
   BookOpen, ExternalLink, Lightbulb, CheckSquare, ListOrdered, List, Check,
   Paperclip, Upload, Loader2, Palette, Paintbrush, Layers
 } from 'lucide-react';
-import { uploadChapterMedia, listMediaFiles, getThemes, uploadTheme, resolveMediaUrl } from '../api';
+import { uploadChapterMedia, uploadCourseImage, listMediaFiles, getThemes, uploadTheme, resolveMediaUrl } from '../api';
 import SecureDocViewer from './SecureDocViewer';
 import ActionModal from './ActionModal';
 import DynamicStyle from './DynamicStyle';
@@ -1652,11 +1652,61 @@ export default function LessonPreviewEditorModal({
 
                         {block.type === 'image' && (
                           editMode ? (
-                            <div className="space-y-2 p-3 bg-slate-50/50 border border-slate-100 rounded-xl">
-                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Image Block</label>
+                            <div className="space-y-3 p-3 bg-slate-50/50 border border-slate-100 rounded-xl">
+                              <div className="flex items-center justify-between">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Image Block</label>
+                                <div className="flex items-center gap-2">
+                                  <input 
+                                    type="file" 
+                                    accept="image/*"
+                                    id={`image-block-upload-${idx}`} 
+                                    className="hidden" 
+                                    onChange={async (e) => {
+                                      const file = e.target.files?.[0];
+                                      if (!file) return;
+                                      try {
+                                        setUploadingBlockIdx(idx);
+                                        const res = await uploadCourseImage(file);
+                                        if (res && res.url) {
+                                          handleUpdateBlock(idx, { url: res.url });
+                                        }
+                                      } catch (err) {
+                                        console.error("Failed to upload course image:", err);
+                                        setModalConfig({
+                                          title: 'Upload Failed',
+                                          message: 'Could not upload image file. Please try again.',
+                                          type: 'warning',
+                                          confirmText: 'Got It'
+                                        });
+                                      } finally {
+                                        setUploadingBlockIdx(null);
+                                        e.target.value = '';
+                                      }
+                                    }}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => document.getElementById(`image-block-upload-${idx}`)?.click()}
+                                    disabled={uploadingBlockIdx === idx}
+                                    className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg transition active:scale-95 disabled:opacity-50 shadow-sm cursor-pointer"
+                                  >
+                                    {uploadingBlockIdx === idx ? (
+                                      <>
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                        <span>Uploading...</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Upload className="w-3 h-3" />
+                                        <span>Upload Local Image</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
                               <input 
                                 type="text"
-                                placeholder="Image URL (can be empty)"
+                                placeholder="Image URL (e.g. /uploads/course_images/...)"
                                 value={block.url || ''}
                                 onChange={(e) => handleUpdateBlock(idx, { url: e.target.value })}
                                 className="editor-text-input !p-2 !text-xs"
@@ -1668,6 +1718,11 @@ export default function LessonPreviewEditorModal({
                                 onChange={(e) => handleUpdateBlock(idx, { caption: e.target.value })}
                                 className="editor-text-input !p-2 !text-xs"
                               />
+                              {block.url && (
+                                <div className="mt-2 relative rounded-lg overflow-hidden border border-slate-200 bg-white p-1.5 max-h-36 flex items-center justify-center">
+                                  <img src={resolveMediaUrl(block.url)} alt={block.caption || ''} className="max-h-32 object-contain rounded-md" />
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <div className="image-block-container">

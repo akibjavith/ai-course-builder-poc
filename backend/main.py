@@ -344,6 +344,27 @@ async def upload_thumbnail(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/course/upload-course-image")
+async def upload_course_image(file: UploadFile = File(...)):
+    validate_uploaded_file(file, 10.0, ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'])
+    import uuid
+    import shutil
+    
+    extension = os.path.splitext(file.filename)[1].lower()
+    filename = f"user_img_{uuid.uuid4().hex[:10]}{extension}"
+    upload_dir = os.path.join("uploads", "course_images")
+    os.makedirs(upload_dir, exist_ok=True)
+    file_path = os.path.join(upload_dir, filename)
+    
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        local_url = f"/uploads/course_images/{filename}"
+        return {"status": "success", "url": local_url}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/course/fetch-web")
 async def fetch_web(req: FetchWebRequest):
     import requests
