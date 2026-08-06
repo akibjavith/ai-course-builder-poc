@@ -1,13 +1,28 @@
 import os
 import re
 import uuid
+import json
 import logging
 import hashlib
 import urllib.parse
 import requests
 from typing import Optional, List, Set, Dict
+from openai import OpenAI
 
 logger = logging.getLogger("image_retriever")
+
+# Initialize OpenAI client lazily or safely
+openai_client = None
+def get_openai_client():
+    global openai_client
+    if openai_client is None:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if api_key:
+            try:
+                openai_client = OpenAI(api_key=api_key)
+            except Exception as e:
+                logger.warning(f"Could not initialize OpenAI client in image_retriever: {e}")
+    return openai_client
 
 # Global in-memory cache for session-based image deduplication: { session_id: set_of_used_urls }
 USED_IMAGES_CACHE: Dict[str, Set[str]] = {}
@@ -82,7 +97,7 @@ UNSAFE_KEYWORDS = [
 
 def sanitize_search_query(query: str, subject: str = "") -> str:
     """
-    Cleans and restricts search query to 3-5 concise words so web engines return top matches.
+    Fallback heuristic cleaner: Cleans and restricts search query to 3-5 concise words.
     """
     clean = re.sub(r'(?i)\b(examples|illustration|visualization|overview|showing|diagram of|picture of|image of|concept of|a|an|the|and|or|for|in|with|using)\b', ' ', query)
     clean = re.sub(r'[^\w\s]', ' ', clean)
@@ -106,6 +121,56 @@ def sanitize_search_query(query: str, subject: str = "") -> str:
         final_q = short_query
 
     return re.sub(r'\s+', ' ', final_q).strip()
+
+def ai_optimize_search_query(search_query: str, subject: str = "", draft_id: str = "") -> List[str]:
+    """
+    Option 1 - Step 1: Uses gpt-4o-mini to convert raw search_query into 2-3 hyper-focused
+    educational diagram search terms for web search engines.
+    """
+    client = get_openai_client()
+    if not client:
+        return [sanitize_search_query(search_query, subject)]
+
+    try:
+        sys_msg = (
+            "You are an expert educational research assistant specializing in web image retrieval.\n"
+            "Given a raw lesson topic/query and course subject, output a JSON array of 2 to 3 concise, "
+            "hyper-specific web image search terms tailored to find real-world documentation, "
+            "plots, flowcharts, or educational diagrams.\n"
+            "Rules:\n"
+            "1. Each query must be 3 to 5 words max.\n"
+            "2. Focus on terms like 'diagram', 'plot', 'architecture', 'chart', or official docs (e.g. 'seaborn pydata plot').\n"
+            "3. Format: {\"queries\": [\"query1\", \"query2\"]}"
+        )
+        user_msg = f"Subject: {subject}\nRaw Query: {search_query}"
+        
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": sys_msg},
+                {"role": "user", "content": user_msg}
+            ],
+            temperature=0.3,
+            max_tokens=100
+        )
+
+        if draft_id and draft_id != "default":
+            try:
+                from metering_helper import track_chatbot_cost
+                track_chatbot_cost(draft_id, response, "gpt-4o-mini", "image_query_optimization")
+            except Exception as ex:
+                logger.error(f"Failed to track image query optimization cost: {ex}")
+        
+        content = response.choices[0].message.content.strip()
+        parsed = json.loads(content)
+        queries = parsed.get("queries", [])
+        if queries and isinstance(queries, list):
+            logger.info(f"[AI Query Optimizer] Generated AI queries: {queries}")
+            return [q.strip() for q in queries if q and isinstance(q, str)]
+    except Exception as e:
+        logger.warning(f"[AI Query Optimizer] Fallback to heuristic query due to: {e}")
+        
+    return [sanitize_search_query(search_query, subject)]
 
 def is_safe_and_relevant(image_item: dict, subject: str = "", language: str = "English") -> bool:
     """
@@ -140,7 +205,7 @@ def is_safe_and_relevant(image_item: dict, subject: str = "", language: str = "E
 
 def rank_candidate_images(candidates: List[dict]) -> List[dict]:
     """
-    Ranks candidate images pooled across all 4 search providers based on domain trust, visual type, and quality.
+    Ranks candidate images pooled across search providers based on domain trust, visual type, and quality.
     """
     def score_image(item):
         score = 0
@@ -162,6 +227,72 @@ def rank_candidate_images(candidates: List[dict]) -> List[dict]:
         return score
 
     return sorted(candidates, key=score_image, reverse=True)
+
+def ai_inspect_and_select_candidate(candidates: List[dict], subject: str = "", search_query: str = "", draft_id: str = "") -> Optional[dict]:
+    """
+    Option 1 - Step 2: Uses gpt-4o-mini to inspect candidate titles/URLs and select the #1
+    most educationally accurate candidate, rejecting homonyms or stock photos.
+    """
+    if not candidates:
+        return None
+        
+    client = get_openai_client()
+    if not client or len(candidates) == 1:
+        ranked = rank_candidate_images(candidates)
+        return ranked[0] if ranked else None
+
+    try:
+        candidate_summary = []
+        for idx, item in enumerate(candidates[:6]):
+            title = item.get("title", "")
+            url = item.get("image") or item.get("url") or ""
+            src = item.get("source", "")
+            candidate_summary.append(f"[{idx}] Title: '{title}' | Source: {src} | URL: {url}")
+            
+        summary_str = "\n".join(candidate_summary)
+        
+        sys_msg = (
+            "You are an AI Image Inspection Judge for educational courses.\n"
+            "Review the list of candidate web images below for a given lesson topic and subject.\n"
+            "Select the single candidate index (0-based) that represents the most accurate, high-quality, "
+            "educational diagram, flowchart, code plot, or authentic concept picture.\n"
+            "STRICT RULES:\n"
+            "1. Reject homonyms (e.g. reject real snakes for Python code, reject biological human brain for AI neural net, reject real animals for Pandas dataframe).\n"
+            "2. Prefer official documentation, Wikipedia, or educational domains.\n"
+            "3. Format JSON response: {\"selected_index\": 0, \"reason\": \"...\"}"
+        )
+        user_msg = f"Subject: {subject}\nLesson Topic: {search_query}\n\nCandidates:\n{summary_str}"
+        
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": sys_msg},
+                {"role": "user", "content": user_msg}
+            ],
+            temperature=0.2,
+            max_tokens=100
+        )
+
+        if draft_id and draft_id != "default":
+            try:
+                from metering_helper import track_chatbot_cost
+                track_chatbot_cost(draft_id, response, "gpt-4o-mini", "image_candidate_inspection")
+            except Exception as ex:
+                logger.error(f"Failed to track image candidate inspection cost: {ex}")
+        
+        content = response.choices[0].message.content.strip()
+        parsed = json.loads(content)
+        selected_idx = parsed.get("selected_index")
+        
+        if selected_idx is not None and isinstance(selected_idx, int) and 0 <= selected_idx < len(candidates[:6]):
+            selected_item = candidates[selected_idx]
+            logger.info(f"[AI Candidate Inspector] Selected candidate #{selected_idx} ('{selected_item.get('title')}'). Reason: {parsed.get('reason')}")
+            return selected_item
+    except Exception as e:
+        logger.warning(f"[AI Candidate Inspector] Fallback to heuristic ranking due to: {e}")
+        
+    ranked = rank_candidate_images(candidates)
+    return ranked[0] if ranked else None
 
 def search_wikipedia_images(query: str, max_results: int = 6) -> List[dict]:
     """
@@ -343,8 +474,11 @@ def retrieve_and_store_educational_image(
     session_id: str = "default"
 ) -> Optional[str]:
     """
-    Main entry point: Pools candidates across 4 engines (Wikipedia, Wikimedia Commons, DuckDuckGo, Pixabay),
-    ranks all candidates by educational authority and clarity, and downloads the top #1 unused image.
+    Main entry point with Option 1 AI Enhancement:
+    1. Uses gpt-4o-mini to generate 2-3 precise search terms.
+    2. Pools candidates across 4 engines (Wikipedia, Wikimedia Commons, DuckDuckGo, Pixabay).
+    3. Uses gpt-4o-mini AI Candidate Inspector to pick the #1 most accurate educational image.
+    4. Downloads selected image to /uploads/course_images/ and tracks deduplication.
     """
     if not search_query:
         return None
@@ -353,22 +487,17 @@ def retrieve_and_store_educational_image(
         USED_IMAGES_CACHE[session_id] = set()
     used_set = USED_IMAGES_CACHE[session_id]
 
-    final_query = sanitize_search_query(search_query, subject)
-    fallback_query = " ".join(final_query.split()[:3]) + " diagram"
+    # Step 1: AI-Optimized Search Queries (with heuristic fallback)
+    optimized_queries = ai_optimize_search_query(search_query, subject, draft_id=session_id)
+    logger.info(f"[ImageRetriever] Raw query: '{search_query}' -> AI Queries: {optimized_queries}")
 
-    logger.info(f"[ImageRetriever] Search query: '{search_query}' -> Sanitized: '{final_query}'")
-
-    queries_to_try = [final_query]
-    if fallback_query != final_query:
-        queries_to_try.append(fallback_query)
-
-    for q in queries_to_try:
+    for q in optimized_queries:
         # Pool candidates across ALL 4 ENGINES
         candidates = []
-        candidates.extend(search_wikipedia_images(q, max_results=6))
-        candidates.extend(search_wikimedia_commons_images(q, max_results=6))
-        candidates.extend(search_duckduckgo_images(q, max_results=6))
-        candidates.extend(search_pixabay_images(q, max_results=6))
+        candidates.extend(search_wikipedia_images(q, max_results=5))
+        candidates.extend(search_wikimedia_commons_images(q, max_results=5))
+        candidates.extend(search_duckduckgo_images(q, max_results=5))
+        candidates.extend(search_pixabay_images(q, max_results=5))
 
         if not candidates:
             continue
@@ -377,10 +506,15 @@ def retrieve_and_store_educational_image(
         if not safe_candidates:
             continue
 
-        # Rank all candidate images from all 4 providers together to pick the absolute best one
-        ranked_candidates = rank_candidate_images(safe_candidates)
+        # Step 2: AI Candidate Inspector to pick the #1 most educationally accurate image
+        selected_candidate = ai_inspect_and_select_candidate(safe_candidates, subject=subject, search_query=search_query, draft_id=session_id)
 
-        for candidate in ranked_candidates:
+        # Fallback to list iteration if selected candidate fails or was used
+        candidates_to_try = [selected_candidate] + [c for c in rank_candidate_images(safe_candidates) if c != selected_candidate]
+
+        for candidate in candidates_to_try:
+            if not candidate:
+                continue
             img_url = candidate.get("image") or candidate.get("url") or candidate.get("thumbnail")
             if not img_url:
                 continue
@@ -393,7 +527,7 @@ def retrieve_and_store_educational_image(
             local_path = download_and_save_image(img_url)
             if local_path:
                 used_set.add(url_hash)
-                logger.info(f"[ImageRetriever] #1 Ranked Image selected from {candidate.get('source')}: {img_url}")
+                logger.info(f"[ImageRetriever] Selected image from {candidate.get('source')}: {img_url}")
                 return local_path
 
     logger.warning(f"[ImageRetriever] Could not download any candidate for query: '{search_query}'")
