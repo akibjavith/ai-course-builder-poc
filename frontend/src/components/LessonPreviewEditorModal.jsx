@@ -5,7 +5,7 @@ import {
   BookOpen, ExternalLink, Lightbulb, CheckSquare, ListOrdered, List, Check,
   Paperclip, Upload, Loader2, Palette, Paintbrush, Layers
 } from 'lucide-react';
-import { uploadChapterMedia, uploadCourseImage, listMediaFiles, getThemes, uploadTheme, resolveMediaUrl } from '../api';
+import { uploadChapterMedia, uploadCourseImage, downloadExternalImage, listMediaFiles, getThemes, uploadTheme, resolveMediaUrl, API_URL } from '../api';
 import SecureDocViewer from './SecureDocViewer';
 import ActionModal from './ActionModal';
 import DynamicStyle from './DynamicStyle';
@@ -1130,18 +1130,61 @@ export default function LessonPreviewEditorModal({
     setActive({ mIdx: next.mIdx, cIdx: next.cIdx });
   };
 
+  const isExternalUrl = (url) => {
+    if (!url) return false;
+    let trimmed = url.trim();
+    if (trimmed.startsWith('www.')) trimmed = 'https://' + trimmed;
+    if (!trimmed.match(/^https?:\/\//i)) return false;
+    if (trimmed.startsWith(API_URL) || trimmed.startsWith('http://localhost') || trimmed.startsWith('http://127.0.0.1') || trimmed.startsWith('/uploads/')) {
+      return false;
+    }
+    return true;
+  };
+
   const handleUpdateBlock = (idx, fields) => {
-    if (!blocksDraft) return;
-    const updated = [...blocksDraft];
-    updated[idx] = { ...updated[idx], ...fields };
-    setBlocksDraft(updated);
+    setBlocksDraft(prev => {
+      if (!prev) return prev;
+      const updated = [...prev];
+      updated[idx] = { ...updated[idx], ...fields };
+      return updated;
+    });
+  };
+
+  const handleDownloadExternalImage = async (idx, rawUrl) => {
+    let trimmed = (rawUrl || '').trim();
+    if (!trimmed) return;
+    if (trimmed.startsWith('www.')) {
+      trimmed = 'https://' + trimmed;
+    }
+    if (!isExternalUrl(trimmed)) {
+      return;
+    }
+    try {
+      setUploadingBlockIdx(idx);
+      const res = await downloadExternalImage(trimmed);
+      if (res && res.url) {
+        handleUpdateBlock(idx, { url: res.url });
+      }
+    } catch (err) {
+      console.error("Failed to download external image:", err);
+      setModalConfig({
+        title: 'Download Failed',
+        message: err?.response?.data?.detail || 'Could not download external image URL to local storage. Check the link and try again.',
+        type: 'warning',
+        confirmText: 'Got It'
+      });
+    } finally {
+      setUploadingBlockIdx(null);
+    }
   };
 
   const handleDeleteBlock = (idx) => {
-    if (!blocksDraft) return;
-    const updated = [...blocksDraft];
-    updated.splice(idx, 1);
-    setBlocksDraft(updated);
+    setBlocksDraft(prev => {
+      if (!prev) return prev;
+      const updated = [...prev];
+      updated.splice(idx, 1);
+      return updated;
+    });
   };
 
   const handleInsertBlock = (idx, type) => {
@@ -1212,6 +1255,7 @@ export default function LessonPreviewEditorModal({
 
   const handleSaveDraft = () => {
     if (readOnly) return;
+
     const newModules = (courseData.structure?.modules || []).map((mod, m) => {
       if (m !== active.mIdx) return mod;
       return {
@@ -1704,13 +1748,43 @@ export default function LessonPreviewEditorModal({
                                   </button>
                                 </div>
                               </div>
-                              <input 
-                                type="text"
-                                placeholder="Image URL (e.g. /uploads/course_images/...)"
-                                value={block.url || ''}
-                                onChange={(e) => handleUpdateBlock(idx, { url: e.target.value })}
-                                className="editor-text-input !p-2 !text-xs"
-                              />
+                              <div className="space-y-1.5">
+                                <div className="flex gap-2 items-center">
+                                  <input 
+                                    type="text"
+                                    placeholder="Image URL (e.g. https://... or /uploads/...)"
+                                    value={block.url || ''}
+                                    onChange={(e) => handleUpdateBlock(idx, { url: e.target.value })}
+                                    className="editor-text-input !p-2 !text-xs flex-1"
+                                  />
+                                  {block.url && isExternalUrl(block.url) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDownloadExternalImage(idx, block.url)}
+                                      disabled={uploadingBlockIdx === idx}
+                                      className="flex items-center gap-1 bg-sky-500 hover:bg-sky-600 text-white text-[10px] font-bold px-2.5 py-2 rounded-lg transition disabled:opacity-50 whitespace-nowrap shadow-sm cursor-pointer"
+                                      title="Download & save image to local server uploads"
+                                    >
+                                      {uploadingBlockIdx === idx ? (
+                                        <>
+                                          <Loader2 className="w-3 h-3 animate-spin" />
+                                          <span>Saving to Server...</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Upload className="w-3 h-3" />
+                                          <span>Save to Server</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  )}
+                                </div>
+                                {block.url && isExternalUrl(block.url) && (
+                                  <p className="text-[10px] text-amber-600 font-medium flex items-center gap-1">
+                                    <Info className="w-3 h-3 inline" /> External URL detected. Click "Save to Server" if you wish to store a local copy on your server.
+                                  </p>
+                                )}
+                              </div>
                               <input 
                                 type="text"
                                 placeholder="Caption / Prompt Description"

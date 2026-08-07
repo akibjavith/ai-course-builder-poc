@@ -8,7 +8,7 @@ from schemas import (
     GenerateTitleRequest, GenerateTitleResponse, FetchWebRequest, FetchYouTubeRequest,
     GenerateOutlineBaseRequest, ExportChapterRequest, GenerateVoiceScriptReq, GenerateFlashcardsRequest,
     GenerateMCQRequest, GenerateAssessmentRequest, ChatRequest, ThemeUploadRequest,
-    ChatbotBuilderRequest
+    ChatbotBuilderRequest, DownloadExternalImageRequest
 )
 from course_planner import generate_course_structure
 from content_generator import generate_chapter_content, generate_course_quiz
@@ -364,6 +364,64 @@ async def upload_course_image(file: UploadFile = File(...)):
         return {"status": "success", "url": local_url}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/course/download-external-image")
+async def download_external_image(req: DownloadExternalImageRequest):
+    import requests
+    import uuid
+
+    url = req.url.strip()
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="Invalid URL scheme. Must start with http:// or https://")
+
+    # If it's already a local URL, just return it
+    if url.startswith("/uploads/"):
+        return {"status": "success", "url": url}
+
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        res = requests.get(url, headers=headers, timeout=15, stream=True)
+        if res.status_code != 200:
+            raise HTTPException(status_code=400, detail=f"Failed to fetch image from URL. HTTP status {res.status_code}")
+
+        content_type = res.headers.get("Content-Type", "").lower().split(";")[0].strip()
+        
+        ext_map = {
+            "image/jpeg": ".jpg",
+            "image/jpg": ".jpg",
+            "image/png": ".png",
+            "image/gif": ".gif",
+            "image/webp": ".webp",
+            "image/svg+xml": ".svg",
+        }
+        
+        extension = ext_map.get(content_type)
+        if not extension:
+            parsed_ext = os.path.splitext(url.split("?")[0])[1].lower()
+            if parsed_ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg']:
+                extension = parsed_ext
+            else:
+                extension = ".jpg"
+
+        filename = f"ext_img_{uuid.uuid4().hex[:10]}{extension}"
+        upload_dir = os.path.join("uploads", "course_images")
+        os.makedirs(upload_dir, exist_ok=True)
+        file_path = os.path.join(upload_dir, filename)
+
+        with open(file_path, "wb") as buffer:
+            for chunk in res.iter_content(chunk_size=8192):
+                buffer.write(chunk)
+
+        local_url = f"/uploads/course_images/{filename}"
+        return {"status": "success", "url": local_url}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error downloading external image from {url}: {e}")
+        raise HTTPException(status_code=500, detail=f"Could not download external image: {str(e)}")
 
 @app.post("/course/fetch-web")
 async def fetch_web(req: FetchWebRequest):

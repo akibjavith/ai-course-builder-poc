@@ -104,6 +104,9 @@ class ImagePromptResponse(BaseModel):
 class ImageResponse(BaseModel):
     image_url: Optional[str] = None
 
+class DownloadExternalImageRequest(BaseModel):
+    url: str
+
 class StoreCourseRequest(BaseModel):
     course_json: dict
 

@@ -37,6 +37,11 @@ export const uploadCourseImage = async (file) => {
   return response.data;
 };
 
+export const downloadExternalImage = async (url) => {
+  const response = await axios.post(`${API_URL}/course/download-external-image`, { url });
+  return response.data;
+};
+
 export const listMediaFiles = async () => {
   const response = await axios.get(`${API_URL}/course/list-media`);
   return response.data;
