@@ -39,6 +39,16 @@
     "output_cost_per_million": 30.00,
     "updated_at": "2026-07-15T00:00:00.000000"
   },
+  "gpt-image-1-mini": {
+    "input_cost_per_million": 2.50,
+    "output_cost_per_million": 8.00,
+    "updated_at": "2026-08-07T00:00:00.000000"
+  },
+  "dall-e-3": {
+    "input_cost_per_million": 0.00,
+    "output_cost_per_million": 40.00,
+    "updated_at": "2026-08-07T00:00:00.000000"
+  },
   "default": {
     "input_cost_per_million": 0.15,
     "output_cost_per_million": 0.60,

@@ -14,7 +14,6 @@ from course_planner import generate_course_structure
 from content_generator import generate_chapter_content, generate_course_quiz
 # video_compiler is imported lazily inside functions that need it
 from openai import OpenAI
-from schemas import ImagePromptResponse, ImageResponse
 from schemas import (
     OutlineRequest, ChapterContent, CourseQuiz, CourseDetails,
     LessonRequest, QuizRequest, StoreCourseRequest, LessonBlocksResponse
@@ -725,67 +724,6 @@ async def generate_voice(payload: Dict[str, str]):
     except Exception as e:
         print("Voice error", e)
         return VoiceScriptResponse(voice_script=f"Voice Generation Error: {str(e)}").dict()
-
-@router.post("/image-prompt")
-async def generate_image_prompt(payload: Dict[str, str]):
-    lesson_text = payload.get("lesson_text", "")
-    if not lesson_text:
-        return ImagePromptResponse(prompt="Abstract educational background pattern").dict()
-        
-    prompt = f"Create a vivid, highly descriptive DALL-E image prompt that visually explains this topic. Keep the prompt strictly visual. Topic: {lesson_text[:1000]}"
-    try:
-         response = get_openai_client().chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.7
-         )
-         result = response.choices[0].message.content.strip()
-         return ImagePromptResponse(prompt=result).dict()
-    except Exception as e:
-         return ImagePromptResponse(prompt="Educational visual showing the learning concept.").dict()
-
-@router.post("/image")
-async def generate_image(payload: Dict[str, str]):
-    prompt = payload.get("prompt", "")
-    url = None
-    try:
-        response = get_openai_client().images.generate(
-            model="gpt-image-2",
-            prompt=prompt[:1000] if prompt else "Beautiful futuristic educational digital art.",
-            n=1,
-            size="1024x1024",
-            quality="low"
-        )
-        print("Image response:", response)
-        img_data = None
-        first_item = response.data[0]
-        
-        url_val = getattr(first_item, 'url', None)
-        b64_val = getattr(first_item, 'b64_json', None)
-        
-        if b64_val:
-            import base64
-            img_data = base64.b64decode(b64_val)
-        elif url_val and url_val != "None":
-            import requests
-            img_data = requests.get(url_val, timeout=20).content
-        else:
-            raise ValueError(f"No valid image URL or b64_json found in response: {first_item}")
-
-        unique_filename = f"dalle_{uuid.uuid4().hex[:8]}.png"
-        os.makedirs("uploads", exist_ok=True)
-        file_path = os.path.join("uploads", unique_filename)
-        with open(file_path, "wb") as f:
-            f.write(img_data)
-            
-        # Return an absolute URL; the frontend will use this directly
-        base_url = os.getenv("PUBLIC_ASSET_URL", "http://localhost:8000")
-        image_url = f"{base_url}/uploads/{unique_filename}"
-        return ImageResponse(image_url=image_url).dict()
-    except Exception as e:
-        print("Image generation/download error:", e)
-        # Return null image URL to indicate omission without placeholder
-        return ImageResponse(image_url=None).dict()
 
 @router.post("/quiz")
 async def create_course_quiz(req: QuizRequest):

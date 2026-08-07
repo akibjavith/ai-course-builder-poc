@@ -98,14 +98,12 @@ class LessonRequest(BaseModel):
     course_details: Optional[CourseDetails] = None
     draft_id: Optional[str] = None
 
-class ImagePromptResponse(BaseModel):
-    prompt: str
-
-class ImageResponse(BaseModel):
-    image_url: Optional[str] = None
-
 class DownloadExternalImageRequest(BaseModel):
     url: str
+
+class GenerateAIImageRequest(BaseModel):
+    prompt: str
+    draft_id: Optional[str] = None
 
 class StoreCourseRequest(BaseModel):
     course_json: dict

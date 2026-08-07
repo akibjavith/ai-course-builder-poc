@@ -3,9 +3,9 @@ import {
   ChevronLeft, ChevronRight, ChevronDown, Edit3, Save, Trash2, X, Plus, Trash, 
   HelpCircle, FileCode, AlertTriangle, AlertCircle, FileText, Info, 
   BookOpen, ExternalLink, Lightbulb, CheckSquare, ListOrdered, List, Check,
-  Paperclip, Upload, Loader2, Palette, Paintbrush, Layers
+  Paperclip, Upload, Loader2, Palette, Paintbrush, Layers, Sparkles, Globe
 } from 'lucide-react';
-import { uploadChapterMedia, uploadCourseImage, downloadExternalImage, listMediaFiles, getThemes, uploadTheme, resolveMediaUrl, API_URL } from '../api';
+import { uploadChapterMedia, uploadCourseImage, downloadExternalImage, generateAIImage, listMediaFiles, getThemes, uploadTheme, resolveMediaUrl, API_URL } from '../api';
 import SecureDocViewer from './SecureDocViewer';
 import ActionModal from './ActionModal';
 import DynamicStyle from './DynamicStyle';
@@ -906,6 +906,7 @@ export default function LessonPreviewEditorModal({
   const containerRef = useRef(null);
   // Track uploading state for attachment blocks
   const [uploadingBlockIdx, setUploadingBlockIdx] = useState(null);
+  const [aiPromptModal, setAiPromptModal] = useState(null); // { idx, prompt }
 
   // Simple active insertion menu index
   const [activeInsertMenuIdx, setActiveInsertMenuIdx] = useState(null);
@@ -1175,6 +1176,41 @@ export default function LessonPreviewEditorModal({
       });
     } finally {
       setUploadingBlockIdx(null);
+    }
+  };
+
+  const handleGenerateAIImage = async (idx, promptText) => {
+    const trimmedPrompt = (promptText || '').trim();
+    if (!trimmedPrompt) {
+      setModalConfig({
+        title: 'Prompt Required',
+        message: 'Please enter a prompt or description for the AI image.',
+        type: 'warning',
+        confirmText: 'Got It'
+      });
+      return;
+    }
+    try {
+      setUploadingBlockIdx(idx);
+      const res = await generateAIImage(trimmedPrompt, courseData?.id || null);
+      if (res && res.url) {
+        handleUpdateBlock(idx, { 
+          url: res.url, 
+          image_source: 'ai_generated',
+          caption: trimmedPrompt 
+        });
+      }
+    } catch (err) {
+      console.error("Failed to generate AI image:", err);
+      setModalConfig({
+        title: 'AI Generation Failed',
+        message: err?.response?.data?.detail || 'Could not generate AI image. Please check your OpenAI API key and try again.',
+        type: 'warning',
+        confirmText: 'Got It'
+      });
+    } finally {
+      setUploadingBlockIdx(null);
+      setAiPromptModal(null);
     }
   };
 
@@ -1698,27 +1734,57 @@ export default function LessonPreviewEditorModal({
                           editMode ? (
                             <div className="space-y-3 p-3 bg-slate-50/50 border border-slate-100 rounded-xl">
                               <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Image Block</label>
-                                  {block.url && !isExternalUrl(block.url) && (
+                                  {block.url && (block.image_source === 'ai_generated' || block.url.includes('ai_img_')) ? (
+                                    <span className="text-[10px] font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                      <Sparkles className="w-3 h-3" /> AI Generated
+                                    </span>
+                                  ) : block.url && block.url.includes('ext_img_') ? (
+                                    <span className="text-[10px] font-bold bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                      <Globe className="w-3 h-3" /> Web Search
+                                    </span>
+                                  ) : block.url && block.url.includes('user_img_') ? (
+                                    <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                      <Upload className="w-3 h-3" /> Local File
+                                    </span>
+                                  ) : block.url && !isExternalUrl(block.url) ? (
                                     <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full flex items-center gap-1">
                                       <Check className="w-3 h-3" /> Saved on Server
                                     </span>
-                                  )}
+                                  ) : null}
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                   {block.url ? (
                                     <button
                                       type="button"
-                                      onClick={() => handleUpdateBlock(idx, { url: '' })}
+                                      onClick={() => handleUpdateBlock(idx, { url: '', image_source: null })}
                                       className="flex items-center gap-1 bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg transition active:scale-95 shadow-sm cursor-pointer"
-                                      title="Remove current image to upload or paste a new one"
+                                      title="Remove current image to upload, generate, or paste a new one"
                                     >
                                       <Trash2 className="w-3 h-3" />
                                       <span>Remove Image</span>
                                     </button>
                                   ) : (
                                     <>
+                                      <button
+                                        type="button"
+                                        onClick={() => setAiPromptModal({ idx, prompt: block.caption || block.search_query || '' })}
+                                        disabled={uploadingBlockIdx === idx}
+                                        className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg transition active:scale-95 disabled:opacity-50 shadow-sm cursor-pointer"
+                                      >
+                                        {uploadingBlockIdx === idx ? (
+                                          <>
+                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                            <span>Generating...</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Sparkles className="w-3 h-3" />
+                                            <span>Generate AI Image</span>
+                                          </>
+                                        )}
+                                      </button>
                                       <input 
                                         type="file" 
                                         accept="image/*"
@@ -1731,7 +1797,7 @@ export default function LessonPreviewEditorModal({
                                             setUploadingBlockIdx(idx);
                                             const res = await uploadCourseImage(file);
                                             if (res && res.url) {
-                                              handleUpdateBlock(idx, { url: res.url });
+                                              handleUpdateBlock(idx, { url: res.url, image_source: 'user_uploaded' });
                                             }
                                           } catch (err) {
                                             console.error("Failed to upload course image:", err);
@@ -2478,6 +2544,71 @@ export default function LessonPreviewEditorModal({
             )}
           </div>
         </div>
+
+        {/* AI Image Generation Prompt Modal Overlay */}
+        {aiPromptModal && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4 animate-scale-up border border-slate-100">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-800 text-sm">Generate AI Image</h3>
+                    <p className="text-[10px] text-slate-400 font-medium">Powered by OpenAI gpt-image-1-mini</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAiPromptModal(null)}
+                  className="p-1 rounded-xl text-slate-400 hover:bg-slate-100 transition"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-600">Prompt / Image Description</label>
+                <textarea
+                  rows={3}
+                  value={aiPromptModal.prompt}
+                  onChange={(e) => setAiPromptModal({ ...aiPromptModal, prompt: e.target.value })}
+                  placeholder="Describe the image or diagram you want AI to generate (e.g., Clean vector diagram of AI vs Machine Learning)..."
+                  className="w-full p-3 border border-slate-200 rounded-2xl text-xs focus:ring-2 focus:ring-purple-500 focus:outline-none text-slate-700 leading-relaxed"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setAiPromptModal(null)}
+                  className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleGenerateAIImage(aiPromptModal.idx, aiPromptModal.prompt)}
+                  disabled={uploadingBlockIdx === aiPromptModal.idx || !aiPromptModal.prompt.trim()}
+                  className="px-5 py-2 text-xs font-bold bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl transition flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+                >
+                  {uploadingBlockIdx === aiPromptModal.idx ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Generating AI Image...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Generate Image</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Footer actions */}
         <div className="p-6 border-t border-slate-100 bg-white flex justify-end">

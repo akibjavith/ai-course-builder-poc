@@ -8,7 +8,7 @@ from schemas import (
     GenerateTitleRequest, GenerateTitleResponse, FetchWebRequest, FetchYouTubeRequest,
     GenerateOutlineBaseRequest, ExportChapterRequest, GenerateVoiceScriptReq, GenerateFlashcardsRequest,
     GenerateMCQRequest, GenerateAssessmentRequest, ChatRequest, ThemeUploadRequest,
-    ChatbotBuilderRequest, DownloadExternalImageRequest
+    ChatbotBuilderRequest, DownloadExternalImageRequest, GenerateAIImageRequest
 )
 from course_planner import generate_course_structure
 from content_generator import generate_chapter_content, generate_course_quiz
@@ -113,51 +113,6 @@ async def create_structure(req: CourseStructureRequest):
         req.details.level
     )
     return {"status": "success", "data": structure}
-
-async def auto_generate_dalle_image(chapter_title: str, explanation: str) -> Optional[str]:
-    import requests
-    import uuid
-    import os
-    try:
-        visual_prompt = (
-            f"A clean professional educational illustration, workflow flow chart, or concept diagram explaining '{chapter_title}'. "
-            f"Style: clean modern infographic, dark theme, high vector graphics, highly informative, no text typos."
-        )
-        response = openai_client.images.generate(
-            model="gpt-image-2",
-            prompt=visual_prompt[:1000],
-            n=1,
-            size="1024x1024",
-            quality="low"
-        )
-        logger.info(f"Image response: {response}")
-        img_data = None
-        first_item = response.data[0]
-        
-        url_val = getattr(first_item, 'url', None)
-        b64_val = getattr(first_item, 'b64_json', None)
-        
-        if b64_val:
-            import base64
-            img_data = base64.b64decode(b64_val)
-        elif url_val and url_val != "None":
-            img_data = requests.get(url_val, timeout=20).content
-        else:
-            raise ValueError(f"No valid image URL or b64_json found in response: {first_item}")
-
-        unique_filename = f"dalle_{uuid.uuid4().hex[:8]}.png"
-        os.makedirs("uploads", exist_ok=True)
-        file_path = os.path.join("uploads", unique_filename)
-        with open(file_path, "wb") as f:
-            f.write(img_data)
-        
-        base_url = os.getenv("PUBLIC_ASSET_URL", "http://localhost:8000")
-        return f"{base_url}/uploads/{unique_filename}"
-    except Exception as e:
-        logger.error(f"Failed to auto generate DALL-E visual for {chapter_title}: {e}")
-        return None
-
-
 
 @app.post("/course/create")
 async def finalize_course(course: dict):
@@ -433,6 +388,94 @@ async def download_external_image(req: DownloadExternalImageRequest):
     except Exception as e:
         logger.error(f"Error downloading external image from {url}: {e}")
         raise HTTPException(status_code=500, detail=f"Could not download external image: {str(e)}")
+
+@app.post("/course/generate-ai-image")
+async def generate_ai_image(req: GenerateAIImageRequest):
+    import uuid
+    import requests
+    import base64
+
+    prompt_text = req.prompt.strip()
+    if not prompt_text:
+        raise HTTPException(status_code=400, detail="Prompt text cannot be empty.")
+
+    model_name = "gpt-image-1-mini"
+    fallback_model = "dall-e-3"
+
+    try:
+        # Step 1: Generate AI Image via OpenAI API
+        try:
+            response = openai_client.images.generate(
+                model=model_name,
+                prompt=prompt_text[:1000],
+                n=1,
+                size="1024x1024",
+                quality="standard"
+            )
+            used_model = model_name
+        except Exception as primary_err:
+            logger.warning(f"Image generation with {model_name} failed ({primary_err}). Falling back to {fallback_model}...")
+            response = openai_client.images.generate(
+                model=fallback_model,
+                prompt=prompt_text[:1000],
+                n=1,
+                size="1024x1024",
+                quality="standard"
+            )
+            used_model = fallback_model
+
+        # Step 2: Track token usage and dollar cost metering if draft_id is provided
+        if req.draft_id:
+            try:
+                from metering_helper import track_chatbot_cost
+                track_chatbot_cost(
+                    draft_id=req.draft_id,
+                    response=response,
+                    model=used_model,
+                    step_name="generate_ai_image"
+                )
+            except Exception as meter_err:
+                logger.error(f"[METERING ERROR] Failed to track image generation cost: {meter_err}")
+
+        # Step 3: Decode/extract image content
+        first_item = response.data[0]
+        url_val = getattr(first_item, 'url', None)
+        b64_val = getattr(first_item, 'b64_json', None)
+
+        img_data = None
+        if b64_val:
+            img_data = base64.b64decode(b64_val)
+        elif url_val and url_val != "None":
+            res = requests.get(url_val, timeout=20)
+            if res.status_code == 200:
+                img_data = res.content
+            else:
+                raise ValueError(f"Failed to fetch generated image payload from URL (HTTP status {res.status_code})")
+        else:
+            raise ValueError(f"No valid image URL or b64_json found in response: {first_item}")
+
+        # Step 4: Save image payload to uploads/course_images/ai_img_<uuid>.png
+        filename = f"ai_img_{uuid.uuid4().hex[:10]}.png"
+        upload_dir = os.path.join("uploads", "course_images")
+        os.makedirs(upload_dir, exist_ok=True)
+        file_path = os.path.join(upload_dir, filename)
+
+        with open(file_path, "wb") as buffer:
+            buffer.write(img_data)
+
+        local_url = f"/uploads/course_images/{filename}"
+        return {
+            "status": "success",
+            "url": local_url,
+            "image_source": "ai_generated",
+            "model_used": used_model
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating AI image: {e}")
+        raise HTTPException(status_code=500, detail=f"Could not generate AI image: {str(e)}")
 
 @app.post("/course/fetch-web")
 async def fetch_web(req: FetchWebRequest):

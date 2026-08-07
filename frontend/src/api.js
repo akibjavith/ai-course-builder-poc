@@ -42,6 +42,11 @@ export const downloadExternalImage = async (url) => {
   return response.data;
 };
 
+export const generateAIImage = async (prompt, draftId = null) => {
+  const response = await axios.post(`${API_URL}/course/generate-ai-image`, { prompt, draft_id: draftId });
+  return response.data;
+};
+
 export const listMediaFiles = async () => {
   const response = await axios.get(`${API_URL}/course/list-media`);
   return response.data;
@@ -76,16 +81,6 @@ export const generateCourseOutline = async (details) => {
 
 export const generateLessonContent = async (payload) => {
   const response = await axios.post(`${API_URL}/course/lesson-blocks`, payload);
-  return response.data;
-};
-
-export const generateImagePrompt = async (payload) => {
-  const response = await axios.post(`${API_URL}/course/image-prompt`, payload);
-  return response.data;
-};
-
-export const generateImage = async (payload) => {
-  const response = await axios.post(`${API_URL}/course/image`, payload);
   return response.data;
 };
 
