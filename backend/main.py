@@ -380,11 +380,22 @@ async def download_external_image(req: DownloadExternalImageRequest):
 
     try:
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
         }
-        res = requests.get(url, headers=headers, timeout=15, stream=True)
-        if res.status_code != 200:
-            raise HTTPException(status_code=400, detail=f"Failed to fetch image from URL. HTTP status {res.status_code}")
+        try:
+            res = requests.get(url, headers=headers, timeout=15, stream=True)
+        except requests.exceptions.Timeout:
+            raise HTTPException(status_code=400, detail="Could not download image: The request timed out.")
+        except requests.exceptions.RequestException:
+            raise HTTPException(status_code=400, detail="Could not download image: Unable to connect to image host.")
+
+        if res.status_code == 403:
+            raise HTTPException(status_code=400, detail="Could not download image: The website blocked access (403 Forbidden) or requires authentication.")
+        elif res.status_code == 404:
+            raise HTTPException(status_code=400, detail="Could not download image: The image link was not found (404 Not Found).")
+        elif res.status_code != 200:
+            raise HTTPException(status_code=400, detail=f"Could not download image: Server returned HTTP status {res.status_code}.")
 
         content_type = res.headers.get("Content-Type", "").lower().split(";")[0].strip()
         

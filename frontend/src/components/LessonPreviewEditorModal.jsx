@@ -1698,54 +1698,75 @@ export default function LessonPreviewEditorModal({
                           editMode ? (
                             <div className="space-y-3 p-3 bg-slate-50/50 border border-slate-100 rounded-xl">
                               <div className="flex items-center justify-between">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Image Block</label>
                                 <div className="flex items-center gap-2">
-                                  <input 
-                                    type="file" 
-                                    accept="image/*"
-                                    id={`image-block-upload-${idx}`} 
-                                    className="hidden" 
-                                    onChange={async (e) => {
-                                      const file = e.target.files?.[0];
-                                      if (!file) return;
-                                      try {
-                                        setUploadingBlockIdx(idx);
-                                        const res = await uploadCourseImage(file);
-                                        if (res && res.url) {
-                                          handleUpdateBlock(idx, { url: res.url });
-                                        }
-                                      } catch (err) {
-                                        console.error("Failed to upload course image:", err);
-                                        setModalConfig({
-                                          title: 'Upload Failed',
-                                          message: 'Could not upload image file. Please try again.',
-                                          type: 'warning',
-                                          confirmText: 'Got It'
-                                        });
-                                      } finally {
-                                        setUploadingBlockIdx(null);
-                                        e.target.value = '';
-                                      }
-                                    }}
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => document.getElementById(`image-block-upload-${idx}`)?.click()}
-                                    disabled={uploadingBlockIdx === idx}
-                                    className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg transition active:scale-95 disabled:opacity-50 shadow-sm cursor-pointer"
-                                  >
-                                    {uploadingBlockIdx === idx ? (
-                                      <>
-                                        <Loader2 className="w-3 h-3 animate-spin" />
-                                        <span>Uploading...</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Upload className="w-3 h-3" />
-                                        <span>Upload Local Image</span>
-                                      </>
-                                    )}
-                                  </button>
+                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Image Block</label>
+                                  {block.url && !isExternalUrl(block.url) && (
+                                    <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                      <Check className="w-3 h-3" /> Saved on Server
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {block.url ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateBlock(idx, { url: '' })}
+                                      className="flex items-center gap-1 bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg transition active:scale-95 shadow-sm cursor-pointer"
+                                      title="Remove current image to upload or paste a new one"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                      <span>Remove Image</span>
+                                    </button>
+                                  ) : (
+                                    <>
+                                      <input 
+                                        type="file" 
+                                        accept="image/*"
+                                        id={`image-block-upload-${idx}`} 
+                                        className="hidden" 
+                                        onChange={async (e) => {
+                                          const file = e.target.files?.[0];
+                                          if (!file) return;
+                                          try {
+                                            setUploadingBlockIdx(idx);
+                                            const res = await uploadCourseImage(file);
+                                            if (res && res.url) {
+                                              handleUpdateBlock(idx, { url: res.url });
+                                            }
+                                          } catch (err) {
+                                            console.error("Failed to upload course image:", err);
+                                            setModalConfig({
+                                              title: 'Upload Failed',
+                                              message: 'Could not upload image file. Please try again.',
+                                              type: 'warning',
+                                              confirmText: 'Got It'
+                                            });
+                                          } finally {
+                                            setUploadingBlockIdx(null);
+                                            e.target.value = '';
+                                          }
+                                        }}
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => document.getElementById(`image-block-upload-${idx}`)?.click()}
+                                        disabled={uploadingBlockIdx === idx}
+                                        className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg transition active:scale-95 disabled:opacity-50 shadow-sm cursor-pointer"
+                                      >
+                                        {uploadingBlockIdx === idx ? (
+                                          <>
+                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                            <span>Uploading...</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Upload className="w-3 h-3" />
+                                            <span>Upload Local Image</span>
+                                          </>
+                                        )}
+                                      </button>
+                                    </>
+                                  )}
                                 </div>
                               </div>
                               <div className="space-y-1.5">
@@ -1753,9 +1774,12 @@ export default function LessonPreviewEditorModal({
                                   <input 
                                     type="text"
                                     placeholder="Image URL (e.g. https://... or /uploads/...)"
-                                    value={block.url || ''}
+                                    value={!!block.url && !isExternalUrl(block.url) ? block.url.split('/').pop() : (block.url || '')}
+                                    disabled={!!block.url && !isExternalUrl(block.url)}
                                     onChange={(e) => handleUpdateBlock(idx, { url: e.target.value })}
-                                    className="editor-text-input !p-2 !text-xs flex-1"
+                                    className={`editor-text-input !p-2 !text-xs flex-1 ${
+                                      !!block.url && !isExternalUrl(block.url) ? 'bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200 font-mono' : ''
+                                    }`}
                                   />
                                   {block.url && isExternalUrl(block.url) && (
                                     <button
@@ -1784,6 +1808,11 @@ export default function LessonPreviewEditorModal({
                                     <Info className="w-3 h-3 inline" /> External URL detected. Click "Save to Server" if you wish to store a local copy on your server.
                                   </p>
                                 )}
+                                {block.url && !isExternalUrl(block.url) && (
+                                  <p className="text-[10px] text-slate-400 font-medium">
+                                    🔒 Image is saved to local server. Click "Remove Image" to change or pick a new file.
+                                  </p>
+                                )}
                               </div>
                               <input 
                                 type="text"
@@ -1793,8 +1822,8 @@ export default function LessonPreviewEditorModal({
                                 className="editor-text-input !p-2 !text-xs"
                               />
                               {block.url && (
-                                <div className="mt-2 relative rounded-lg overflow-hidden border border-slate-200 bg-white p-1.5 max-h-36 flex items-center justify-center">
-                                  <img src={resolveMediaUrl(block.url)} alt={block.caption || ''} className="max-h-32 object-contain rounded-md" />
+                                <div className="mt-2 relative rounded-lg overflow-hidden border border-slate-200 bg-white p-1.5 max-h-44 flex flex-col items-center justify-center group">
+                                  <img src={resolveMediaUrl(block.url)} alt={block.caption || ''} className="max-h-36 object-contain rounded-md" />
                                 </div>
                               )}
                             </div>
