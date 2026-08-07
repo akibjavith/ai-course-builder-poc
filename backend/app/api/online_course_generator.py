@@ -236,7 +236,7 @@ async def generate_lesson_blocks(req: LessonRequest):
         2. "paragraph": text. Write clear, thorough, learner-ready content. Use sub-paragraphs or multiple paragraph blocks as needed.
         3. "bullet_list": items (list of strings).
         4. "numbered_list": items (list of strings).
-        5. "image": search_query (specific 3-5 word query targeting an educational diagram, flowchart, architecture model, or infographic for this section, e.g., "Convolutional Neural Network CNN architecture diagram"), caption (educational explanation of what the visual represents). VISUAL AID RULE: For conceptual, technical, architectural, or scientific topics, actively include 1 to 2 "image" blocks in the lesson where a diagram, flowchart, or architecture model helps explain the topic.
+        5. "image": search_query (specific 3-5 word query targeting an educational visual, e.g., "Convolutional Neural Network CNN architecture diagram"), caption (educational explanation of what the visual represents), image_source (optional: "ai_generated" for custom diagrams/flowcharts/architecture models, or "web_search" for stock photos/real-world examples). VISUAL AID RULE: For conceptual, technical, architectural, or scientific topics, actively include 1 to 2 "image" blocks in the lesson.
         6. "video": url (always output "" for now), caption (describe what the video/narration should show).
         7. "table": headers (list of strings), rows (list of lists of strings). Used for comparisons, classifications, and vocabulary guides.
         8. "callout": text, callout_type (one of: "info", "warning", "tip", "danger").
@@ -524,18 +524,39 @@ async def generate_lesson_blocks(req: LessonRequest):
                 search_q = str(block.get("search_query") or block.get("caption") or req.title or "")
                 session_id = str(req.course_details.courseName if req.course_details else "default_session")
                 course_lang = str(req.course_details.language if req.course_details else "English")
-                
-                # Fetch local educational image path via ImageRetriever
-                local_path = retrieve_and_store_educational_image(
-                    search_query=search_q,
-                    subject=subject,
-                    language=course_lang,
-                    session_id=session_id
-                )
-                if local_path:
-                    block["url"] = local_path
-                else:
-                    block["url"] = str(block.get("url") or "")
+                pref_source = str(block.get("image_source") or "").lower()
+
+                # Keywords indicating custom AI diagram generation
+                diagram_keywords = ["diagram", "flowchart", "architecture", "model", "funnel", "pipeline", "structure", "schema", "illustration", "infographic"]
+                is_diagram_prompt = any(k in search_q.lower() for k in diagram_keywords)
+
+                resolved_url = None
+
+                # Hybrid Strategy: Try AI Generation for diagrams/custom prompts
+                if pref_source == "ai_generated" or (pref_source != "web_search" and is_diagram_prompt):
+                    try:
+                        from main import generate_ai_image_helper
+                        prompt_for_ai = f"{search_q}. {block['caption']}".strip()
+                        ai_res = generate_ai_image_helper(prompt=prompt_for_ai, draft_id=session_id)
+                        if ai_res and ai_res.get("url"):
+                            resolved_url = ai_res["url"]
+                            block["image_source"] = "ai_generated"
+                    except Exception as ai_gen_err:
+                        logger.warning(f"[LessonBlocks] AI image generation failed for '{search_q}': {ai_gen_err}. Falling back to web search...")
+
+                # Web Search Retrieval (if AI image was not requested or failed)
+                if not resolved_url:
+                    local_path = retrieve_and_store_educational_image(
+                        search_query=search_q,
+                        subject=subject,
+                        language=course_lang,
+                        session_id=session_id
+                    )
+                    if local_path:
+                        resolved_url = local_path
+                        block["image_source"] = "web_search"
+
+                block["url"] = resolved_url or str(block.get("url") or "")
                     
             elif block_type == "video":
                 block["url"] = str(block.get("url") or "")
