@@ -8,7 +8,7 @@ from schemas import (
     GenerateTitleRequest, GenerateTitleResponse, FetchWebRequest, FetchYouTubeRequest,
     GenerateOutlineBaseRequest, ExportChapterRequest, GenerateVoiceScriptReq, GenerateFlashcardsRequest,
     GenerateMCQRequest, GenerateAssessmentRequest, ChatRequest, ThemeUploadRequest,
-    ChatbotBuilderRequest, DownloadExternalImageRequest, GenerateAIImageRequest
+    ChatbotBuilderRequest, DownloadExternalImageRequest, GenerateAIImageRequest, DownloadExternalAudioRequest
 )
 from course_planner import generate_course_structure
 from content_generator import generate_chapter_content, generate_course_quiz
@@ -17,6 +17,7 @@ from rag_pipeline import ingest_document
 from course_store import save_course, get_courses, get_course, update_course, delete_course
 from database import save_course_to_mysql
 import os
+import uuid
 import shutil
 import json
 import time
@@ -319,6 +320,96 @@ async def upload_course_image(file: UploadFile = File(...)):
         return {"status": "success", "url": local_url}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/course/upload-course-audio")
+async def upload_course_audio(file: UploadFile = File(...)):
+    validate_uploaded_file(file, 25.0, ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac'])
+    extension = os.path.splitext(file.filename)[1].lower() or ".mp3"
+    filename = f"user_audio_{uuid.uuid4().hex[:10]}{extension}"
+    
+    try:
+        upload_dir = os.path.join("uploads", "course_audio")
+        os.makedirs(upload_dir, exist_ok=True)
+        file_path = os.path.join(upload_dir, filename)
+
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        local_url = f"/uploads/course_audio/{filename}"
+        return {"status": "success", "url": local_url}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/course/download-external-audio")
+async def download_external_audio(req: DownloadExternalAudioRequest):
+    import requests
+    import uuid
+
+    url = req.url.strip()
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="Invalid URL scheme. Must start with http:// or https://")
+
+    if url.startswith("/uploads/"):
+        return {"status": "success", "url": url}
+
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "audio/mpeg,audio/wav,audio/*,*/*;q=0.8"
+        }
+        try:
+            res = requests.get(url, headers=headers, timeout=20, stream=True)
+        except requests.exceptions.Timeout:
+            raise HTTPException(status_code=400, detail="Could not download audio: The request timed out.")
+        except requests.exceptions.RequestException:
+            raise HTTPException(status_code=400, detail="Could not download audio: Unable to connect to audio host.")
+
+        if res.status_code == 403:
+            raise HTTPException(status_code=400, detail="Could not download audio: Access blocked (403 Forbidden) or authentication required.")
+        elif res.status_code == 404:
+            raise HTTPException(status_code=400, detail="Could not download audio: Audio file not found (404 Not Found).")
+        elif res.status_code != 200:
+            raise HTTPException(status_code=400, detail=f"Could not download audio: Server returned HTTP status {res.status_code}.")
+
+        content_type = res.headers.get("Content-Type", "").lower().split(";")[0].strip()
+        
+        ext_map = {
+            "audio/mpeg": ".mp3",
+            "audio/mp3": ".mp3",
+            "audio/wav": ".wav",
+            "audio/x-wav": ".wav",
+            "audio/aac": ".aac",
+            "audio/ogg": ".ogg",
+            "audio/flac": ".flac",
+            "audio/mp4": ".m4a",
+            "audio/x-m4a": ".m4a",
+        }
+        
+        extension = ext_map.get(content_type)
+        if not extension:
+            parsed_ext = os.path.splitext(url.split("?")[0])[1].lower()
+            if parsed_ext in ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac']:
+                extension = parsed_ext
+            else:
+                extension = ".mp3"
+
+        filename = f"ext_audio_{uuid.uuid4().hex[:10]}{extension}"
+        upload_dir = os.path.join("uploads", "course_audio")
+        os.makedirs(upload_dir, exist_ok=True)
+        file_path = os.path.join(upload_dir, filename)
+
+        with open(file_path, "wb") as buffer:
+            for chunk in res.iter_content(chunk_size=8192):
+                buffer.write(chunk)
+
+        local_url = f"/uploads/course_audio/{filename}"
+        return {"status": "success", "url": local_url}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error downloading external audio from {url}: {e}")
+        raise HTTPException(status_code=500, detail=f"Could not download external audio: {str(e)}")
 
 @app.post("/course/download-external-image")
 async def download_external_image(req: DownloadExternalImageRequest):

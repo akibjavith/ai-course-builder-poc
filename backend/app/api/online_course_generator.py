@@ -247,6 +247,7 @@ async def generate_lesson_blocks(req: LessonRequest):
         13. "flashcard": title (optional string), cards (list of objects with "front" and "back" strings). Front contains key term/concept/question, Back contains definition/explanation/answer. Include ALL flashcards for this lesson as multiple entries in this single "cards" list — do NOT create more than one "flashcard" block per lesson.
         14. "summary": points (list of strings summarizing key takeaways).
         15. "reference": title, url (trusted educational platforms/documentation, no hallucinated URLs).
+        16. "audio": url (output "" for now), caption (audio title, podcast summary, or voice narration topic), audio_source (optional: "ai_generated", "user_uploaded", "external").
 
         SUBJECT ADAPTATION MATRIX:
         - Language Lessons: Use paragraph blocks for reading passages, code blocks or paragraph blocks formatted as dialogue scripts (e.g., Speaker A vs Speaker B), and table blocks for vocabulary definitions.
@@ -451,7 +452,11 @@ async def generate_lesson_blocks(req: LessonRequest):
                     "summary_block": "summary",
                     "reference_block": "reference",
                     "table_block": "table",
-                    "callout_block": "callout"
+                    "callout_block": "callout",
+                    "audio_block": "audio",
+                    "audio_player": "audio",
+                    "voice_block": "audio",
+                    "podcast": "audio"
                 }
                 if t in type_mapping:
                     block["type"] = type_mapping[t]
@@ -557,6 +562,11 @@ async def generate_lesson_blocks(req: LessonRequest):
                         block["image_source"] = "web_search"
 
                 block["url"] = resolved_url or str(block.get("url") or "")
+                    
+            elif block_type == "audio":
+                block["url"] = str(block.get("url") or "")
+                block["caption"] = str(block.get("caption") or "")
+                block["audio_source"] = str(block.get("audio_source") or "user_uploaded")
                     
             elif block_type == "video":
                 block["url"] = str(block.get("url") or "")

@@ -42,6 +42,20 @@ export const downloadExternalImage = async (url) => {
   return response.data;
 };
 
+export const uploadCourseAudio = async (file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await axios.post(`${API_URL}/course/upload-course-audio`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
+  return response.data;
+};
+
+export const downloadExternalAudio = async (url) => {
+  const response = await axios.post(`${API_URL}/course/download-external-audio`, { url });
+  return response.data;
+};
+
 export const generateAIImage = async (prompt, draftId = null) => {
   const response = await axios.post(`${API_URL}/course/generate-ai-image`, { prompt, draft_id: draftId });
   return response.data;

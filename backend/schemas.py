@@ -101,6 +101,9 @@ class LessonRequest(BaseModel):
 class DownloadExternalImageRequest(BaseModel):
     url: str
 
+class DownloadExternalAudioRequest(BaseModel):
+    url: str
+
 class GenerateAIImageRequest(BaseModel):
     prompt: str
     draft_id: Optional[str] = None

@@ -3,9 +3,9 @@ import {
   ChevronLeft, ChevronRight, ChevronDown, Edit3, Save, Trash2, X, Plus, Trash, 
   HelpCircle, FileCode, AlertTriangle, AlertCircle, FileText, Info, 
   BookOpen, ExternalLink, Lightbulb, CheckSquare, ListOrdered, List, Check,
-  Paperclip, Upload, Loader2, Palette, Paintbrush, Layers, Sparkles, Globe
+  Paperclip, Upload, Loader2, Palette, Paintbrush, Layers, Sparkles, Globe, Volume2, Music
 } from 'lucide-react';
-import { uploadChapterMedia, uploadCourseImage, downloadExternalImage, generateAIImage, listMediaFiles, getThemes, uploadTheme, resolveMediaUrl, API_URL } from '../api';
+import { uploadChapterMedia, uploadCourseImage, downloadExternalImage, uploadCourseAudio, downloadExternalAudio, generateAIImage, listMediaFiles, getThemes, uploadTheme, resolveMediaUrl, API_URL } from '../api';
 import SecureDocViewer from './SecureDocViewer';
 import ActionModal from './ActionModal';
 import DynamicStyle from './DynamicStyle';
@@ -21,6 +21,7 @@ const BLOCK_INFO = {
   numbered_list: { label: 'Numbered List', icon: ListOrdered, color: 'text-teal-500', bg: 'bg-teal-50' },
   image: { label: 'Image', icon: Info, color: 'text-amber-500', bg: 'bg-amber-50' },
   video: { label: 'Video', icon: Info, color: 'text-rose-500', bg: 'bg-rose-50' },
+  audio: { label: 'Audio Block', icon: Volume2, color: 'text-purple-500', bg: 'bg-purple-50' },
   table: { label: 'Table', icon: FileText, color: 'text-cyan-500', bg: 'bg-cyan-50' },
   callout: { label: 'Callout', icon: AlertTriangle, color: 'text-yellow-500', bg: 'bg-yellow-50' },
   code: { label: 'Code Block', icon: FileCode, color: 'text-slate-500', bg: 'bg-slate-50' },
@@ -1179,6 +1180,34 @@ export default function LessonPreviewEditorModal({
     }
   };
 
+  const handleDownloadExternalAudio = async (idx, rawUrl) => {
+    let trimmed = (rawUrl || '').trim();
+    if (!trimmed) return;
+    if (trimmed.startsWith('www.')) {
+      trimmed = 'https://' + trimmed;
+    }
+    if (!isExternalUrl(trimmed)) {
+      return;
+    }
+    try {
+      setUploadingBlockIdx(idx);
+      const res = await downloadExternalAudio(trimmed);
+      if (res && res.url) {
+        handleUpdateBlock(idx, { url: res.url, audio_source: 'external' });
+      }
+    } catch (err) {
+      console.error("Failed to download external audio:", err);
+      setModalConfig({
+        title: 'Download Failed',
+        message: err?.response?.data?.detail || 'Could not download external audio URL to local storage. Check the link and try again.',
+        type: 'warning',
+        confirmText: 'Got It'
+      });
+    } finally {
+      setUploadingBlockIdx(null);
+    }
+  };
+
   const handleGenerateAIImage = async (idx, promptText) => {
     const trimmedPrompt = (promptText || '').trim();
     if (!trimmedPrompt) {
@@ -1231,6 +1260,7 @@ export default function LessonPreviewEditorModal({
     else if (type === 'paragraph') { newBlock.text = 'New paragraph explanation content...'; }
     else if (type === 'bullet_list' || type === 'numbered_list') { newBlock.items = ['List item 1', 'List item 2']; }
     else if (type === 'image' || type === 'video') { newBlock.url = ''; newBlock.caption = 'Describe this content'; }
+    else if (type === 'audio') { newBlock.url = ''; newBlock.caption = 'Audio Track Title / Narration'; newBlock.audio_source = 'user_uploaded'; }
     else if (type === 'table') { newBlock.headers = ['Header 1', 'Header 2']; newBlock.rows = [['Value 1', 'Value 2']]; }
     else if (type === 'callout') { newBlock.text = 'Note text'; newBlock.callout_type = 'info'; }
     else if (type === 'code') { newBlock.language = 'javascript'; newBlock.code = '// Code snippet'; newBlock.explanation = 'Explain the code'; }
@@ -1936,6 +1966,175 @@ export default function LessonPreviewEditorModal({
                                 </div>
                               )}
                               {block.caption && <p className="video-block-caption">{block.caption}</p>}
+                            </div>
+                          )
+                        )}
+
+                        {block.type === 'audio' && (
+                          editMode ? (
+                            <div className="space-y-3 p-3 bg-slate-50/50 border border-slate-100 rounded-xl">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                                    <Volume2 className="w-3 h-3 text-purple-500" /> Audio Block
+                                  </label>
+                                  {block.url && (block.audio_source === 'ai_generated' || block.url.includes('ai_audio_')) ? (
+                                    <span className="text-[10px] font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                      <Sparkles className="w-3 h-3" /> AI Generated
+                                    </span>
+                                  ) : block.url && (block.audio_source === 'user_uploaded' || block.url.includes('user_audio_')) ? (
+                                    <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                      <Upload className="w-3 h-3" /> Local File
+                                    </span>
+                                  ) : block.url && !isExternalUrl(block.url) ? (
+                                    <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                      <Check className="w-3 h-3" /> Saved on Server
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {block.url ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateBlock(idx, { url: '', audio_source: null })}
+                                      className="flex items-center gap-1 bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg transition active:scale-95 shadow-sm cursor-pointer"
+                                      title="Remove current audio file to upload or paste a new one"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                      <span>Remove Audio</span>
+                                    </button>
+                                  ) : (
+                                    <>
+                                      <button
+                                        type="button"
+                                        disabled={true}
+                                        className="flex items-center gap-1.5 bg-purple-200 text-purple-500 text-[10px] font-bold px-2.5 py-1 rounded-lg cursor-not-allowed shadow-sm"
+                                        title="AI Voice Generation coming soon!"
+                                      >
+                                        <Sparkles className="w-3 h-3" />
+                                        <span>Generate AI Audio</span>
+                                      </button>
+                                      <input 
+                                        type="file" 
+                                        accept="audio/*"
+                                        id={`audio-block-upload-${idx}`} 
+                                        className="hidden" 
+                                        onChange={async (e) => {
+                                          const file = e.target.files?.[0];
+                                          if (!file) return;
+                                          try {
+                                            setUploadingBlockIdx(idx);
+                                            const res = await uploadCourseAudio(file);
+                                            if (res && res.url) {
+                                              handleUpdateBlock(idx, { url: res.url, audio_source: 'user_uploaded', caption: block.caption || file.name });
+                                            }
+                                          } catch (err) {
+                                            console.error("Failed to upload course audio:", err);
+                                            setModalConfig({
+                                              title: 'Upload Failed',
+                                              message: 'Could not upload audio file. Please try again.',
+                                              type: 'warning',
+                                              confirmText: 'Got It'
+                                            });
+                                          } finally {
+                                            setUploadingBlockIdx(null);
+                                            e.target.value = '';
+                                          }
+                                        }}
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => document.getElementById(`audio-block-upload-${idx}`)?.click()}
+                                        disabled={uploadingBlockIdx === idx}
+                                        className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg transition active:scale-95 disabled:opacity-50 shadow-sm cursor-pointer"
+                                      >
+                                        {uploadingBlockIdx === idx ? (
+                                          <>
+                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                            <span>Uploading...</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Upload className="w-3 h-3" />
+                                            <span>Upload Local Audio</span>
+                                          </>
+                                        )}
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="space-y-1.5">
+                                <div className="flex gap-2 items-center">
+                                  <input 
+                                    type="text"
+                                    placeholder="Audio URL (e.g. https://... or /uploads/...)"
+                                    value={!!block.url && !isExternalUrl(block.url) ? block.url.split('/').pop() : (block.url || '')}
+                                    disabled={!!block.url && !isExternalUrl(block.url)}
+                                    onChange={(e) => handleUpdateBlock(idx, { url: e.target.value })}
+                                    className={`editor-text-input !p-2 !text-xs flex-1 ${
+                                      !!block.url && !isExternalUrl(block.url) ? 'bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200 font-mono' : ''
+                                    }`}
+                                  />
+                                  {block.url && isExternalUrl(block.url) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDownloadExternalAudio(idx, block.url)}
+                                      disabled={uploadingBlockIdx === idx}
+                                      className="flex items-center gap-1 bg-sky-500 hover:bg-sky-600 text-white text-[10px] font-bold px-2.5 py-2 rounded-lg transition disabled:opacity-50 whitespace-nowrap shadow-sm cursor-pointer"
+                                      title="Download & save audio to local server uploads"
+                                    >
+                                      {uploadingBlockIdx === idx ? (
+                                        <>
+                                          <Loader2 className="w-3 h-3 animate-spin" />
+                                          <span>Saving to Server...</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Upload className="w-3 h-3" />
+                                          <span>Save to Server</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  )}
+                                </div>
+                                {block.url && isExternalUrl(block.url) && (
+                                  <p className="text-[10px] text-amber-600 font-medium flex items-center gap-1">
+                                    <Info className="w-3 h-3 inline" /> External Audio URL detected. Click "Save to Server" if you wish to store a local copy on your server.
+                                  </p>
+                                )}
+                                {block.url && !isExternalUrl(block.url) && (
+                                  <p className="text-[10px] text-slate-400 font-medium">
+                                    🔒 Audio file is saved to local server. Click "Remove Audio" to change or pick a new file.
+                                  </p>
+                                )}
+                              </div>
+                              <input 
+                                type="text"
+                                placeholder="Audio Title / Narration Description"
+                                value={block.caption || ''}
+                                onChange={(e) => handleUpdateBlock(idx, { caption: e.target.value })}
+                                className="editor-text-input !p-2 !text-xs"
+                              />
+                              {block.url && (
+                                <div className="mt-2 p-2 bg-white rounded-xl border border-slate-200 shadow-sm">
+                                  <audio controls src={resolveMediaUrl(block.url)} className="w-full" />
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="audio-block-container p-4 bg-slate-50/80 border border-slate-200 rounded-2xl space-y-2.5 shadow-sm">
+                              <div className="flex items-center gap-2 text-slate-700 font-bold text-xs uppercase tracking-wider">
+                                <Volume2 className="w-4 h-4 text-purple-600" />
+                                <span>{block.caption || 'Audio Track'}</span>
+                              </div>
+                              {block.url ? (
+                                <audio controls src={resolveMediaUrl(block.url)} className="w-full rounded-xl" />
+                              ) : (
+                                <div className="p-3 bg-slate-100 flex items-center justify-center rounded-xl border border-dashed border-slate-200 text-slate-400 text-xs font-medium">
+                                  [Audio Track Placeholder: {block.caption || 'No audio file attached'}]
+                                </div>
+                              )}
                             </div>
                           )
                         )}
