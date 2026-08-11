@@ -140,7 +140,7 @@ async def generate_lesson_blocks(req: LessonRequest):
         system_size_rules = (
             f"COURSE DEPTH LAW — {duration_hours}-HOUR COURSE: "
             f"This lesson belongs to a {duration_hours}-hour course. {scaling['mood']} "
-            "Organically select and mix the best content blocks (image, code, tables, lists, callouts, paragraphs, sub-paragraphs, quizzes, flashcards, assignments) "
+            "Organically select and mix the best content blocks (image, audio, code, tables, lists, callouts, paragraphs, sub-paragraphs, quizzes, flashcards, assignments) "
             "that best fit this specific topic. You are FORBIDDEN from writing superficial summaries or placeholder text."
         )
 
@@ -157,6 +157,7 @@ async def generate_lesson_blocks(req: LessonRequest):
         - Cover {scaling['sub_topics']} distinct sub-topics/sections (use separate "heading" blocks for each) — do not just write one general overview. Only count sub-topics that teach genuinely new content; sections like objectives, quiz, summary, or references do not count toward this.
         - CONTENT DEPTH PER SUB-TOPIC: every sub-topic must be explained with at least {scaling['paragraph_depth']} full "paragraph" block(s) of real, substantive explanation BEFORE any supporting "bullet_list" or "table" block. Bullet lists and tables are extra support for a sub-topic, never a replacement for proper paragraph explanation — do not cover a sub-topic with only a heading and a short bullet list.
         - Include 1 to 2 "image" blocks with descriptive "search_query" whenever explaining visual concepts, plot layouts, architecture diagrams, data flows, or workflow processes.
+        - Optionally include 0 to 2 "audio" blocks with a rich 200 to 400 word "script" — only where a narrated overview genuinely adds value (a dense sub-topic, a multi-part concept worth hearing summarized aloud). Most lessons need none; do not force one in.
         - Include {scaling['examples']} fully worked "example" block(s) with complete scenarios and results.
         - If a "quiz" block is included, bundle {scaling['quiz_questions']} questions into its single "questions" list.
         - If a "flashcard" block is included, bundle {scaling['flashcard_cards']} cards into its single "cards" list.
@@ -194,12 +195,12 @@ async def generate_lesson_blocks(req: LessonRequest):
         elif "video" in style_lower or "lecture" in style_lower or "multimedia" in style_lower or "narration" in style_lower:
             style_guidelines = """
         PRIMARY LEARNING STYLE PREFERENCE: 'Video & Multimedia Lectures'.
-        - Include "video" blocks with narration breakdowns alongside explanatory text and summary blocks.
+        - Include "video" blocks with narration breakdowns, and consider an "audio" block for a narrated overview of dense sections, alongside explanatory text and summary blocks.
         """
         else:
             style_guidelines = """
         PRIMARY LEARNING STYLE PREFERENCE: 'Balanced Combination'.
-        - Combine explanatory "paragraph" text, "image" (educational diagrams, flowcharts, infographics), "callout" tips, "table" breakdowns, "code" snippets (if applicable), "quiz" questions, and "flashcard" blocks into a rich learning flow.
+        - Combine explanatory "paragraph" text, "image" (educational diagrams, flowcharts, infographics), "callout" tips, "table" breakdowns, "code" snippets (if applicable), "quiz" questions, "flashcard" blocks, and an occasional "audio" narration where a section genuinely benefits from it, into a rich learning flow.
         """
 
         visual_rule = """
@@ -207,6 +208,13 @@ async def generate_lesson_blocks(req: LessonRequest):
         - Analyze the lesson topic. Whenever explaining a concept, workflow, architectural diagram, plot layout (e.g. Seaborn chart types, Matplotlib hierarchy), marketing strategy funnel, algorithm, or data pipeline, insert an "image" block.
         - Set "search_query" to a concise 3-5 word query targeting an educational visual (e.g., "Seaborn jointplot architecture diagram", "Digital marketing funnel strategy diagram").
         - If a lesson topic is purely abstract or text-only and doesn't benefit from a visual representation, you may omit the image block.
+        """
+
+        audio_rule = """
+        EDUCATIONAL AUDIO NARRATION GUIDELINE:
+        - Analyze the lesson topic the same way you analyze it for images. Whenever a section is conceptually dense, summarizes several sub-topics into one overview, or would genuinely benefit from being heard as well as read, insert an "audio" block with a "script" field (200 to 400 words) narrating the key ideas in a natural, spoken tone.
+        - It is normal and expected for MOST lessons to include zero audio blocks. Add one — rarely two, only for longer or unusually complex lessons — solely when it adds real value beyond the written blocks, never as a formality or to fill a quota.
+        - If the lesson topic is short, purely factual, vocabulary-based, or already fully served by the written blocks, omit the audio block entirely.
         """
 
         prompt_str = f"""
@@ -219,7 +227,8 @@ async def generate_lesson_blocks(req: LessonRequest):
         {duration_guidelines}
         {style_guidelines}
         {visual_rule}
-        
+        {audio_rule}
+
         Additional prompt instructions / focus areas: {req.prompt or 'None'}
 
         CRITICAL - LEARNER-READY PUBLISHING PRINCIPLE:
@@ -247,7 +256,7 @@ async def generate_lesson_blocks(req: LessonRequest):
         13. "flashcard": title (optional string), cards (list of objects with "front" and "back" strings). Front contains key term/concept/question, Back contains definition/explanation/answer. Include ALL flashcards for this lesson as multiple entries in this single "cards" list — do NOT create more than one "flashcard" block per lesson.
         14. "summary": points (list of strings summarizing key takeaways).
         15. "reference": title, url (trusted educational platforms/documentation, no hallucinated URLs).
-        16. "audio": url (output "" for now), caption (audio title, podcast summary, or voice narration topic), audio_source (optional: "ai_generated", "user_uploaded", "external").
+        16. "audio": script (the full 200 to 400 word educational narration script text explaining the core lesson topic), caption (descriptive audio overview title), url (output "" for now), audio_source (optional: "ai_generated", "user_uploaded", "external"). AUDIO NARRATION RULE: Only where a section is conceptually dense, spans multiple sub-topics, or genuinely benefits from a spoken walkthrough — insert an "audio" block with a rich "script" field (200 to 400 words). Most lessons should have none; a longer or more complex lesson may occasionally warrant two. Never add one purely to fill the block quota.
 
         SUBJECT ADAPTATION MATRIX:
         - Language Lessons: Use paragraph blocks for reading passages, code blocks or paragraph blocks formatted as dialogue scripts (e.g., Speaker A vs Speaker B), and table blocks for vocabulary definitions.
@@ -491,8 +500,8 @@ async def generate_lesson_blocks(req: LessonRequest):
 
             # Fallback to paragraph for unsupported types
             allowed_types = {
-                "heading", "paragraph", "bullet_list", "numbered_list", "image", "video", 
-                "table", "callout", "code", "example", "quiz", "assignment", 
+                "heading", "paragraph", "bullet_list", "numbered_list", "image", "video",
+                "audio", "table", "callout", "code", "example", "quiz", "assignment",
                 "flashcard", "summary", "reference"
             }
             if block.get("type") not in allowed_types:

@@ -200,6 +200,15 @@ class VideoBlock(BaseModel):
     url: str
     caption: str
 
+class AudioBlock(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: Literal["audio"] = "audio"
+    url: Optional[str] = ""
+    caption: str
+    script: Optional[str] = None
+    audio_source: Optional[str] = "ai_generated"
+    voice: Optional[str] = None
+
 class TableBlock(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     type: Literal["table"] = "table"
@@ -283,6 +292,7 @@ LessonBlock = Annotated[
         NumberedListBlock,
         ImageBlock,
         VideoBlock,
+        AudioBlock,
         TableBlock,
         CalloutBlock,
         CodeBlock,
