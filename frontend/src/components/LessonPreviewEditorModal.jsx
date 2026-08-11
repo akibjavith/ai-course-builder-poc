@@ -1269,7 +1269,7 @@ export default function LessonPreviewEditorModal({
     try {
       setUploadingBlockIdx(idx);
       const res = await generateAIAudio({
-        script: script || null,
+        script: mode === 'prompt' ? null : (script || null),
         prompt: prompt || null,
         voice: voice || 'nova',
         mode: mode || 'verbatim',
@@ -2078,23 +2078,25 @@ export default function LessonPreviewEditorModal({
                                     </span>
                                   ) : null}
 
-                                  {/* Voice Selector Dropdown */}
-                                  <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-0.5 text-xs shadow-xs">
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase">Voice:</span>
-                                    <select
-                                      value={block.voice || 'nova'}
-                                      onChange={(e) => handleChangeAudioVoice(idx, block, e.target.value)}
-                                      disabled={uploadingBlockIdx === idx}
-                                      className="text-[11px] font-bold text-purple-700 bg-transparent focus:outline-none cursor-pointer"
-                                    >
-                                      <option value="nova">👩 Nova (Friendly Female)</option>
-                                      <option value="onyx">👨 Onyx (Professional Male)</option>
-                                      <option value="echo">👨 Echo (Warm Male)</option>
-                                      <option value="shimmer">👩 Shimmer (Soft Female)</option>
-                                      <option value="alloy">🧑 Alloy (Neutral)</option>
-                                      <option value="fable">🎭 Fable (Storyteller)</option>
-                                    </select>
-                                  </div>
+                                  {/* Voice Selector Dropdown - Only shown for AI Generated Audio or New Audio blocks */}
+                                  {(!block.url || block.audio_source === 'ai_generated' || (block.url && block.url.includes('ai_audio_'))) && (
+                                    <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-0.5 text-xs shadow-xs">
+                                      <span className="text-[10px] font-bold text-slate-400 uppercase">Voice:</span>
+                                      <select
+                                        value={block.voice || 'nova'}
+                                        onChange={(e) => handleChangeAudioVoice(idx, block, e.target.value)}
+                                        disabled={uploadingBlockIdx === idx}
+                                        className="text-[11px] font-bold text-purple-700 bg-transparent focus:outline-none cursor-pointer"
+                                      >
+                                        <option value="nova">👩 Nova (Friendly Female)</option>
+                                        <option value="onyx">👨 Onyx (Professional Male)</option>
+                                        <option value="echo">👨 Echo (Warm Male)</option>
+                                        <option value="shimmer">👩 Shimmer (Soft Female)</option>
+                                        <option value="alloy">🧑 Alloy (Neutral)</option>
+                                        <option value="fable">🎭 Fable (Storyteller)</option>
+                                      </select>
+                                    </div>
+                                  )}
                                 </div>
 
                                 <div className="flex items-center gap-2 flex-wrap">
@@ -2996,14 +2998,14 @@ export default function LessonPreviewEditorModal({
                   onClick={() => setAiAudioModal(prev => ({ ...prev, mode: 'verbatim' }))}
                   className={`flex-1 py-1.5 rounded-lg transition ${aiAudioModal.mode === 'verbatim' ? 'bg-white text-purple-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                 >
-                  🎵 Verbatim Script (tts-1)
+                  🎵 Verbatim Script
                 </button>
                 <button
                   type="button"
                   onClick={() => setAiAudioModal(prev => ({ ...prev, mode: 'prompt' }))}
                   className={`flex-1 py-1.5 rounded-lg transition ${aiAudioModal.mode === 'prompt' ? 'bg-white text-purple-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                 >
-                  ✨ Topic Prompt (gpt-4o-mini-tts)
+                  ✨ Topic Prompt
                 </button>
               </div>
 

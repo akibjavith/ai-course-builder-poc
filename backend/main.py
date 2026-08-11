@@ -589,7 +589,7 @@ def generate_ai_audio_helper(
             "You are an expert educational audio narrator and podcast scriptwriter. "
             "Write a clear, engaging, educational audio script explaining the given topic. "
             "Pacing rules: Use natural punctuation (commas, periods, short sentences) to ensure smooth pronunciation. "
-            "LENGTH LIMIT: Keep the script concise (between 200 and 450 words, maximum 2,500 characters / 3-4 minutes spoken audio). "
+            "LENGTH LIMIT: Keep the script concise (between 200 and 450 words, maximum 2,500 characters / 2-3 minutes spoken audio). Always complete your final conclusion sentence cleanly with a full stop."
         )
 
         if is_podcast:
@@ -602,36 +602,92 @@ def generate_ai_audio_helper(
         else:
             caption_text = f"Audio Overview: {topic_prompt[:50]}"
 
-        user_message = f"Topic to explain in audio: {topic_prompt}"
+        user_message = f"Explain this topic in detail in 2 to 3 minutes of spoken audio: {topic_prompt}"
 
+        # Attempt 1: Direct Audio Completions via gpt-4o-mini-tts
         try:
-            llm_response = openai_client.chat.completions.create(
+            audio_completion = openai_client.chat.completions.create(
                 model="gpt-4o-mini-tts",
+                modalities=["text", "audio"],
+                audio={"voice": voice_name, "format": "mp3"},
                 messages=[
                     {"role": "system", "content": system_instruction},
                     {"role": "user", "content": user_message}
                 ],
-                temperature=0.7,
-                max_tokens=800
+                max_tokens=2500
             )
-            
-            # Log LLM text token cost if draft_id is supplied
-            if draft_id:
-                try:
-                    from metering_helper import track_chatbot_cost
-                    track_chatbot_cost(
-                        draft_id=draft_id,
-                        response=llm_response,
-                        model="gpt-4o-mini-tts",
-                        step_name="generate_ai_audio_script"
-                    )
-                except Exception as meter_err:
-                    logger.error(f"[METERING ERROR] Failed to track script LLM cost: {meter_err}")
 
-            final_script = llm_response.choices[0].message.content.strip()
-        except Exception as llm_err:
-            logger.error(f"Failed to generate script text with LLM: {llm_err}")
-            final_script = topic_prompt
+            audio_obj = getattr(audio_completion.choices[0].message, 'audio', None)
+            if audio_obj:
+                audio_b64 = getattr(audio_obj, 'data', '')
+                extracted_transcript = getattr(audio_obj, 'transcript', '')
+                final_script = (extracted_transcript or topic_prompt).strip()
+
+                import base64
+                audio_bytes = base64.b64decode(audio_b64)
+                filename = f"ai_audio_{uuid.uuid4().hex[:10]}.mp3"
+                upload_dir = os.path.join("uploads", "course_audio")
+                os.makedirs(upload_dir, exist_ok=True)
+                file_path = os.path.join(upload_dir, filename)
+
+                with open(file_path, "wb") as f:
+                    f.write(audio_bytes)
+
+                local_url = f"/uploads/course_audio/{filename}"
+
+                if draft_id:
+                    try:
+                        from metering_helper import track_chatbot_cost
+                        track_chatbot_cost(
+                            draft_id=draft_id,
+                            response=audio_completion,
+                            model="gpt-4o-mini-tts",
+                            step_name="generate_ai_audio_prompt"
+                        )
+                    except Exception as meter_err:
+                        logger.error(f"[METERING ERROR] Failed to track audio completion cost: {meter_err}")
+
+                return {
+                    "status": "success",
+                    "url": local_url,
+                    "script": final_script,
+                    "caption": caption_text,
+                    "voice": voice_name,
+                    "audio_source": "ai_generated",
+                    "model_used": "gpt-4o-mini-tts"
+                }
+
+        except Exception as direct_err:
+            logger.info(f"[AudioHelper] Direct audio completion fallback to script + tts-1: {direct_err}")
+
+            # Fallback: LLM writes script text first, then tts-1 converts to speech
+            try:
+                llm_response = openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": system_instruction},
+                        {"role": "user", "content": user_message}
+                    ],
+                    temperature=0.7,
+                    max_tokens=2500
+                )
+                
+                if draft_id:
+                    try:
+                        from metering_helper import track_chatbot_cost
+                        track_chatbot_cost(
+                            draft_id=draft_id,
+                            response=llm_response,
+                            model="gpt-4o-mini",
+                            step_name="generate_ai_audio_script"
+                        )
+                    except Exception as meter_err:
+                        logger.error(f"[METERING ERROR] Failed to track script LLM cost: {meter_err}")
+
+                final_script = llm_response.choices[0].message.content.strip()
+            except Exception as llm_err:
+                logger.error(f"Failed to generate script text with LLM: {llm_err}")
+                final_script = topic_prompt
 
     # Enforce 3-4 min length cap (max 2,500 chars)
     if len(final_script) > 2500:
