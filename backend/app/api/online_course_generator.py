@@ -564,8 +564,31 @@ async def generate_lesson_blocks(req: LessonRequest):
                 block["url"] = resolved_url or str(block.get("url") or "")
                     
             elif block_type == "audio":
+                block["caption"] = str(block.get("caption") or block.get("title") or req.title or "")
+                script_text = str(block.get("script") or block.get("text") or block["caption"]).strip()
+                session_id = str(req.course_details.courseName if req.course_details else "default_session")
+                voice_choice = str(block.get("voice") or "nova")
+
+                if not block.get("url") and script_text:
+                    try:
+                        from main import generate_ai_audio_helper
+                        audio_res = generate_ai_audio_helper(
+                            script=script_text,
+                            prompt=block["caption"],
+                            voice=voice_choice,
+                            mode="verbatim",
+                            draft_id=session_id
+                        )
+                        if audio_res and audio_res.get("url"):
+                            block["url"] = audio_res["url"]
+                            block["script"] = audio_res.get("script") or script_text
+                            block["caption"] = audio_res.get("caption") or block["caption"]
+                            block["audio_source"] = "ai_generated"
+                            block["voice"] = voice_choice
+                    except Exception as audio_err:
+                        logger.warning(f"[LessonBlocks] Automated AI audio generation failed: {audio_err}")
+
                 block["url"] = str(block.get("url") or "")
-                block["caption"] = str(block.get("caption") or "")
                 block["audio_source"] = str(block.get("audio_source") or "user_uploaded")
                     
             elif block_type == "video":

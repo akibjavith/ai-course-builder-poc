@@ -3,9 +3,9 @@ import {
   ChevronLeft, ChevronRight, ChevronDown, Edit3, Save, Trash2, X, Plus, Trash, 
   HelpCircle, FileCode, AlertTriangle, AlertCircle, FileText, Info, 
   BookOpen, ExternalLink, Lightbulb, CheckSquare, ListOrdered, List, Check,
-  Paperclip, Upload, Loader2, Palette, Paintbrush, Layers, Sparkles, Globe, Volume2, Music
+  Paperclip, Upload, Loader2, Palette, Paintbrush, Layers, Sparkles, Globe, Volume2, Music, MessageSquare
 } from 'lucide-react';
-import { uploadChapterMedia, uploadCourseImage, downloadExternalImage, uploadCourseAudio, downloadExternalAudio, generateAIImage, listMediaFiles, getThemes, uploadTheme, resolveMediaUrl, API_URL } from '../api';
+import { uploadChapterMedia, uploadCourseImage, downloadExternalImage, uploadCourseAudio, downloadExternalAudio, generateAIImage, generateAIAudio, listMediaFiles, getThemes, uploadTheme, resolveMediaUrl, API_URL } from '../api';
 import SecureDocViewer from './SecureDocViewer';
 import ActionModal from './ActionModal';
 import DynamicStyle from './DynamicStyle';
@@ -908,6 +908,8 @@ export default function LessonPreviewEditorModal({
   // Track uploading state for attachment blocks
   const [uploadingBlockIdx, setUploadingBlockIdx] = useState(null);
   const [aiPromptModal, setAiPromptModal] = useState(null); // { idx, prompt }
+  const [aiAudioModal, setAiAudioModal] = useState(null); // { idx, prompt, script, voice, mode, isPodcast }
+  const [expandedTranscripts, setExpandedTranscripts] = useState({}); // { [blockIdx]: boolean }
 
   // Simple active insertion menu index
   const [activeInsertMenuIdx, setActiveInsertMenuIdx] = useState(null);
@@ -1240,6 +1242,90 @@ export default function LessonPreviewEditorModal({
     } finally {
       setUploadingBlockIdx(null);
       setAiPromptModal(null);
+    }
+  };
+
+  const handleGenerateAIAudio = async (idx, configPayload) => {
+    const { script, prompt, voice, mode, isPodcast } = configPayload;
+    if (mode === 'verbatim' && !(script || '').trim()) {
+      setModalConfig({
+        title: 'Script Required',
+        message: 'Please enter a text script to generate verbatim AI speech.',
+        type: 'warning',
+        confirmText: 'Got It'
+      });
+      return;
+    }
+    if (mode === 'prompt' && !(prompt || '').trim()) {
+      setModalConfig({
+        title: 'Topic Prompt Required',
+        message: 'Please enter a topic prompt for generating the AI audio content.',
+        type: 'warning',
+        confirmText: 'Got It'
+      });
+      return;
+    }
+
+    try {
+      setUploadingBlockIdx(idx);
+      const res = await generateAIAudio({
+        script: script || null,
+        prompt: prompt || null,
+        voice: voice || 'nova',
+        mode: mode || 'verbatim',
+        is_podcast: !!isPodcast,
+        draft_id: courseData?.id || null
+      });
+
+      if (res && res.url) {
+        handleUpdateBlock(idx, {
+          url: res.url,
+          script: res.script || script,
+          caption: res.caption || (mode === 'prompt' ? prompt : 'AI Audio Track'),
+          voice: res.voice || voice || 'nova',
+          audio_source: 'ai_generated'
+        });
+      }
+    } catch (err) {
+      console.error("Failed to generate AI audio:", err);
+      setModalConfig({
+        title: 'Audio Generation Failed',
+        message: err?.response?.data?.detail || 'Could not generate AI audio. Check your OpenAI API key and try again.',
+        type: 'warning',
+        confirmText: 'Got It'
+      });
+    } finally {
+      setUploadingBlockIdx(null);
+      setAiAudioModal(null);
+    }
+  };
+
+  const handleChangeAudioVoice = async (idx, currentBlock, newVoice) => {
+    if (!currentBlock || !currentBlock.script) {
+      handleUpdateBlock(idx, { voice: newVoice });
+      return;
+    }
+    try {
+      setUploadingBlockIdx(idx);
+      const res = await generateAIAudio({
+        script: currentBlock.script,
+        voice: newVoice,
+        mode: 'verbatim',
+        draft_id: courseData?.id || null
+      });
+
+      if (res && res.url) {
+        handleUpdateBlock(idx, {
+          url: res.url,
+          voice: newVoice,
+          audio_source: 'ai_generated'
+        });
+      }
+    } catch (err) {
+      console.error("Failed to change voice tone:", err);
+      handleUpdateBlock(idx, { voice: newVoice });
+    } finally {
+      setUploadingBlockIdx(null);
     }
   };
 
@@ -1991,14 +2077,33 @@ export default function LessonPreviewEditorModal({
                                       <Check className="w-3 h-3" /> Saved on Server
                                     </span>
                                   ) : null}
+
+                                  {/* Voice Selector Dropdown */}
+                                  <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-0.5 text-xs shadow-xs">
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase">Voice:</span>
+                                    <select
+                                      value={block.voice || 'nova'}
+                                      onChange={(e) => handleChangeAudioVoice(idx, block, e.target.value)}
+                                      disabled={uploadingBlockIdx === idx}
+                                      className="text-[11px] font-bold text-purple-700 bg-transparent focus:outline-none cursor-pointer"
+                                    >
+                                      <option value="nova">👩 Nova (Friendly Female)</option>
+                                      <option value="onyx">👨 Onyx (Professional Male)</option>
+                                      <option value="echo">👨 Echo (Warm Male)</option>
+                                      <option value="shimmer">👩 Shimmer (Soft Female)</option>
+                                      <option value="alloy">🧑 Alloy (Neutral)</option>
+                                      <option value="fable">🎭 Fable (Storyteller)</option>
+                                    </select>
+                                  </div>
                                 </div>
+
                                 <div className="flex items-center gap-2 flex-wrap">
                                   {block.url ? (
                                     <button
                                       type="button"
                                       onClick={() => handleUpdateBlock(idx, { url: '', audio_source: null })}
                                       className="flex items-center gap-1 bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg transition active:scale-95 shadow-sm cursor-pointer"
-                                      title="Remove current audio file to upload or paste a new one"
+                                      title="Remove current audio file to upload or generate a new one"
                                     >
                                       <Trash2 className="w-3 h-3" />
                                       <span>Remove Audio</span>
@@ -2007,12 +2112,28 @@ export default function LessonPreviewEditorModal({
                                     <>
                                       <button
                                         type="button"
-                                        disabled={true}
-                                        className="flex items-center gap-1.5 bg-purple-200 text-purple-500 text-[10px] font-bold px-2.5 py-1 rounded-lg cursor-not-allowed shadow-sm"
-                                        title="AI Voice Generation coming soon!"
+                                        onClick={() => setAiAudioModal({
+                                          idx,
+                                          prompt: block.caption || '',
+                                          script: block.script || '',
+                                          voice: block.voice || 'nova',
+                                          mode: block.script ? 'verbatim' : 'prompt',
+                                          isPodcast: false
+                                        })}
+                                        disabled={uploadingBlockIdx === idx}
+                                        className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg transition active:scale-95 disabled:opacity-50 shadow-sm cursor-pointer"
                                       >
-                                        <Sparkles className="w-3 h-3" />
-                                        <span>Generate AI Audio</span>
+                                        {uploadingBlockIdx === idx ? (
+                                          <>
+                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                            <span>Generating Audio...</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Sparkles className="w-3 h-3" />
+                                            <span>Generate AI Audio</span>
+                                          </>
+                                        )}
                                       </button>
                                       <input 
                                         type="file" 
@@ -2064,6 +2185,7 @@ export default function LessonPreviewEditorModal({
                                   )}
                                 </div>
                               </div>
+
                               <div className="space-y-1.5">
                                 <div className="flex gap-2 items-center">
                                   <input 
@@ -2109,6 +2231,7 @@ export default function LessonPreviewEditorModal({
                                   </p>
                                 )}
                               </div>
+
                               <input 
                                 type="text"
                                 placeholder="Audio Title / Narration Description"
@@ -2116,6 +2239,18 @@ export default function LessonPreviewEditorModal({
                                 onChange={(e) => handleUpdateBlock(idx, { caption: e.target.value })}
                                 className="editor-text-input !p-2 !text-xs"
                               />
+
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase">Written Transcript / Narration Script</label>
+                                <textarea 
+                                  rows={3}
+                                  placeholder="Written transcript text script (read verbatim by tts-1)..."
+                                  value={block.script || ''}
+                                  onChange={(e) => handleUpdateBlock(idx, { script: e.target.value })}
+                                  className="w-full p-2.5 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-purple-500 focus:outline-none text-slate-700 leading-relaxed font-sans"
+                                />
+                              </div>
+
                               {block.url && (
                                 <div className="mt-2 p-2 bg-white rounded-xl border border-slate-200 shadow-sm">
                                   <audio controls src={resolveMediaUrl(block.url)} className="w-full" />
@@ -2123,16 +2258,39 @@ export default function LessonPreviewEditorModal({
                               )}
                             </div>
                           ) : (
-                            <div className="audio-block-container p-4 bg-slate-50/80 border border-slate-200 rounded-2xl space-y-2.5 shadow-sm">
-                              <div className="flex items-center gap-2 text-slate-700 font-bold text-xs uppercase tracking-wider">
-                                <Volume2 className="w-4 h-4 text-purple-600" />
-                                <span>{block.caption || 'Audio Track'}</span>
+                            <div className="audio-block-container p-4 bg-slate-50/80 border border-slate-200 rounded-2xl space-y-3 shadow-sm">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-slate-800 font-bold text-xs uppercase tracking-wider">
+                                  <Volume2 className="w-4 h-4 text-purple-600" />
+                                  <span>{block.caption || 'Audio Overview Track'}</span>
+                                </div>
+                                {block.script && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setExpandedTranscripts(prev => ({ ...prev, [idx]: !prev[idx] }))}
+                                    className="text-[11px] font-bold text-purple-700 hover:text-purple-800 flex items-center gap-1 transition cursor-pointer"
+                                  >
+                                    <FileText className="w-3.5 h-3.5" />
+                                    <span>{expandedTranscripts[idx] ? 'Hide Transcript ▲' : 'Read Transcript ▾'}</span>
+                                  </button>
+                                )}
                               </div>
+
                               {block.url ? (
                                 <audio controls src={resolveMediaUrl(block.url)} className="w-full rounded-xl" />
                               ) : (
                                 <div className="p-3 bg-slate-100 flex items-center justify-center rounded-xl border border-dashed border-slate-200 text-slate-400 text-xs font-medium">
                                   [Audio Track Placeholder: {block.caption || 'No audio file attached'}]
+                                </div>
+                              )}
+
+                              {/* Accordion Read-Along Transcript */}
+                              {block.script && expandedTranscripts[idx] && (
+                                <div className="p-3.5 bg-white rounded-xl border border-slate-200/90 text-xs text-slate-700 leading-relaxed font-sans animate-fade-in shadow-inner">
+                                  <p className="font-bold text-[10px] text-purple-600 uppercase tracking-widest mb-1 flex items-center gap-1">
+                                    <FileText className="w-3 h-3" /> Audio Transcript
+                                  </p>
+                                  <div className="whitespace-pre-line">{block.script}</div>
                                 </div>
                               )}
                             </div>
@@ -2801,6 +2959,134 @@ export default function LessonPreviewEditorModal({
                     <>
                       <Sparkles className="w-3.5 h-3.5" />
                       <span>Generate Image</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* AI Audio Generation Modal */}
+        {aiAudioModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-fade-in">
+            <div className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-slate-100 space-y-4 animate-scale-in">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center font-bold">
+                    <Volume2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm text-slate-800">Generate AI Audio Track</h3>
+                    <p className="text-[10px] text-slate-400 font-medium">Use tts-1 or gpt-4o-mini-tts with voice selection</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setAiAudioModal(null)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Mode Selection Tabs */}
+              <div className="flex gap-2 p-1 bg-slate-100 rounded-xl text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setAiAudioModal(prev => ({ ...prev, mode: 'verbatim' }))}
+                  className={`flex-1 py-1.5 rounded-lg transition ${aiAudioModal.mode === 'verbatim' ? 'bg-white text-purple-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                >
+                  🎵 Verbatim Script (tts-1)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAiAudioModal(prev => ({ ...prev, mode: 'prompt' }))}
+                  className={`flex-1 py-1.5 rounded-lg transition ${aiAudioModal.mode === 'prompt' ? 'bg-white text-purple-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                >
+                  ✨ Topic Prompt (gpt-4o-mini-tts)
+                </button>
+              </div>
+
+              {/* Voice Choice */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Select Voice Tone</label>
+                <select
+                  value={aiAudioModal.voice || 'nova'}
+                  onChange={(e) => setAiAudioModal(prev => ({ ...prev, voice: e.target.value }))}
+                  className="w-full p-2.5 border border-slate-200 rounded-xl text-xs font-bold text-purple-700 bg-white focus:ring-2 focus:ring-purple-500 focus:outline-none cursor-pointer"
+                >
+                  <option value="nova">👩 Nova (Friendly Female Teacher)</option>
+                  <option value="onyx">👨 Onyx (Professional Male Instructor)</option>
+                  <option value="echo">👨 Echo (Warm Conversational Male)</option>
+                  <option value="shimmer">👩 Shimmer (Soft & Calm Female)</option>
+                  <option value="alloy">🧑 Alloy (Neutral & Balanced)</option>
+                  <option value="fable">🎭 Fable (Expressive Storyteller)</option>
+                </select>
+              </div>
+
+              {aiAudioModal.mode === 'verbatim' ? (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Exact Text Script (read word-for-word)</label>
+                  <textarea 
+                    rows={4}
+                    placeholder="Enter the exact script text to convert to spoken audio..."
+                    value={aiAudioModal.script || ''}
+                    onChange={(e) => setAiAudioModal(prev => ({ ...prev, script: e.target.value }))}
+                    className="w-full p-3 border border-slate-200 rounded-2xl text-xs text-slate-700 focus:ring-2 focus:ring-purple-500 focus:outline-none leading-relaxed font-sans"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Topic / Concept Prompt</label>
+                    <textarea 
+                      rows={3}
+                      placeholder="Describe what the audio content should be about (e.g. Explain Supervised vs Unsupervised Learning in simple terms)..."
+                      value={aiAudioModal.prompt || ''}
+                      onChange={(e) => setAiAudioModal(prev => ({ ...prev, prompt: e.target.value }))}
+                      className="w-full p-3 border border-slate-200 rounded-2xl text-xs text-slate-700 focus:ring-2 focus:ring-purple-500 focus:outline-none leading-relaxed font-sans"
+                    />
+                  </div>
+
+                  {/* Podcast Toggle */}
+                  <label className="flex items-center gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer">
+                    <input 
+                      type="checkbox"
+                      checked={!!aiAudioModal.isPodcast}
+                      onChange={(e) => setAiAudioModal(prev => ({ ...prev, isPodcast: e.target.checked }))}
+                      className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+                    />
+                    <div>
+                      <p className="text-xs font-bold text-slate-700">🎙️ Podcast Mode (2-Speaker Dialogue)</p>
+                      <p className="text-[10px] text-slate-400 font-medium">Generates an interactive dialogue between Host Alex and Dr. Taylor</p>
+                    </div>
+                  </label>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setAiAudioModal(null)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleGenerateAIAudio(aiAudioModal.idx, aiAudioModal)}
+                  disabled={uploadingBlockIdx === aiAudioModal.idx}
+                  className="px-5 py-2 text-xs font-bold bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl transition flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+                >
+                  {uploadingBlockIdx === aiAudioModal.idx ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Generating AI Audio...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Generate Audio</span>
                     </>
                   )}
                 </button>

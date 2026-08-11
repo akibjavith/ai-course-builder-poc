@@ -61,6 +61,11 @@ export const generateAIImage = async (prompt, draftId = null) => {
   return response.data;
 };
 
+export const generateAIAudio = async (payload) => {
+  const response = await axios.post(`${API_URL}/course/generate-ai-audio`, payload);
+  return response.data;
+};
+
 export const listMediaFiles = async () => {
   const response = await axios.get(`${API_URL}/course/list-media`);
   return response.data;

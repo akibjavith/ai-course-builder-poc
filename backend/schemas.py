@@ -108,6 +108,14 @@ class GenerateAIImageRequest(BaseModel):
     prompt: str
     draft_id: Optional[str] = None
 
+class GenerateAIAudioRequest(BaseModel):
+    script: Optional[str] = None
+    prompt: Optional[str] = None
+    voice: Optional[str] = "nova"
+    mode: Optional[str] = "verbatim"
+    is_podcast: Optional[bool] = False
+    draft_id: Optional[str] = None
+
 class StoreCourseRequest(BaseModel):
     course_json: dict
 

@@ -8,7 +8,8 @@ from schemas import (
     GenerateTitleRequest, GenerateTitleResponse, FetchWebRequest, FetchYouTubeRequest,
     GenerateOutlineBaseRequest, ExportChapterRequest, GenerateVoiceScriptReq, GenerateFlashcardsRequest,
     GenerateMCQRequest, GenerateAssessmentRequest, ChatRequest, ThemeUploadRequest,
-    ChatbotBuilderRequest, DownloadExternalImageRequest, GenerateAIImageRequest, DownloadExternalAudioRequest
+    ChatbotBuilderRequest, DownloadExternalImageRequest, GenerateAIImageRequest, DownloadExternalAudioRequest,
+    GenerateAIAudioRequest
 )
 from course_planner import generate_course_structure
 from content_generator import generate_chapter_content, generate_course_quiz
@@ -561,6 +562,152 @@ async def generate_ai_image(req: GenerateAIImageRequest):
     except Exception as e:
         logger.error(f"Error generating AI image: {e}")
         raise HTTPException(status_code=500, detail=f"Could not generate AI image: {str(e)}")
+
+def generate_ai_audio_helper(
+    script: Optional[str] = None,
+    prompt: Optional[str] = None,
+    voice: str = "nova",
+    mode: str = "verbatim",
+    is_podcast: bool = False,
+    draft_id: Optional[str] = None
+) -> dict:
+    import uuid
+
+    voice_name = (voice or "nova").lower().strip()
+    valid_voices = ["nova", "onyx", "echo", "shimmer", "alloy", "fable"]
+    if voice_name not in valid_voices:
+        voice_name = "nova"
+
+    final_script = (script or "").strip()
+    caption_text = "Audio Overview"
+
+    # Step 1: If prompt mode (or script is empty), use gpt-4o-mini to write the educational narration script first
+    if mode == "prompt" or not final_script:
+        topic_prompt = (prompt or script or "Educational lesson summary").strip()
+        
+        system_instruction = (
+            "You are an expert educational audio narrator and podcast scriptwriter. "
+            "Write a clear, engaging, educational audio script explaining the given topic. "
+            "Pacing rules: Use natural punctuation (commas, periods, short sentences) to ensure smooth pronunciation. "
+            "LENGTH LIMIT: Keep the script concise (between 200 and 450 words, maximum 2,500 characters / 3-4 minutes spoken audio). "
+        )
+
+        if is_podcast:
+            system_instruction += (
+                "Format as a 2-speaker interactive educational podcast dialogue. "
+                "Dynamically choose 2 relevant role titles matching the topic (e.g. 'Instructor & Student', 'Host & Lead Expert', or 'Senior Specialist & Analyst'). "
+                "Structure clearly as: '[Speaker 1 Title]: ... [Speaker 2 Title]: ...'"
+            )
+            caption_text = f"Podcast Dialogue: {topic_prompt[:50]}"
+        else:
+            caption_text = f"Audio Overview: {topic_prompt[:50]}"
+
+        user_message = f"Topic to explain in audio: {topic_prompt}"
+
+        try:
+            llm_response = openai_client.chat.completions.create(
+                model="gpt-4o-mini-tts",
+                messages=[
+                    {"role": "system", "content": system_instruction},
+                    {"role": "user", "content": user_message}
+                ],
+                temperature=0.7,
+                max_tokens=800
+            )
+            
+            # Log LLM text token cost if draft_id is supplied
+            if draft_id:
+                try:
+                    from metering_helper import track_chatbot_cost
+                    track_chatbot_cost(
+                        draft_id=draft_id,
+                        response=llm_response,
+                        model="gpt-4o-mini-tts",
+                        step_name="generate_ai_audio_script"
+                    )
+                except Exception as meter_err:
+                    logger.error(f"[METERING ERROR] Failed to track script LLM cost: {meter_err}")
+
+            final_script = llm_response.choices[0].message.content.strip()
+        except Exception as llm_err:
+            logger.error(f"Failed to generate script text with LLM: {llm_err}")
+            final_script = topic_prompt
+
+    # Enforce 3-4 min length cap (max 2,500 chars)
+    if len(final_script) > 2500:
+        final_script = final_script[:2500]
+
+    # Step 2: Convert final_script to audio via OpenAI tts-1 (speed=0.95 for neat educational speech)
+    try:
+        tts_response = openai_client.audio.speech.create(
+            model="tts-1",
+            voice=voice_name,
+            speed=0.95,
+            input=final_script
+        )
+
+        # Track TTS character cost if draft_id is supplied
+        if draft_id:
+            try:
+                from ai_metering.token_tracker import calculate_dynamic_cost
+                from database import add_chatbot_draft_cost
+                char_count = len(final_script)
+                cost_data = calculate_dynamic_cost(
+                    model="tts-1",
+                    input_tokens=char_count,
+                    output_tokens=0
+                )
+                tts_cost = cost_data.get("total_cost", 0.0)
+                if tts_cost > 0:
+                    add_chatbot_draft_cost(draft_id, tts_cost)
+                    logger.info(f"[METERING] Added TTS audio cost ${tts_cost} ({char_count} chars) for draft {draft_id}")
+            except Exception as tts_meter_err:
+                logger.error(f"[METERING ERROR] Failed to track TTS audio cost: {tts_meter_err}")
+
+        # Step 3: Save audio payload to uploads/course_audio/ai_audio_<uuid>.mp3
+        filename = f"ai_audio_{uuid.uuid4().hex[:10]}.mp3"
+        upload_dir = os.path.join("uploads", "course_audio")
+        os.makedirs(upload_dir, exist_ok=True)
+        file_path = os.path.join(upload_dir, filename)
+
+        with open(file_path, "wb") as buffer:
+            for chunk in tts_response.iter_bytes():
+                buffer.write(chunk)
+
+        local_url = f"/uploads/course_audio/{filename}"
+        return {
+            "status": "success",
+            "url": local_url,
+            "script": final_script,
+            "caption": caption_text,
+            "voice": voice_name,
+            "audio_source": "ai_generated",
+            "model_used": "tts-1"
+        }
+
+    except Exception as e:
+        logger.error(f"Error executing TTS speech generation: {e}")
+        raise ValueError(f"Could not convert script to speech: {str(e)}")
+
+@app.post("/course/generate-ai-audio")
+async def generate_ai_audio(req: GenerateAIAudioRequest):
+    try:
+        res = generate_ai_audio_helper(
+            script=req.script,
+            prompt=req.prompt,
+            voice=req.voice or "nova",
+            mode=req.mode or "verbatim",
+            is_podcast=req.is_podcast or False,
+            draft_id=req.draft_id
+        )
+        return res
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in generate_ai_audio endpoint: {e}")
+        raise HTTPException(status_code=500, detail=f"Could not generate AI audio: {str(e)}")
 
 @app.post("/course/fetch-web")
 async def fetch_web(req: FetchWebRequest):
