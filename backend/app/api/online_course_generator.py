@@ -755,6 +755,46 @@ async def generate_lesson_blocks(req: LessonRequest):
                 block["title"] = str(block.get("title") or "")
                 block["url"] = str(block.get("url") or "")
 
+        # ── GUARANTEED AUDIO: every lesson gets exactly one real audio narration ────────
+        # Mirrors the quiz/flashcard "always end up with at least one" guarantee, but unlike
+        # those, a placeholder here would be useless — so instead of inserting a stub, this
+        # actually generates a real script + real TTS file grounded in THIS lesson's own
+        # content whenever the model didn't already include an "audio" block on its own.
+        has_audio_block = any(b.get("type") == "audio" for b in lesson_data["blocks"])
+        if not has_audio_block:
+            try:
+                heading_texts = [b.get("text") for b in lesson_data["blocks"] if b.get("type") == "heading" and b.get("text")]
+                paragraph_texts = [b.get("text") for b in lesson_data["blocks"] if b.get("type") == "paragraph" and b.get("text")]
+                content_snippet = " ".join(paragraph_texts)[:3000]
+                topic_summary = (
+                    f"Lesson: {req.title}. "
+                    f"Key sections covered: {', '.join(heading_texts[:8]) or req.title}. "
+                    f"Lesson content: {content_snippet or req.prompt or req.title}"
+                )
+
+                session_id = str(req.course_details.courseName if req.course_details else "default_session")
+
+                from main import generate_ai_audio_helper
+                audio_res = generate_ai_audio_helper(
+                    prompt=topic_summary,
+                    mode="prompt",
+                    voice="nova",
+                    draft_id=session_id
+                )
+                if audio_res and audio_res.get("url"):
+                    lesson_data["blocks"].append({
+                        "id": str(uuid.uuid4()),
+                        "type": "audio",
+                        "url": audio_res["url"],
+                        "caption": audio_res.get("caption") or f"Audio Overview: {req.title}",
+                        "script": audio_res.get("script") or "",
+                        "audio_source": "ai_generated",
+                        "voice": audio_res.get("voice") or "nova"
+                    })
+                    logger.info(f"[LessonBlocks] Guaranteed-audio fallback generated 1 audio block for lesson '{req.title}'.")
+            except Exception as guaranteed_audio_err:
+                logger.warning(f"[LessonBlocks] Guaranteed-audio fallback failed for lesson '{req.title}': {guaranteed_audio_err}")
+
         # Validate using Pydantic model
         try:
             validated_data = LessonBlocksResponse(**lesson_data)

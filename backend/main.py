@@ -563,6 +563,30 @@ async def generate_ai_image(req: GenerateAIImageRequest):
         logger.error(f"Error generating AI image: {e}")
         raise HTTPException(status_code=500, detail=f"Could not generate AI image: {str(e)}")
 
+def _trim_script_to_sentence_boundary(text: str, max_len: int = 2500) -> str:
+    """
+    Trims text to at most max_len characters WITHOUT cutting off mid-word/mid-sentence.
+    Prefers cutting back to the last complete sentence ending (., !, ?) within the budget;
+    if no sentence boundary is found reasonably close to the limit, falls back to the last
+    whole word and closes it off with a period so the narration never ends mid-thought.
+    """
+    if len(text) <= max_len:
+        return text
+
+    truncated = text[:max_len]
+    last_end = max(truncated.rfind('.'), truncated.rfind('!'), truncated.rfind('?'))
+
+    # Only trust the sentence boundary if it doesn't throw away more than half the budget
+    if last_end != -1 and last_end > max_len * 0.5:
+        return truncated[:last_end + 1].strip()
+
+    last_space = truncated.rfind(' ')
+    if last_space != -1:
+        return truncated[:last_space].rstrip() + '.'
+
+    return truncated.rstrip() + '.'
+
+
 def generate_ai_audio_helper(
     script: Optional[str] = None,
     prompt: Optional[str] = None,
@@ -589,7 +613,7 @@ def generate_ai_audio_helper(
             "You are an expert educational audio narrator and podcast scriptwriter. "
             "Write a clear, engaging, educational audio script explaining the given topic. "
             "Pacing rules: Use natural punctuation (commas, periods, short sentences) to ensure smooth pronunciation. "
-            "LENGTH LIMIT: Keep the script concise (between 200 and 450 words, maximum 2,500 characters / 2-3 minutes spoken audio). Always complete your final conclusion sentence cleanly with a full stop."
+            "LENGTH LIMIT: Keep the script concise (between 200 and 400 words, maximum 2,200 characters / 2-3 minutes spoken audio). Leave margin under the limit — always complete your final conclusion sentence cleanly with a full stop well before the character cap, never right at it."
         )
 
         if is_podcast:
@@ -689,9 +713,8 @@ def generate_ai_audio_helper(
                 logger.error(f"Failed to generate script text with LLM: {llm_err}")
                 final_script = topic_prompt
 
-    # Enforce 3-4 min length cap (max 2,500 chars)
-    if len(final_script) > 2500:
-        final_script = final_script[:2500]
+    # Enforce 3-4 min length cap (max 2,500 chars) without cutting off mid-word/mid-sentence
+    final_script = _trim_script_to_sentence_boundary(final_script, max_len=2500)
 
     # Step 2: Convert final_script to audio via OpenAI tts-1 (speed=0.95 for neat educational speech)
     try:
