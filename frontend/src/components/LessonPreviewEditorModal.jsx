@@ -908,7 +908,7 @@ export default function LessonPreviewEditorModal({
   // Track uploading state for attachment blocks
   const [uploadingBlockIdx, setUploadingBlockIdx] = useState(null);
   const [aiPromptModal, setAiPromptModal] = useState(null); // { idx, prompt }
-  const [aiAudioModal, setAiAudioModal] = useState(null); // { idx, prompt, script, voice, mode, isPodcast }
+  const [aiAudioModal, setAiAudioModal] = useState(null); // { idx, prompt, script, voice, mode }
   const [expandedTranscripts, setExpandedTranscripts] = useState({}); // { [blockIdx]: boolean }
 
   // Simple active insertion menu index
@@ -1246,7 +1246,7 @@ export default function LessonPreviewEditorModal({
   };
 
   const handleGenerateAIAudio = async (idx, configPayload) => {
-    const { script, prompt, voice, mode, isPodcast } = configPayload;
+    const { script, prompt, voice, mode } = configPayload;
     if (mode === 'verbatim' && !(script || '').trim()) {
       setModalConfig({
         title: 'Script Required',
@@ -1273,7 +1273,6 @@ export default function LessonPreviewEditorModal({
         prompt: prompt || null,
         voice: voice || 'nova',
         mode: mode || 'verbatim',
-        is_podcast: !!isPodcast,
         draft_id: courseData?.id || null
       });
 
@@ -2119,8 +2118,7 @@ export default function LessonPreviewEditorModal({
                                           prompt: block.caption || '',
                                           script: block.script || '',
                                           voice: block.voice || 'nova',
-                                          mode: block.script ? 'verbatim' : 'prompt',
-                                          isPodcast: false
+                                          mode: block.script ? 'verbatim' : 'prompt'
                                         })}
                                         disabled={uploadingBlockIdx === idx}
                                         className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg transition active:scale-95 disabled:opacity-50 shadow-sm cursor-pointer"
@@ -3050,19 +3048,7 @@ export default function LessonPreviewEditorModal({
                     />
                   </div>
 
-                  {/* Podcast Toggle */}
-                  <label className="flex items-center gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer">
-                    <input 
-                      type="checkbox"
-                      checked={!!aiAudioModal.isPodcast}
-                      onChange={(e) => setAiAudioModal(prev => ({ ...prev, isPodcast: e.target.checked }))}
-                      className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
-                    />
-                    <div>
-                      <p className="text-xs font-bold text-slate-700">🎙️ Podcast Mode (2-Speaker Dialogue)</p>
-                      <p className="text-[10px] text-slate-400 font-medium">Generates an interactive dialogue between Host Alex and Dr. Taylor</p>
-                    </div>
-                  </label>
+
                 </div>
               )}
 

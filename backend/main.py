@@ -592,7 +592,6 @@ def generate_ai_audio_helper(
     prompt: Optional[str] = None,
     voice: str = "nova",
     mode: str = "verbatim",
-    is_podcast: bool = False,
     draft_id: Optional[str] = None
 ) -> dict:
     import uuid
@@ -610,21 +609,13 @@ def generate_ai_audio_helper(
         topic_prompt = (prompt or script or "Educational lesson summary").strip()
         
         system_instruction = (
-            "You are an expert educational audio narrator and podcast scriptwriter. "
+            "You are an expert educational audio narrator. "
             "Write a clear, engaging, educational audio script explaining the given topic. "
             "Pacing rules: Use natural punctuation (commas, periods, short sentences) to ensure smooth pronunciation. "
             "LENGTH LIMIT: Keep the script concise (between 200 and 400 words, maximum 2,200 characters / 2-3 minutes spoken audio). Leave margin under the limit — always complete your final conclusion sentence cleanly with a full stop well before the character cap, never right at it."
         )
 
-        if is_podcast:
-            system_instruction += (
-                "Format as a 2-speaker interactive educational podcast dialogue. "
-                "Dynamically choose 2 relevant role titles matching the topic (e.g. 'Instructor & Student', 'Host & Lead Expert', or 'Senior Specialist & Analyst'). "
-                "Structure clearly as: '[Speaker 1 Title]: ... [Speaker 2 Title]: ...'"
-            )
-            caption_text = f"Podcast Dialogue: {topic_prompt[:50]}"
-        else:
-            caption_text = f"Audio Overview: {topic_prompt[:50]}"
+        caption_text = f"Audio Overview: {topic_prompt[:50]}"
 
         user_message = f"Explain this topic in detail in 2 to 3 minutes of spoken audio: {topic_prompt}"
 
@@ -776,7 +767,6 @@ async def generate_ai_audio(req: GenerateAIAudioRequest):
             prompt=req.prompt,
             voice=req.voice or "nova",
             mode=req.mode or "verbatim",
-            is_podcast=req.is_podcast or False,
             draft_id=req.draft_id
         )
         return res

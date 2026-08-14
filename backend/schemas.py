@@ -113,7 +113,6 @@ class GenerateAIAudioRequest(BaseModel):
     prompt: Optional[str] = None
     voice: Optional[str] = "nova"
     mode: Optional[str] = "verbatim"
-    is_podcast: Optional[bool] = False
     draft_id: Optional[str] = None
 
 class StoreCourseRequest(BaseModel):
