@@ -2080,13 +2080,13 @@ export default function LessonPreviewEditorModal({
 
                                   {/* Voice Selector Dropdown - Only shown for AI Generated Audio or New Audio blocks */}
                                   {(!block.url || block.audio_source === 'ai_generated' || (block.url && block.url.includes('ai_audio_'))) && (
-                                    <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-0.5 text-xs shadow-xs">
+                                    <div className="flex items-center gap-1.5">
                                       <span className="text-[10px] font-bold text-slate-400 uppercase">Voice:</span>
                                       <select
                                         value={block.voice || 'nova'}
                                         onChange={(e) => handleChangeAudioVoice(idx, block, e.target.value)}
                                         disabled={uploadingBlockIdx === idx}
-                                        className="text-[11px] font-bold text-purple-700 bg-transparent focus:outline-none cursor-pointer"
+                                        className="editor-select-field !w-auto !p-1.5 !text-[11px] !font-bold"
                                       >
                                         <option value="nova">👩 Nova (Friendly Female)</option>
                                         <option value="onyx">👨 Onyx (Professional Male)</option>
@@ -2249,7 +2249,7 @@ export default function LessonPreviewEditorModal({
                                   placeholder="Written transcript text script (read verbatim by tts-1)..."
                                   value={block.script || ''}
                                   onChange={(e) => handleUpdateBlock(idx, { script: e.target.value })}
-                                  className="w-full p-2.5 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-purple-500 focus:outline-none text-slate-700 leading-relaxed font-sans"
+                                  className="editor-textarea-field !text-xs leading-relaxed"
                                 />
                               </div>
 
@@ -2260,17 +2260,17 @@ export default function LessonPreviewEditorModal({
                               )}
                             </div>
                           ) : (
-                            <div className="audio-block-container p-4 bg-slate-50/80 border border-slate-200 rounded-2xl space-y-3 shadow-sm">
+                            <div className="audio-block-container space-y-3">
                               <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2 text-slate-800 font-bold text-xs uppercase tracking-wider">
-                                  <Volume2 className="w-4 h-4 text-purple-600" />
+                                <div className="audio-block-title flex items-center gap-2 font-bold text-xs uppercase tracking-wider">
+                                  <Volume2 className="audio-block-icon w-4 h-4" />
                                   <span>{block.caption || 'Audio Overview Track'}</span>
                                 </div>
                                 {block.script && (
                                   <button
                                     type="button"
                                     onClick={() => setExpandedTranscripts(prev => ({ ...prev, [idx]: !prev[idx] }))}
-                                    className="text-[11px] font-bold text-purple-700 hover:text-purple-800 flex items-center gap-1 transition cursor-pointer"
+                                    className="audio-block-transcript-toggle text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
                                   >
                                     <FileText className="w-3.5 h-3.5" />
                                     <span>{expandedTranscripts[idx] ? 'Hide Transcript ▲' : 'Read Transcript ▾'}</span>
@@ -2281,15 +2281,15 @@ export default function LessonPreviewEditorModal({
                               {block.url ? (
                                 <audio controls src={resolveMediaUrl(block.url)} className="w-full rounded-xl" />
                               ) : (
-                                <div className="p-3 bg-slate-100 flex items-center justify-center rounded-xl border border-dashed border-slate-200 text-slate-400 text-xs font-medium">
+                                <div className="audio-block-placeholder p-3 flex items-center justify-center text-xs font-medium">
                                   [Audio Track Placeholder: {block.caption || 'No audio file attached'}]
                                 </div>
                               )}
 
                               {/* Accordion Read-Along Transcript */}
                               {block.script && expandedTranscripts[idx] && (
-                                <div className="p-3.5 bg-white rounded-xl border border-slate-200/90 text-xs text-slate-700 leading-relaxed font-sans animate-fade-in shadow-inner">
-                                  <p className="font-bold text-[10px] text-purple-600 uppercase tracking-widest mb-1 flex items-center gap-1">
+                                <div className="audio-block-transcript-box p-3.5 text-xs leading-relaxed animate-fade-in">
+                                  <p className="audio-block-transcript-label font-bold text-[10px] uppercase tracking-widest mb-1 flex items-center gap-1">
                                     <FileText className="w-3 h-3" /> Audio Transcript
                                   </p>
                                   <div className="whitespace-pre-line">{block.script}</div>

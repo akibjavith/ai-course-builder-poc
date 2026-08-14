@@ -522,6 +522,53 @@
   margin-top: 0.5rem;
 }
 
+/* Audio Block */
+.audio-block-container {
+  margin: 1.5rem 0;
+  padding: 1rem;
+  border-radius: 1.5rem;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  box-shadow: var(--theme-shadow);
+}
+
+.audio-block-title {
+  color: var(--text-main);
+}
+
+.audio-block-icon {
+  color: var(--accent-color);
+}
+
+.audio-block-transcript-toggle {
+  color: var(--accent-color);
+  opacity: 0.85;
+}
+
+.audio-block-transcript-toggle:hover {
+  opacity: 1;
+}
+
+.audio-block-placeholder {
+  border-radius: 0.75rem;
+  border: 1px dashed var(--border-color);
+  background-color: var(--bg-primary);
+  color: var(--text-muted);
+}
+
+.audio-block-transcript-box {
+  border-radius: 0.75rem;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-primary);
+  color: var(--text-secondary);
+  font-family: var(--font-family);
+  box-shadow: var(--theme-shadow);
+}
+
+.audio-block-transcript-label {
+  color: var(--accent-color);
+}
+
 /* Code Blocks */
 .code-block-pre {
   padding: 1.5rem;
