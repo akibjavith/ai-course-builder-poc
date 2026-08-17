@@ -192,6 +192,16 @@ async def list_subjects():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/course/audio/voices")
+async def get_audio_voices():
+    try:
+        from database import get_active_audio_voices
+        voices = get_active_audio_voices()
+        return {"status": "success", "voices": voices}
+    except Exception as e:
+        logger.error(f"Error fetching audio voices: {e}")
+        raise HTTPException(status_code=500, detail=f"Could not fetch audio voices: {str(e)}")
+
 @app.get("/course/themes")
 def get_themes():
     themes_file = "themes.json"
@@ -597,7 +607,9 @@ def generate_ai_audio_helper(
     import uuid
 
     voice_name = (voice or "nova").lower().strip()
-    valid_voices = ["nova", "onyx", "echo", "shimmer", "alloy", "fable"]
+    from database import get_active_audio_voices
+    active_voices = get_active_audio_voices()
+    valid_voices = [v["voice_key"].lower().strip() for v in active_voices]
     if voice_name not in valid_voices:
         voice_name = "nova"
 

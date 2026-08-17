@@ -493,6 +493,8 @@ def init_draft_table():
     finally:
         cursor.close()
         conn.close()
+    
+    init_audio_voices_table()
 
 def save_chatbot_draft(draft_id: str, course_name: str, current_step: str, course_data: dict, messages: list, touch_user_interaction: bool = False):
     conn = get_local_db_connection()
@@ -633,5 +635,69 @@ def add_chatbot_draft_cost(draft_id: str, cost: float):
     finally:
         cursor.close()
         conn.close()
+
+def init_audio_voices_table():
+    try:
+        conn = get_local_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS corp_audio_voices (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                voice_key VARCHAR(50) NOT NULL UNIQUE,
+                display_name VARCHAR(100) NOT NULL,
+                gender VARCHAR(20) DEFAULT 'Unspecified',
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+
+        # Seed default voices if table is empty
+        cursor.execute("SELECT COUNT(*) FROM corp_audio_voices")
+        row = cursor.fetchone()
+        count = row[0] if row else 0
+        if count == 0:
+            default_voices = [
+                ("nova", "👩 Nova (Friendly Female Teacher)", "Female"),
+                ("onyx", "👨 Onyx (Professional Male Instructor)", "Male"),
+                ("echo", "👨 Echo (Warm Conversational Male)", "Male"),
+                ("shimmer", "👩 Shimmer (Soft & Calm Female)", "Female"),
+                ("alloy", "🧑 Alloy (Neutral & Balanced)", "Neutral"),
+                ("fable", "🎭 Fable (Expressive Storyteller)", "Neutral")
+            ]
+            cursor.executemany(
+                "INSERT INTO corp_audio_voices (voice_key, display_name, gender) VALUES (%s, %s, %s)",
+                default_voices
+            )
+            conn.commit()
+            print("DEBUG: Seeded default OpenAI audio voices into corp_audio_voices.")
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print(f"Error initializing audio voices table: {e}")
+
+def get_active_audio_voices():
+    fallback_voices = [
+        {"voice_key": "nova", "display_name": "👩 Nova (Friendly Female Teacher)", "gender": "Female"},
+        {"voice_key": "onyx", "display_name": "👨 Onyx (Professional Male Instructor)", "gender": "Male"},
+        {"voice_key": "echo", "display_name": "👨 Echo (Warm Conversational Male)", "gender": "Male"},
+        {"voice_key": "shimmer", "display_name": "👩 Shimmer (Soft & Calm Female)", "gender": "Female"},
+        {"voice_key": "alloy", "display_name": "🧑 Alloy (Neutral & Balanced)", "gender": "Neutral"},
+        {"voice_key": "fable", "display_name": "🎭 Fable (Expressive Storyteller)", "gender": "Neutral"}
+    ]
+    try:
+        conn = get_local_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT voice_key, display_name, gender FROM corp_audio_voices WHERE is_active = TRUE ORDER BY id ASC")
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        if rows:
+            return rows
+        return fallback_voices
+    except Exception as e:
+        print(f"Fallback to default audio voices due to error: {e}")
+        return fallback_voices
+
 
 

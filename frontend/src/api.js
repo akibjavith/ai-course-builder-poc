@@ -66,6 +66,11 @@ export const generateAIAudio = async (payload) => {
   return response.data;
 };
 
+export const getAudioVoices = async () => {
+  const response = await axios.get(`${API_URL}/course/audio/voices`);
+  return response.data;
+};
+
 export const listMediaFiles = async () => {
   const response = await axios.get(`${API_URL}/course/list-media`);
   return response.data;

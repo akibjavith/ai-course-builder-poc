@@ -5,7 +5,7 @@ import {
   BookOpen, ExternalLink, Lightbulb, CheckSquare, ListOrdered, List, Check,
   Paperclip, Upload, Loader2, Palette, Paintbrush, Layers, Sparkles, Globe, Volume2, Music, MessageSquare
 } from 'lucide-react';
-import { uploadChapterMedia, uploadCourseImage, downloadExternalImage, uploadCourseAudio, downloadExternalAudio, generateAIImage, generateAIAudio, listMediaFiles, getThemes, uploadTheme, resolveMediaUrl, API_URL } from '../api';
+import { uploadChapterMedia, uploadCourseImage, downloadExternalImage, uploadCourseAudio, downloadExternalAudio, generateAIImage, generateAIAudio, getAudioVoices, listMediaFiles, getThemes, uploadTheme, resolveMediaUrl, API_URL } from '../api';
 import SecureDocViewer from './SecureDocViewer';
 import ActionModal from './ActionModal';
 import DynamicStyle from './DynamicStyle';
@@ -909,6 +909,7 @@ export default function LessonPreviewEditorModal({
   const [uploadingBlockIdx, setUploadingBlockIdx] = useState(null);
   const [aiPromptModal, setAiPromptModal] = useState(null); // { idx, prompt }
   const [aiAudioModal, setAiAudioModal] = useState(null); // { idx, prompt, script, voice, mode }
+  const [audioVoices, setAudioVoices] = useState([]);
   const [expandedTranscripts, setExpandedTranscripts] = useState({}); // { [blockIdx]: boolean }
 
   // Simple active insertion menu index
@@ -938,6 +939,27 @@ export default function LessonPreviewEditorModal({
       setTheme('light');
     }
   }, [active.mIdx, active.cIdx, chapter]);
+
+  // Fetch dynamic audio voices from MySQL DB endpoint (on mount and when AI Audio Modal opens)
+  const fetchVoices = () => {
+    getAudioVoices()
+      .then(res => {
+        if (res && res.voices && res.voices.length > 0) {
+          setAudioVoices(res.voices);
+        }
+      })
+      .catch(err => console.error("Error loading dynamic audio voices:", err));
+  };
+
+  useEffect(() => {
+    fetchVoices();
+  }, []);
+
+  useEffect(() => {
+    if (aiAudioModal) {
+      fetchVoices();
+    }
+  }, [aiAudioModal]);
 
   const handleSelectTheme = (newThemeId) => {
     setTheme(newThemeId);
@@ -2087,12 +2109,22 @@ export default function LessonPreviewEditorModal({
                                         disabled={uploadingBlockIdx === idx}
                                         className="editor-select-field !w-auto !p-1.5 !text-[11px] !font-bold"
                                       >
-                                        <option value="nova">👩 Nova (Friendly Female)</option>
-                                        <option value="onyx">👨 Onyx (Professional Male)</option>
-                                        <option value="echo">👨 Echo (Warm Male)</option>
-                                        <option value="shimmer">👩 Shimmer (Soft Female)</option>
-                                        <option value="alloy">🧑 Alloy (Neutral)</option>
-                                        <option value="fable">🎭 Fable (Storyteller)</option>
+                                        {audioVoices.length > 0 ? (
+                                          audioVoices.map(v => (
+                                            <option key={v.voice_key} value={v.voice_key}>
+                                              {v.display_name}
+                                            </option>
+                                          ))
+                                        ) : (
+                                          <>
+                                            <option value="nova">👩 Nova (Friendly Female)</option>
+                                            <option value="onyx">👨 Onyx (Professional Male)</option>
+                                            <option value="echo">👨 Echo (Warm Male)</option>
+                                            <option value="shimmer">👩 Shimmer (Soft Female)</option>
+                                            <option value="alloy">🧑 Alloy (Neutral)</option>
+                                            <option value="fable">🎭 Fable (Storyteller)</option>
+                                          </>
+                                        )}
                                       </select>
                                     </div>
                                   )}
@@ -3015,12 +3047,22 @@ export default function LessonPreviewEditorModal({
                   onChange={(e) => setAiAudioModal(prev => ({ ...prev, voice: e.target.value }))}
                   className="w-full p-2.5 border border-slate-200 rounded-xl text-xs font-bold text-purple-700 bg-white focus:ring-2 focus:ring-purple-500 focus:outline-none cursor-pointer"
                 >
-                  <option value="nova">👩 Nova (Friendly Female Teacher)</option>
-                  <option value="onyx">👨 Onyx (Professional Male Instructor)</option>
-                  <option value="echo">👨 Echo (Warm Conversational Male)</option>
-                  <option value="shimmer">👩 Shimmer (Soft & Calm Female)</option>
-                  <option value="alloy">🧑 Alloy (Neutral & Balanced)</option>
-                  <option value="fable">🎭 Fable (Expressive Storyteller)</option>
+                  {audioVoices.length > 0 ? (
+                    audioVoices.map(v => (
+                      <option key={v.voice_key} value={v.voice_key}>
+                        {v.display_name}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="nova">👩 Nova (Friendly Female Teacher)</option>
+                      <option value="onyx">👨 Onyx (Professional Male Instructor)</option>
+                      <option value="echo">👨 Echo (Warm Conversational Male)</option>
+                      <option value="shimmer">👩 Shimmer (Soft & Calm Female)</option>
+                      <option value="alloy">🧑 Alloy (Neutral & Balanced)</option>
+                      <option value="fable">🎭 Fable (Expressive Storyteller)</option>
+                    </>
+                  )}
                 </select>
               </div>
 
