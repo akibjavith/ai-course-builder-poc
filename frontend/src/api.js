@@ -125,19 +125,6 @@ export const deleteCourse = async (courseId) => {
   return response.data;
 };
 
-export const uploadThumbnail = async (file) => {
-  const formData = new FormData();
-  formData.append('file', file);
-  const response = await axios.post(`${API_URL}/course/upload-thumbnail`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  });
-  return response.data;
-};
-
-export const generateCourseTitle = async (description) => {
-  const response = await axios.post(`${API_URL}/course/generate-title`, { description });
-  return response.data;
-};
 
 export const fetchWebDocument = async (url) => {
   const response = await axios.post(`${API_URL}/course/fetch-web`, { url });
@@ -149,20 +136,6 @@ export const fetchYouTubeDocument = async (youtubeUrl) => {
   return response.data;
 };
 
-export const generateOutlineSkeleton = async (payload) => {
-  const response = await axios.post(`${API_URL}/course/generate-outline`, payload);
-  return response.data;
-};
-
-export const exportChapter = async (payload) => {
-  const response = await axios.post(`${API_URL}/course/export`, payload);
-  return response.data;
-};
-
-export const generateFlashcards = async (payload) => {
-  const response = await axios.post(`${API_URL}/course/flashcards`, payload);
-  return response.data;
-};
 
 export const uploadFile = async (file) => {
   const formData = new FormData();

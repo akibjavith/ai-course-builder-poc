@@ -15,8 +15,8 @@ from content_generator import generate_chapter_content, generate_course_quiz
 # video_compiler is imported lazily inside functions that need it
 from openai import OpenAI
 from schemas import (
-    OutlineRequest, ChapterContent, CourseQuiz, CourseDetails,
-    LessonRequest, QuizRequest, StoreCourseRequest, LessonBlocksResponse
+    ChapterContent, CourseQuiz, CourseDetails,
+    StoreCourseRequest, LessonBlocksResponse, LessonRequest
 )
 from image_retriever import retrieve_and_store_educational_image
 
@@ -35,27 +35,6 @@ router = APIRouter(prefix="/course", tags=["online_course_generator"])
 # In-memory store for async tasks: { task_id: { "status": str, "progress": int, "message": str, "result": any } }
 TASK_STORE: Dict[str, Dict[str, Any]] = {}
 
-# Using schemas from schemas.py instead of local definitions
-
-@router.post("/outline")
-async def generate_outline(req: OutlineRequest):
-    try:
-        structure = generate_course_structure(
-            courseName=req.courseName,
-            description=req.description,
-            subject=req.subject,
-            level=req.level
-        )
-        return structure
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/lesson")
-async def generate_lesson(req: LessonRequest):
-    raise HTTPException(
-        status_code=404,
-        detail="This endpoint has been deprecated and disabled. Please use /course/lesson-blocks instead."
-    )
 
 # ── Continuous content-depth scaling for /lesson-blocks ─────────────────────
 # Every hour value (1-20) gets its own numeric targets via a straight-line
@@ -808,40 +787,5 @@ async def generate_lesson_blocks(req: LessonRequest):
         logger.exception("Error generating lesson blocks")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/voice")
-async def generate_voice(payload: Dict[str, str]):
-    lesson_text = payload.get("lesson_text", "")
-    if not lesson_text:
-        return VoiceScriptResponse(voice_script="").dict()
-        
-    try:
-        # Just generate a streamlined narration script via LLM
-        prompt = f"Convert the following textbook explanation into a conversational, engaging voice-over script, suitable for text-to-speech. Do not include sound cues or stage directions or character names. Just the raw spoken text.\nText:\n{lesson_text[:3000]}"
-        response = get_openai_client().chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.7
-        )
-        script = response.choices[0].message.content.strip()
-        return VoiceScriptResponse(voice_script=script).dict()
-    except Exception as e:
-        print("Voice error", e)
-        return VoiceScriptResponse(voice_script=f"Voice Generation Error: {str(e)}").dict()
 
-@router.post("/quiz")
-async def create_course_quiz(req: QuizRequest):
-    from content_generator import generate_course_quiz
-
-    try:
-        quiz = generate_course_quiz(
-            course_title=req.course_title,
-            modules=req.modules,
-            source_type=req.sourceType,
-            audience=req.audience,
-            difficulty=req.difficulty,
-            objectives=req.objectives or []
-        )
-        return quiz
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 

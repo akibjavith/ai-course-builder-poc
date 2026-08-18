@@ -5,8 +5,7 @@ from fastapi.responses import JSONResponse
 from typing import Optional
 from schemas import (
     CourseStructureRequest,
-    GenerateTitleRequest, GenerateTitleResponse, FetchWebRequest, FetchYouTubeRequest,
-    GenerateOutlineBaseRequest, ExportChapterRequest, GenerateVoiceScriptReq, GenerateFlashcardsRequest,
+    FetchWebRequest, FetchYouTubeRequest,
     GenerateMCQRequest, GenerateAssessmentRequest, ChatRequest, ThemeUploadRequest,
     ChatbotBuilderRequest, DownloadExternalImageRequest, GenerateAIImageRequest, DownloadExternalAudioRequest,
     GenerateAIAudioRequest, ChatbotDraftsListResponse
@@ -286,30 +285,6 @@ async def get_single_course(course_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/course/generate-title", response_model=GenerateTitleResponse)
-async def api_generate_title(req: GenerateTitleRequest):
-    from content_generator import generate_brief_title
-    title = generate_brief_title(req.description)
-    return {"title": title}
-
-@app.post("/course/upload-thumbnail")
-async def upload_thumbnail(file: UploadFile = File(...)):
-    validate_uploaded_file(file, 5.0, ['.jpg', '.jpeg', '.png', '.gif', '.webp'])
-    import uuid
-    import shutil
-    
-    extension = os.path.splitext(file.filename)[1]
-    unique_filename = f"{uuid.uuid4()}{extension}"
-    file_path = os.path.join("uploads", unique_filename)
-    
-    try:
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        
-        base_url = os.getenv("PUBLIC_ASSET_URL", "http://localhost:8000")
-        return {"status": "success", "url": f"{base_url}/uploads/{unique_filename}"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/course/upload-course-image")
 async def upload_course_image(file: UploadFile = File(...)):
@@ -840,92 +815,7 @@ async def fetch_youtube(req: FetchYouTubeRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/course/generate-outline")
-async def generate_outline(req: GenerateOutlineBaseRequest):
-    from content_generator import generate_outline_skeleton
-    structure = generate_outline_skeleton(req.description, req.modules_count, req.chapters_per_module)
-    return {"status": "success", "data": structure}
 
-@app.post("/course/export")
-async def export_chapter(req: ExportChapterRequest):
-    import uuid
-    unique_filename = f"export_{uuid.uuid4()}"
-    file_path = os.path.join("uploads", unique_filename)
-    
-    try:
-        if req.format == "txt":
-            file_path += ".txt"
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(req.content.get("explanation", ""))
-        elif req.format == "pdf":
-            import pdfkit
-            file_path += ".pdf"
-            html_content = f"<h1>{req.chapter_title}</h1><p>{req.content.get('explanation', '')}</p>"
-            try:
-                pdfkit.from_string(html_content, file_path)
-            except OSError:
-                file_path = file_path.replace(".pdf", ".txt")
-                with open(file_path, "w", encoding="utf-8") as f:
-                    f.write(f"{req.chapter_title}\n\n{req.content.get('explanation', '')}")
-        elif req.format == "pptx":
-            from pptx import Presentation
-            file_path += ".pptx"
-            prs = Presentation()
-            slide_layout = prs.slide_layouts[1] # Title and Content
-            slide = prs.slides.add_slide(slide_layout)
-            title = slide.shapes.title
-            content = slide.placeholders[1]
-            title.text = req.chapter_title
-            content.text = req.content.get("explanation", "")[:500] + "..." # basic
-            prs.save(file_path)
-        else:
-            raise Exception("Unsupported format")
-
-        base_url = os.getenv("PUBLIC_ASSET_URL", "http://localhost:8000")
-        return {"status": "success", "url": f"{base_url}/uploads/{unique_filename}"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/course/voice")
-async def generate_voice(req: GenerateVoiceScriptReq):
-    import uuid
-    
-    unique_filename = f"tts_{uuid.uuid4()}.mp3"
-    file_path = os.path.join("uploads", unique_filename)
-    
-    try:
-        response = openai_client.audio.speech.create(
-            model="tts-1",
-            voice="alloy",
-            input=req.text
-        )
-        response.stream_to_file(file_path)
-        base_url = os.getenv("PUBLIC_ASSET_URL", "http://localhost:8000")
-        return {"status": "success", "audio_url": f"{base_url}/uploads/{unique_filename}"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/course/flashcards")
-async def generate_flashcards(req: GenerateFlashcardsRequest):
-    from pydantic import BaseModel
-    class FlashcardModel(BaseModel):
-        question: str
-        answer: str
-    class FlashcardsResponse(BaseModel):
-        flashcards: list[FlashcardModel]
-    
-    try:
-        completion = openai_client.beta.chat.completions.parse(
-            model=LLM_MODEL,
-            messages=[
-                {"role": "system", "content": "You are a helpful educational AI. Generate exactly 5 flashcards from the provided text."},
-                {"role": "user", "content": f"Text:\n{req.text[:2000]}"}
-            ],
-            response_format=FlashcardsResponse
-        )
-        return {"status": "success", "flashcards": completion.choices[0].message.parsed.model_dump().get("flashcards")}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 def convert_to_pdf_if_needed(file_path: str) -> str:
     import platform
@@ -1060,13 +950,7 @@ Assessment Guidelines: {req.assessment_text or 'None'}"""
         logger.error(f"Error generating assessment: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/course/auto-fill")
-async def api_auto_fill():
-    from content_generator import generate_course_details_from_context
-    details = generate_course_details_from_context()
-    if not details:
-        raise HTTPException(status_code=400, detail="No source documents found. Please upload documents in Step 1 first.")
-    return {"status": "success", "details": details}
+
 
 @app.post("/course/chat")
 async def api_chat(req: ChatRequest):

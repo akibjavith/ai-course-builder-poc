@@ -1,5 +1,6 @@
+import uuid
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Union, Literal, Annotated
 
 class CourseDetails(BaseModel):
     courseType: Optional[str] = "Custom Course"
@@ -29,6 +30,14 @@ class CourseStructureRequest(BaseModel):
 
 class CourseStructureResponse(BaseModel):
     modules: List[ModuleStructure]
+
+class LessonRequest(BaseModel):
+    title: str
+    module_title: str
+    prompt: str
+    type: str = "html"
+    course_details: Optional[CourseDetails] = None
+    draft_id: Optional[str] = None
 
 class QuizQuestion(BaseModel):
     question: str
@@ -61,9 +70,6 @@ class ChapterContent(BaseModel):
     tables: Optional[List[TableSpec]] = None
     references: Optional[List[ReferenceSpec]] = None
 
-class GenerateFlashcardsRequest(BaseModel):
-    text: str
-    
 class GenerateMCQRequest(BaseModel):
     course_title: str
     module_title: str
@@ -74,7 +80,7 @@ class GenerateAssessmentRequest(BaseModel):
     course_title: str
     module_title: str
     assessment_text: Optional[str] = None
-    
+
 class MCQItem(BaseModel):
     question: str
     options: List[str]
@@ -82,21 +88,6 @@ class MCQItem(BaseModel):
     
 class MCQResponse(BaseModel):
     mcqs: List[MCQItem]
-# --- Online Course Generator schemas ---
-
-class OutlineRequest(BaseModel):
-    courseName: str = Field(..., description="Title of the course")
-    description: str = Field(..., description="Brief description of the course")
-    level: str = Field(..., description="Difficulty (beginner|intermediate|advanced)")
-    subject: str = Field(..., description="Subject of the course")
-
-class LessonRequest(BaseModel):
-    title: str
-    module_title: str
-    prompt: str
-    type: str = "html"
-    course_details: Optional[CourseDetails] = None
-    draft_id: Optional[str] = None
 
 class DownloadExternalImageRequest(BaseModel):
     url: str
@@ -118,40 +109,11 @@ class GenerateAIAudioRequest(BaseModel):
 class StoreCourseRequest(BaseModel):
     course_json: dict
 
-class QuizRequest(BaseModel):
-    course_title: str
-    modules: List[dict]
-    sourceType: Optional[str] = "external"
-    course_details: Optional[CourseDetails] = None
-
-
-class GenerateTitleRequest(BaseModel):
-    description: str
-
-class GenerateTitleResponse(BaseModel):
-    title: str
-
 class FetchWebRequest(BaseModel):
     url: str
 
 class FetchYouTubeRequest(BaseModel):
     youtube_url: str
-
-class GenerateOutlineBaseRequest(BaseModel):
-    description: str
-    modules_count: int
-    chapters_per_module: int
-    assessments_per_module: int
-
-class GenerateVoiceScriptReq(BaseModel):
-    text: str
-
-class ExportChapterRequest(BaseModel):
-    course_title: str
-    module_title: str
-    chapter_title: str
-    content: dict
-    format: str # 'pdf', 'pptx', 'txt', 'mp4'
 
 class ChatRequest(BaseModel):
     messages: list
@@ -162,8 +124,6 @@ class ChatRequest(BaseModel):
 
 
 # --- Block-Based Lesson Content Schemas ---
-import uuid
-from typing import Union, Literal
 
 class HeadingBlock(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -280,8 +240,6 @@ class ReferenceBlock(BaseModel):
     type: Literal["reference"] = "reference"
     title: str
     url: str
-
-from typing import Annotated
 
 LessonBlock = Annotated[
     Union[
