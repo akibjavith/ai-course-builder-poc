@@ -2,7 +2,7 @@ import mysql.connector
 import os
 import json
 from dotenv import load_dotenv
-from typing import Dict, Any
+from typing import Dict, Any, Optional, List
 
 load_dotenv()
 
@@ -442,6 +442,93 @@ def get_local_db_connection():
         collation='utf8mb4_unicode_ci'
     )
 
+def init_users_table():
+    conn = get_local_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS corp_users (
+                user_id VARCHAR(50) PRIMARY KEY,
+                username VARCHAR(100) NOT NULL,
+                email VARCHAR(100),
+                role VARCHAR(50) DEFAULT 'user',
+                created_at DATETIME
+            )
+        """)
+        conn.commit()
+        
+        # Seed default user if empty
+        cursor.execute("SELECT user_id FROM corp_users WHERE user_id = 'user_default'")
+        if not cursor.fetchone():
+            import datetime
+            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cursor.execute(
+                "INSERT INTO corp_users (user_id, username, email, role, created_at) VALUES (%s, %s, %s, %s, %s)",
+                ("user_default", "IC LEAF Admin", "admin@icleaf.com", "admin", now_str)
+            )
+            conn.commit()
+        print("DEBUG: Local MySQL corp_users table initialized successfully.")
+    except Exception as e:
+        print(f"Error initializing corp_users table: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+def create_user(user_id: str, username: str, email: str = "", role: str = "user"):
+    conn = get_local_db_connection()
+    cursor = conn.cursor()
+    import datetime
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        cursor.execute("SELECT user_id FROM corp_users WHERE user_id = %s", (user_id,))
+        if cursor.fetchone():
+            cursor.execute("UPDATE corp_users SET username = %s, email = %s, role = %s WHERE user_id = %s", (username, email, role, user_id))
+        else:
+            cursor.execute("INSERT INTO corp_users (user_id, username, email, role, created_at) VALUES (%s, %s, %s, %s, %s)", (user_id, username, email, role, now_str))
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
+
+def get_users():
+    try:
+        conn = get_local_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT user_id, username, email, role, created_at FROM corp_users ORDER BY created_at ASC")
+            rows = cursor.fetchall()
+            for r in rows:
+                if r.get("created_at") and hasattr(r["created_at"], "strftime"):
+                    r["created_at"] = r["created_at"].strftime("%Y-%m-%d %H:%M:%S")
+                else:
+                    r["created_at"] = str(r.get("created_at") or "")
+            return rows
+        finally:
+            cursor.close()
+            conn.close()
+    except Exception as e:
+        print(f"Error fetching users from DB: {e}")
+        return [
+            {"user_id": "user_001", "username": "IC LEAF Admin", "email": "admin@icleaf.com", "role": "admin", "created_at": ""},
+            {"user_id": "user_002", "username": "javed_07", "email": "javed@icleaf.com", "role": "user", "created_at": ""}
+        ]
+
+def get_user(user_id: str):
+    conn = get_local_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT user_id, username, email, role, created_at FROM corp_users WHERE user_id = %s", (user_id,))
+        r = cursor.fetchone()
+        if r:
+            if r.get("created_at") and hasattr(r["created_at"], "strftime"):
+                r["created_at"] = r["created_at"].strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                r["created_at"] = str(r.get("created_at") or "")
+        return r
+    finally:
+        cursor.close()
+        conn.close()
+
 def init_draft_table():
     # Make sure target database exists by connecting without DB name first
     db_port = int(os.getenv("LOCAL_DB_PORT", 3306))
@@ -464,6 +551,8 @@ def init_draft_table():
         temp_cursor.close()
         temp_conn.close()
 
+    init_users_table()
+
     # Now connect to the database and build the table
     conn = get_local_db_connection()
     cursor = conn.cursor()
@@ -471,17 +560,29 @@ def init_draft_table():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS corp_chatbot_course_draft (
                 id VARCHAR(50) PRIMARY KEY,
+                user_id VARCHAR(50) DEFAULT 'user_default',
                 course_name VARCHAR(255),
                 current_step VARCHAR(50),
                 course_data LONGTEXT,
                 messages LONGTEXT,
                 created_at DATETIME,
                 updated_at DATETIME,
-                total_cost DOUBLE DEFAULT 0.0
+                total_cost DOUBLE DEFAULT 0.0,
+                FOREIGN KEY (user_id) REFERENCES corp_users(user_id) ON DELETE SET NULL
             )
         """)
         conn.commit()
-        # Fallback ALTER TABLE check for existing tables without the column
+        # Fallback ALTER TABLE check for existing tables without the column or constraint
+        try:
+            cursor.execute("ALTER TABLE corp_chatbot_course_draft ADD COLUMN user_id VARCHAR(50) DEFAULT 'user_default'")
+            conn.commit()
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE corp_chatbot_course_draft ADD CONSTRAINT fk_draft_user FOREIGN KEY (user_id) REFERENCES corp_users(user_id) ON DELETE SET NULL")
+            conn.commit()
+        except Exception:
+            pass
         try:
             cursor.execute("ALTER TABLE corp_chatbot_course_draft ADD COLUMN total_cost DOUBLE DEFAULT 0.0")
             conn.commit()
@@ -496,7 +597,9 @@ def init_draft_table():
     
     init_audio_voices_table()
 
-def save_chatbot_draft(draft_id: str, course_name: str, current_step: str, course_data: dict, messages: list, touch_user_interaction: bool = False):
+def save_chatbot_draft(draft_id: str, course_name: str, current_step: str, course_data: dict, messages: list, touch_user_interaction: bool = False, user_id: Optional[str] = "user_default"):
+    if not user_id:
+        user_id = "user_default"
     conn = get_local_db_connection()
     cursor = conn.cursor()
     import datetime
@@ -506,6 +609,15 @@ def save_chatbot_draft(draft_id: str, course_name: str, current_step: str, cours
     messages_json = json.dumps(messages)
     
     try:
+        # Ensure user_id exists in corp_users to prevent foreign key constraint failures
+        cursor.execute("SELECT user_id FROM corp_users WHERE user_id = %s", (user_id,))
+        if not cursor.fetchone():
+            cursor.execute(
+                "INSERT INTO corp_users (user_id, username, email, role, created_at) VALUES (%s, %s, %s, %s, %s)",
+                (user_id, f"User ({user_id})", "", "user", now_str)
+            )
+            conn.commit()
+
         # Check if exists
         cursor.execute("SELECT id FROM corp_chatbot_course_draft WHERE id = %s", (draft_id,))
         exists = cursor.fetchone()
@@ -514,6 +626,7 @@ def save_chatbot_draft(draft_id: str, course_name: str, current_step: str, cours
             if touch_user_interaction:
                 sql = """
                     UPDATE corp_chatbot_course_draft SET
+                        user_id = %s,
                         course_name = %s,
                         current_step = %s,
                         course_data = %s,
@@ -521,43 +634,53 @@ def save_chatbot_draft(draft_id: str, course_name: str, current_step: str, cours
                         updated_at = %s
                     WHERE id = %s
                 """
-                cursor.execute(sql, (course_name, current_step, course_data_json, messages_json, now_str, draft_id))
+                cursor.execute(sql, (user_id, course_name, current_step, course_data_json, messages_json, now_str, draft_id))
             else:
                 sql = """
                     UPDATE corp_chatbot_course_draft SET
+                        user_id = %s,
                         course_name = %s,
                         current_step = %s,
                         course_data = %s,
                         messages = %s
                     WHERE id = %s
                 """
-                cursor.execute(sql, (course_name, current_step, course_data_json, messages_json, draft_id))
+                cursor.execute(sql, (user_id, course_name, current_step, course_data_json, messages_json, draft_id))
         else:
             sql = """
                 INSERT INTO corp_chatbot_course_draft 
-                    (id, course_name, current_step, course_data, messages, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    (id, user_id, course_name, current_step, course_data, messages, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """
-            cursor.execute(sql, (draft_id, course_name, current_step, course_data_json, messages_json, now_str, now_str))
+            cursor.execute(sql, (draft_id, user_id, course_name, current_step, course_data_json, messages_json, now_str, now_str))
             
         conn.commit()
     finally:
         cursor.close()
         conn.close()
 
-def get_chatbot_drafts(include_details: bool = False):
+def get_chatbot_drafts(user_id: Optional[str] = None, include_details: bool = False):
     conn = get_local_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
+        query_params = []
+        where_clause = ""
+        if user_id:
+            where_clause = " WHERE user_id = %s "
+            query_params.append(user_id)
+
         if include_details:
-            cursor.execute("SELECT id, course_name, current_step, course_data, messages, created_at, updated_at FROM corp_chatbot_course_draft ORDER BY updated_at DESC, id DESC")
+            sql = f"SELECT id, user_id, course_name, current_step, course_data, messages, created_at, updated_at FROM corp_chatbot_course_draft {where_clause} ORDER BY updated_at DESC, id DESC"
         else:
-            cursor.execute("SELECT id, course_name, current_step, created_at, updated_at FROM corp_chatbot_course_draft ORDER BY updated_at DESC, id DESC")
+            sql = f"SELECT id, user_id, course_name, current_step, created_at, updated_at FROM corp_chatbot_course_draft {where_clause} ORDER BY updated_at DESC, id DESC"
+        
+        cursor.execute(sql, tuple(query_params))
         rows = cursor.fetchall()
         drafts = []
         for r in rows:
             draft = {
                 "id": r["id"],
+                "userId": r.get("user_id") or "user_default",
                 "courseName": r["course_name"],
                 "currentStep": r["current_step"],
                 "created_at": r["created_at"].strftime("%Y-%m-%d %H:%M:%S") if r.get("created_at") and hasattr(r["created_at"], "strftime") else str(r.get("created_at") or r.get("updated_at") or ""),
@@ -581,12 +704,14 @@ def get_chatbot_drafts(include_details: bool = False):
         cursor.close()
         conn.close()
 
-
-def get_chatbot_draft(draft_id: str):
+def get_chatbot_draft(draft_id: str, user_id: Optional[str] = None):
     conn = get_local_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT id, course_name, current_step, course_data, messages FROM corp_chatbot_course_draft WHERE id = %s", (draft_id,))
+        if user_id:
+            cursor.execute("SELECT id, user_id, course_name, current_step, course_data, messages FROM corp_chatbot_course_draft WHERE id = %s AND user_id = %s", (draft_id, user_id))
+        else:
+            cursor.execute("SELECT id, user_id, course_name, current_step, course_data, messages FROM corp_chatbot_course_draft WHERE id = %s", (draft_id,))
         r = cursor.fetchone()
         if not r:
             return None
@@ -601,6 +726,7 @@ def get_chatbot_draft(draft_id: str):
             
         return {
             "id": r["id"],
+            "userId": r.get("user_id") or "user_default",
             "courseName": r["course_name"],
             "currentStep": r["current_step"],
             "courseData": cdata,
@@ -610,11 +736,14 @@ def get_chatbot_draft(draft_id: str):
         cursor.close()
         conn.close()
 
-def delete_chatbot_draft(draft_id: str):
+def delete_chatbot_draft(draft_id: str, user_id: Optional[str] = None):
     conn = get_local_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("DELETE FROM corp_chatbot_course_draft WHERE id = %s", (draft_id,))
+        if user_id:
+            cursor.execute("DELETE FROM corp_chatbot_course_draft WHERE id = %s AND user_id = %s", (draft_id, user_id))
+        else:
+            cursor.execute("DELETE FROM corp_chatbot_course_draft WHERE id = %s", (draft_id,))
         conn.commit()
     finally:
         cursor.close()

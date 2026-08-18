@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
@@ -262,6 +262,40 @@ def save_theme(req: ThemeUploadRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error saving theme: {str(e)}")
 
+# --- User Management Endpoints ---
+
+from schemas import UserCreate, UserResponse
+
+@app.post("/course/users", response_model=UserResponse)
+def api_create_user(req: UserCreate):
+    try:
+        from database import create_user, get_user
+        create_user(user_id=req.user_id, username=req.username, email=req.email or "", role=req.role or "user")
+        user = get_user(req.user_id)
+        if not user:
+            raise HTTPException(status_code=500, detail="Failed to retrieve user after creation")
+        return user
+    except Exception as e:
+        logger.error(f"Error creating/updating user {req.user_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/course/users")
+def api_get_users():
+    try:
+        from database import get_users
+        users = get_users()
+        return {"status": "success", "users": users}
+    except Exception as e:
+        logger.error(f"Error fetching users: {e}")
+        return {
+            "status": "success",
+            "users": [
+                {"user_id": "user_001", "username": "IC LEAF Admin", "email": "admin@icleaf.com", "role": "admin", "created_at": ""},
+                {"user_id": "user_002", "username": "javed_07", "email": "javed@icleaf.com", "role": "user", "created_at": ""}
+            ]
+        }
+
+
 @app.get("/course/{course_id}")
 async def get_single_course(course_id: str):
     try:
@@ -282,6 +316,8 @@ async def get_single_course(course_id: str):
             return {"status": "success", "course": course}
             
         raise HTTPException(status_code=404, detail="Course not found")
+    except HTTPException as he:
+        raise he
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -2873,12 +2909,14 @@ async def api_cancel_generation(draft_id: str):
 
     return {"status": "success", "message": "Cancellation request"}
 
-# Get all drafts
+# --- Chatbot Draft Endpoints (User Isolated) ---
+
+# Get all drafts (optionally filtered by user_id)
 @app.get("/course/chatbot-builder/courses", response_model=ChatbotDraftsListResponse)
-def api_get_chatbot_drafts():
+def api_get_chatbot_drafts(user_id: Optional[str] = Query(None)):
     try:
         from database import get_chatbot_drafts
-        drafts = get_chatbot_drafts(include_details=False)
+        drafts = get_chatbot_drafts(user_id=user_id, include_details=False)
         for d in drafts:
             draft_id = d["id"]
             if draft_id in bg_generation_registry:
@@ -2892,10 +2930,10 @@ def api_get_chatbot_drafts():
 
 # Get a specific draft
 @app.get("/course/chatbot-builder/course/load/{draft_id}")
-def api_get_chatbot_draft(draft_id: str):
+def api_get_chatbot_draft(draft_id: str, user_id: Optional[str] = Query(None)):
     try:
         from database import get_chatbot_draft
-        draft = get_chatbot_draft(draft_id)
+        draft = get_chatbot_draft(draft_id, user_id=user_id)
         if not draft:
             raise HTTPException(status_code=404, detail="Draft not found")
         return {"status": "success", "draft": draft}
@@ -2916,7 +2954,8 @@ def api_save_chatbot_draft(req: ChatbotDraftSaveRequest):
             current_step=req.currentStep,
             course_data=req.courseData,
             messages=req.messages,
-            touch_user_interaction=req.touch_user_interaction
+            touch_user_interaction=req.touch_user_interaction,
+            user_id=req.user_id
         )
         return {"status": "success", "message": "Draft saved"}
     except Exception as e:
@@ -2925,10 +2964,10 @@ def api_save_chatbot_draft(req: ChatbotDraftSaveRequest):
 
 # Delete a draft
 @app.delete("/course/chatbot-builder/course/delete/{draft_id}")
-def api_delete_chatbot_draft(draft_id: str):
+def api_delete_chatbot_draft(draft_id: str, user_id: Optional[str] = Query(None)):
     try:
         from database import delete_chatbot_draft
-        delete_chatbot_draft(draft_id)
+        delete_chatbot_draft(draft_id, user_id=user_id)
         return {"status": "success", "message": "Draft deleted"}
     except Exception as e:
         logger.error(f"Error deleting chatbot draft {draft_id}: {e}")
@@ -2946,6 +2985,7 @@ def api_rename_chatbot_draft(draft_id: str, req: RenameDraftRequest):
     except Exception as e:
         logger.error(f"Error renaming chatbot draft {draft_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 # Suggest learning topics dynamically based on history
 @app.get("/course/chatbot-builder/suggest-topics")

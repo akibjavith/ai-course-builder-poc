@@ -274,11 +274,27 @@ class ThemeUploadRequest(BaseModel):
     variables: Dict[str, str]
 
 
+class UserCreate(BaseModel):
+    user_id: str
+    username: str
+    email: Optional[str] = ""
+    role: Optional[str] = "user"
+
+
+class UserResponse(BaseModel):
+    user_id: str
+    username: str
+    email: Optional[str] = ""
+    role: Optional[str] = "user"
+    created_at: Optional[str] = ""
+
+
 class ChatbotBuilderRequest(BaseModel):
     messages: list
     currentStep: str = "GATHER_DETAILS"
     courseData: Optional[dict] = {}
     draft_id: Optional[str] = None
+    user_id: Optional[str] = "user_default"
 
 
 class ChatbotDraftSaveRequest(BaseModel):
@@ -288,6 +304,7 @@ class ChatbotDraftSaveRequest(BaseModel):
     courseData: dict
     messages: list
     touch_user_interaction: Optional[bool] = False
+    user_id: Optional[str] = "user_default"
 
 
 class RenameDraftRequest(BaseModel):
@@ -296,6 +313,7 @@ class RenameDraftRequest(BaseModel):
 
 class ChatbotDraftSummary(BaseModel):
     id: str
+    userId: Optional[str] = "user_default"
     courseName: Optional[str] = ""
     currentStep: Optional[str] = ""
     bgStatus: Optional[str] = "idle"
@@ -306,3 +324,4 @@ class ChatbotDraftSummary(BaseModel):
 class ChatbotDraftsListResponse(BaseModel):
     status: str
     drafts: List[ChatbotDraftSummary]
+

@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   MessageSquare, Send, BookOpen, Layers, CheckCircle, 
-  HelpCircle, Eye, Sparkles, ChevronRight, ChevronLeft, 
+  HelpCircle, Eye, Sparkles, ChevronRight, ChevronLeft, ChevronUp,
   Trash2, Loader2, Award, FileText, Check, Paperclip, 
   Mic, Lightbulb, Compass, ThumbsUp, ThumbsDown, Copy, 
   RotateCcw, X, Search, Bell, Info, Plus, PanelLeft, Edit,
-  Pause, Play, ListChecks, CheckCircle2, Circle
+  Pause, Play, ListChecks, CheckCircle2, Circle, User
 } from 'lucide-react';
-import { chatWithChatbotBuilder, createCourse, uploadDoc, generateLessonContent, saveChatbotDraft, getChatbotDrafts, getChatbotDraft, deleteChatbotDraft, renameChatbotDraft, getSubjects, getCourseById, generateStructure, startBgGeneration, getBgGenerationStatus, pauseBgGeneration, cancelBgGeneration, getSuggestedTopics, getSuggestedGoals } from '../api';
+import { chatWithChatbotBuilder, createCourse, uploadDoc, generateLessonContent, saveChatbotDraft, getChatbotDrafts, getChatbotDraft, deleteChatbotDraft, renameChatbotDraft, getSubjects, getCourseById, generateStructure, startBgGeneration, getBgGenerationStatus, pauseBgGeneration, cancelBgGeneration, getSuggestedTopics, getSuggestedGoals, getUsers } from '../api';
 import logo from '../assets/logo.png';
 import LessonPreviewEditorModal from './LessonPreviewEditorModal';
 
@@ -218,10 +218,42 @@ export default function ChatbotCourseCreator({ onClose }) {
   const messagesEndRef = useRef(null);
   const lastSavedDataRef = useRef(null);
 
-  // Load drafts list on mount and check for shared url parameter
-  const fetchDraftsList = async () => {
+  const [usersList, setUsersList] = useState([]);
+  const [activeUserId, setActiveUserId] = useState('user_001');
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const userMenuRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const fetchUsers = async () => {
     try {
-      const res = await getChatbotDrafts();
+      const res = await getUsers();
+      if (res && res.status === 'success' && Array.isArray(res.users) && res.users.length > 0) {
+        setUsersList(res.users);
+        setActiveUserId(prev => {
+          const exists = res.users.some(u => u.user_id === prev);
+          return exists ? prev : res.users[0].user_id;
+        });
+      }
+    } catch (err) {
+      console.error("Failed to fetch users list", err);
+    }
+  };
+
+  // Load drafts list on mount and check for shared url parameter
+  const fetchDraftsList = async (userId = activeUserId) => {
+    try {
+      const res = await getChatbotDrafts(userId);
       if (res && res.status === 'success') {
         setDraftsList(res.drafts || []);
       }
@@ -341,6 +373,7 @@ export default function ChatbotCourseCreator({ onClose }) {
 
 
   useEffect(() => {
+    fetchUsers();
     const params = new URLSearchParams(window.location.search);
     const urlDraftId = params.get('draftId');
     if (urlDraftId) {
@@ -350,6 +383,12 @@ export default function ChatbotCourseCreator({ onClose }) {
     }
     fetchDraftsList();
   }, []);
+
+  useEffect(() => {
+    if (activeUserId) {
+      fetchDraftsList(activeUserId);
+    }
+  }, [activeUserId]);
 
 
   const isDraftLoadingRef = useRef(false);
@@ -397,6 +436,7 @@ export default function ChatbotCourseCreator({ onClose }) {
 
       const payload = {
         id: activeDraftId,
+        user_id: activeUserId,
         courseName: derivedName,
         currentStep,
         courseData: { ...courseData, details: normalizedDetails },
@@ -407,7 +447,7 @@ export default function ChatbotCourseCreator({ onClose }) {
       saveChatbotDraft(payload)
         .then(() => {
           lastSavedDataRef.current = currentState; // Mark current state as saved
-          getChatbotDrafts().then(res => {
+          getChatbotDrafts(activeUserId).then(res => {
             if (res && res.status === 'success') {
               setDraftsList(res.drafts || []);
             }
@@ -415,7 +455,7 @@ export default function ChatbotCourseCreator({ onClose }) {
         })
         .catch(err => console.error("MySQL draft autosave failed", err));
     }
-  }, [messages, courseData, currentStep, activeDraftId]);
+  }, [messages, courseData, currentStep, activeDraftId, activeUserId]);
 
   // Periodically refresh drafts list if any draft is generating in the background
   useEffect(() => {
@@ -2630,20 +2670,91 @@ export default function ChatbotCourseCreator({ onClose }) {
               })()}
             </div>
 
-            {/* Bottom Profile Area */}
-            <div className="border-t border-slate-200/50 pt-4 flex items-center justify-between">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-rose-400 to-indigo-500 flex items-center justify-center text-white font-extrabold text-[10px] shadow-sm">
-                  IL
-                </div>
-                <div className="min-w-0 text-left">
-                  <p className="text-[11px] font-bold text-slate-800 truncate leading-none">IC Leaf admin</p>
-                  <p className="text-[9px] text-slate-400 truncate mt-0.5">admin@icleaf.com</p>
-                </div>
+            {/* Bottom Profile Area with Interactive Custom User Dropup */}
+            <div className="border-t border-slate-200/50 pt-4 flex items-center justify-between gap-2">
+              <div className="relative flex-1 min-w-0" ref={userMenuRef}>
+                {(() => {
+                  const activeUserObj = usersList.find(u => u.user_id === activeUserId) || usersList[0];
+                  const username = activeUserObj?.username || (usersList.length > 0 ? usersList[0].username : "Loading...");
+                  const email = activeUserObj?.email || (activeUserObj?.user_id ? `${activeUserObj.user_id}@icleaf.com` : "");
+                  const initials = username !== "Loading..." ? username.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase() : '..';
+
+                  return (
+                    <>
+                      {/* Floating Custom Dropup Popover Menu */}
+                      {isUserMenuOpen && (
+                        <div className="absolute bottom-full left-0 mb-2 w-60 bg-white/95 backdrop-blur-lg border border-slate-200/90 rounded-2xl shadow-xl p-1.5 z-50 animate-in fade-in slide-in-from-bottom-2 duration-150">
+                          <div className="max-h-52 overflow-y-auto space-y-1 custom-scrollbar">
+                            {usersList.length > 0 ? (
+                              usersList.map(u => {
+                                const isSelected = u.user_id === activeUserId;
+                                const uInitials = (u.username || u.user_id).split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'U';
+                                const displayEmail = u.email || `${u.user_id}@icleaf.com`;
+                                return (
+                                  <button
+                                    key={u.user_id}
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveUserId(u.user_id);
+                                      fetchDraftsList(u.user_id);
+                                      setIsUserMenuOpen(false);
+                                    }}
+                                    className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-left transition-all duration-150 ${
+                                      isSelected 
+                                        ? 'bg-indigo-50/90 text-indigo-950 border border-indigo-200/60 font-bold shadow-xs' 
+                                        : 'hover:bg-slate-100/80 text-slate-700 font-medium'
+                                    }`}
+                                  >
+                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white font-extrabold text-[10px] shadow-xs shrink-0 ${
+                                      isSelected ? 'bg-gradient-to-tr from-rose-400 to-indigo-500' : 'bg-slate-400'
+                                    }`}>
+                                      {uInitials}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-xs truncate leading-tight font-extrabold">{u.username}</p>
+                                      <p className="text-[10px] text-slate-400 truncate mt-0.5">{displayEmail}</p>
+                                    </div>
+                                    {isSelected && (
+                                      <div className="w-2 h-2 rounded-full bg-indigo-600 shrink-0 mr-1" />
+                                    )}
+                                  </button>
+                                );
+                              })
+                            ) : (
+                              <div className="p-3 text-xs text-slate-400 text-center font-medium">Loading users...</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Clickable Profile Card */}
+                      <div 
+                        onClick={() => {
+                          fetchUsers();
+                          setIsUserMenuOpen(prev => !prev);
+                        }}
+                        className={`flex items-center gap-2 bg-white/60 hover:bg-white/95 border border-slate-200/80 rounded-xl p-1.5 shadow-xs transition-all duration-200 cursor-pointer group select-none active:scale-[0.98] ${
+                          isUserMenuOpen ? 'ring-2 ring-indigo-400/40 bg-white/95 border-indigo-300' : ''
+                        }`}
+                        title="Click to switch active user account"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-rose-400 to-indigo-500 flex items-center justify-center text-white font-extrabold text-[10px] shadow-xs shrink-0">
+                          {initials}
+                        </div>
+                        <div className="min-w-0 flex-1 text-left">
+                          <p className="text-[11px] font-bold text-slate-800 truncate leading-none">{username}</p>
+                          <p className="text-[9px] font-medium text-slate-400 truncate mt-0.5">{email}</p>
+                        </div>
+                        <ChevronUp className={`w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600 transition-transform duration-200 shrink-0 mr-1 ${isUserMenuOpen ? 'rotate-180 text-indigo-600' : ''}`} />
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
+
               <button 
                 onClick={onClose}
-                className="p-1.5 hover:bg-red-50 hover:text-red-600 rounded-lg text-slate-400 transition"
+                className="p-2 hover:bg-red-50 hover:text-red-600 rounded-xl text-slate-400 transition shrink-0"
                 title="Exit to Dashboard"
               >
                 <X className="w-4 h-4" />

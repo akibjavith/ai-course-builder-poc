@@ -192,12 +192,23 @@ export const uploadTheme = async (themeData) => {
   return response.data;
 };
 
-export const chatWithChatbotBuilder = async (messages, currentStep, courseData, draftId) => {
+export const getUsers = async () => {
+  const response = await axios.get(`${API_URL}/course/users`);
+  return response.data;
+};
+
+export const createUser = async (userData) => {
+  const response = await axios.post(`${API_URL}/course/users`, userData);
+  return response.data;
+};
+
+export const chatWithChatbotBuilder = async (messages, currentStep, courseData, draftId, userId = 'user_default') => {
   const response = await axios.post(`${API_URL}/course/chatbot-builder/chat`, {
     messages,
     currentStep,
     courseData,
-    draft_id: draftId
+    draft_id: draftId,
+    user_id: userId
   });
   return response.data;
 };
@@ -208,18 +219,21 @@ export const saveChatbotDraft = async (draftData) => {
   return response.data;
 };
 
-export const getChatbotDrafts = async () => {
-  const response = await axios.get(`${API_URL}/course/chatbot-builder/courses`);
+export const getChatbotDrafts = async (userId = null) => {
+  const url = userId ? `${API_URL}/course/chatbot-builder/courses?user_id=${encodeURIComponent(userId)}` : `${API_URL}/course/chatbot-builder/courses`;
+  const response = await axios.get(url);
   return response.data;
 };
 
-export const getChatbotDraft = async (draftId) => {
-  const response = await axios.get(`${API_URL}/course/chatbot-builder/course/load/${draftId}`);
+export const getChatbotDraft = async (draftId, userId = null) => {
+  const url = userId ? `${API_URL}/course/chatbot-builder/course/load/${draftId}?user_id=${encodeURIComponent(userId)}` : `${API_URL}/course/chatbot-builder/course/load/${draftId}`;
+  const response = await axios.get(url);
   return response.data;
 };
 
-export const deleteChatbotDraft = async (draftId) => {
-  const response = await axios.delete(`${API_URL}/course/chatbot-builder/course/delete/${draftId}`);
+export const deleteChatbotDraft = async (draftId, userId = null) => {
+  const url = userId ? `${API_URL}/course/chatbot-builder/course/delete/${draftId}?user_id=${encodeURIComponent(userId)}` : `${API_URL}/course/chatbot-builder/course/delete/${draftId}`;
+  const response = await axios.delete(url);
   return response.data;
 };
 
