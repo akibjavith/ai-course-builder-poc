@@ -1,29 +1,5 @@
 [
   {
-    "id": "light",
-    "name": "Light Mode",
-    "variables": {
-      "--bg-primary": "#ffffff",
-      "--bg-secondary": "#f8fafc",
-      "--text-main": "#0f172a",
-      "--text-secondary": "#475569",
-      "--text-muted": "#94a3b8",
-      "--border-color": "#f1f5f9",
-      "--accent-color": "#0ea5e9",
-      "--accent-bg": "#f0f9ff",
-      "--code-bg": "#0f172a",
-      "--code-text": "#38bdf8",
-      "--theme-shadow": "0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05)",
-      "--font-family": "\"Outfit\", sans-serif",
-      "--font-size-base": "1rem",
-      "--font-size-h1": "2.5rem",
-      "--font-size-h2": "2rem",
-      "--font-size-h3": "1.5rem",
-      "--line-height": "1.8",
-      "--block-spacing": "1.25rem"
-    }
-  },
-  {
     "id": "dark",
     "name": "Dark Midnight",
     "variables": {
@@ -213,6 +189,30 @@
       "--font-size-h3": "1.9rem",
       "--line-height": "1.9",
       "--block-spacing": "1.8rem"
+    }
+  },
+  {
+    "id": "light",
+    "name": "Light Mode",
+    "variables": {
+      "--bg-primary": "#ffffff",
+      "--bg-secondary": "#f8fafc",
+      "--text-main": "#0f172a",
+      "--text-secondary": "#475569",
+      "--text-muted": "#94a3b8",
+      "--border-color": "#f1f5f9",
+      "--accent-color": "#0ea5e9",
+      "--accent-bg": "#f0f9ff",
+      "--code-bg": "#0f172a",
+      "--code-text": "#38bdf8",
+      "--theme-shadow": "0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05)",
+      "--font-family": "\"Outfit\", sans-serif",
+      "--font-size-base": "1rem",
+      "--font-size-h1": "2.5rem",
+      "--font-size-h2": "2rem",
+      "--font-size-h3": "1.5rem",
+      "--line-height": "1.8",
+      "--block-spacing": "1.25rem"
     }
   }
 ]

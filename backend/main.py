@@ -9,7 +9,7 @@ from schemas import (
     GenerateOutlineBaseRequest, ExportChapterRequest, GenerateVoiceScriptReq, GenerateFlashcardsRequest,
     GenerateMCQRequest, GenerateAssessmentRequest, ChatRequest, ThemeUploadRequest,
     ChatbotBuilderRequest, DownloadExternalImageRequest, GenerateAIImageRequest, DownloadExternalAudioRequest,
-    GenerateAIAudioRequest
+    GenerateAIAudioRequest, ChatbotDraftsListResponse
 )
 from course_planner import generate_course_structure
 from content_generator import generate_chapter_content, generate_course_quiz
@@ -2987,14 +2987,14 @@ async def api_cancel_generation(draft_id: str):
     except Exception as e:
         logger.error(f"Error updating draft on cancel: {e}")
 
-    return {"status": "success", "message": "Cancellation requested"}
+    return {"status": "success", "message": "Cancellation request"}
 
 # Get all drafts
-@app.get("/course/chatbot-builder/courses")
+@app.get("/course/chatbot-builder/courses", response_model=ChatbotDraftsListResponse)
 def api_get_chatbot_drafts():
     try:
         from database import get_chatbot_drafts
-        drafts = get_chatbot_drafts()
+        drafts = get_chatbot_drafts(include_details=False)
         for d in drafts:
             draft_id = d["id"]
             if draft_id in bg_generation_registry:
@@ -3032,9 +3032,9 @@ def api_save_chatbot_draft(req: ChatbotDraftSaveRequest):
             current_step=req.currentStep,
             course_data=req.courseData,
             messages=req.messages,
-            touch_user_interaction=bool(req.touch_user_interaction)
+            touch_user_interaction=req.touch_user_interaction
         )
-        return {"status": "success", "message": "Draft saved successfully"}
+        return {"status": "success", "message": "Draft saved"}
     except Exception as e:
         logger.error(f"Error saving chatbot draft: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -3045,7 +3045,7 @@ def api_delete_chatbot_draft(draft_id: str):
     try:
         from database import delete_chatbot_draft
         delete_chatbot_draft(draft_id)
-        return {"status": "success", "message": "Draft deleted successfully"}
+        return {"status": "success", "message": "Draft deleted"}
     except Exception as e:
         logger.error(f"Error deleting chatbot draft {draft_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -3058,7 +3058,7 @@ def api_rename_chatbot_draft(draft_id: str, req: RenameDraftRequest):
     try:
         from database import rename_chatbot_draft
         rename_chatbot_draft(draft_id, req.name)
-        return {"status": "success", "message": "Draft renamed successfully"}
+        return {"status": "success", "message": "Draft renamed"}
     except Exception as e:
         logger.error(f"Error renaming chatbot draft {draft_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -3084,7 +3084,7 @@ def api_suggest_topics():
         draft_names = []
         try:
             from database import get_chatbot_drafts
-            drafts = get_chatbot_drafts()
+            drafts = get_chatbot_drafts(include_details=True)
             for d in drafts:
                 c_name = d.get("courseName")
                 c_topic = d.get("courseData", {}).get("details", {}).get("topic")

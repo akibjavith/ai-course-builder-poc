@@ -545,36 +545,42 @@ def save_chatbot_draft(draft_id: str, course_name: str, current_step: str, cours
         cursor.close()
         conn.close()
 
-def get_chatbot_drafts():
+def get_chatbot_drafts(include_details: bool = False):
     conn = get_local_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT id, course_name, current_step, course_data, messages, created_at, updated_at FROM corp_chatbot_course_draft ORDER BY updated_at DESC, id DESC")
+        if include_details:
+            cursor.execute("SELECT id, course_name, current_step, course_data, messages, created_at, updated_at FROM corp_chatbot_course_draft ORDER BY updated_at DESC, id DESC")
+        else:
+            cursor.execute("SELECT id, course_name, current_step, created_at, updated_at FROM corp_chatbot_course_draft ORDER BY updated_at DESC, id DESC")
         rows = cursor.fetchall()
         drafts = []
         for r in rows:
-            try:
-                cdata = json.loads(r["course_data"]) if r["course_data"] else {}
-            except Exception:
-                cdata = {}
-            try:
-                msgs = json.loads(r["messages"]) if r["messages"] else []
-            except Exception:
-                msgs = []
-                
-            drafts.append({
+            draft = {
                 "id": r["id"],
                 "courseName": r["course_name"],
                 "currentStep": r["current_step"],
-                "courseData": cdata,
-                "messages": msgs,
                 "created_at": r["created_at"].strftime("%Y-%m-%d %H:%M:%S") if r.get("created_at") and hasattr(r["created_at"], "strftime") else str(r.get("created_at") or r.get("updated_at") or ""),
                 "updated_at": r["updated_at"].strftime("%Y-%m-%d %H:%M:%S") if hasattr(r["updated_at"], "strftime") else str(r["updated_at"])
-            })
+            }
+            if include_details:
+                try:
+                    cdata = json.loads(r["course_data"]) if r.get("course_data") else {}
+                except Exception:
+                    cdata = {}
+                try:
+                    msgs = json.loads(r["messages"]) if r.get("messages") else []
+                except Exception:
+                    msgs = []
+                draft["courseData"] = cdata
+                draft["messages"] = msgs
+
+            drafts.append(draft)
         return drafts
     finally:
         cursor.close()
         conn.close()
+
 
 def get_chatbot_draft(draft_id: str):
     conn = get_local_db_connection()

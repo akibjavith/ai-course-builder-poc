@@ -336,8 +336,15 @@ class RenameDraftRequest(BaseModel):
     name: str
 
 
+class ChatbotDraftSummary(BaseModel):
+    id: str
+    courseName: Optional[str] = ""
+    currentStep: Optional[str] = ""
+    bgStatus: Optional[str] = "idle"
+    created_at: Optional[str] = ""
+    updated_at: Optional[str] = ""
 
 
-
-
-
+class ChatbotDraftsListResponse(BaseModel):
+    status: str
+    drafts: List[ChatbotDraftSummary]
