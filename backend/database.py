@@ -456,17 +456,6 @@ def init_users_table():
             )
         """)
         conn.commit()
-        
-        # Seed default user if empty
-        cursor.execute("SELECT user_id FROM corp_users WHERE user_id = 'user_default'")
-        if not cursor.fetchone():
-            import datetime
-            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            cursor.execute(
-                "INSERT INTO corp_users (user_id, username, email, role, created_at) VALUES (%s, %s, %s, %s, %s)",
-                ("user_default", "IC LEAF Admin", "admin@icleaf.com", "admin", now_str)
-            )
-            conn.commit()
         print("DEBUG: Local MySQL corp_users table initialized successfully.")
     except Exception as e:
         print(f"Error initializing corp_users table: {e}")
